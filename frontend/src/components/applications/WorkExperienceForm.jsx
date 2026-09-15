@@ -1,0 +1,242 @@
+import React from 'react';
+import { Briefcase, CheckCircle2, Trash2 } from 'lucide-react';
+
+const emptyEntry = () => ({
+  id: (typeof crypto !== "undefined" && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `work_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+  position_title: "",
+  company_office: "",
+  date_from: "",
+  date_to: "",
+  monthly_salary: "",
+  appointment_status: "",
+  is_govt_service: null,
+});
+
+export default function WorkExperienceForm({ data, onChange }) {
+  // Normalize data prop: support array or handle single object fallback gracefully
+  let safeData = data;
+
+  if (!Array.isArray(safeData)) {
+    if (safeData && typeof safeData === "object") {
+      const hasContent = Object.values(safeData).some((v) => v !== "" && v != null);
+      safeData = hasContent ? [{ ...emptyEntry(), ...safeData }] : [];
+    } else {
+      safeData = [];
+    }
+  }
+
+  const safeOnChange = typeof onChange === "function"
+    ? onChange
+    : (next) => {
+        console.error("[WorkExperienceForm] No `onChange` function was passed. Update dropped:", next);
+      };
+
+  const handleAddWork = () => {
+    safeOnChange([...safeData, emptyEntry()]);
+  };
+
+  const handleRemove = (id) => {
+    safeOnChange(safeData.filter((entry) => entry.id !== id));
+  };
+
+  const handleFieldChange = (id, field, value) => {
+    safeOnChange(
+      safeData.map((entry) =>
+        entry.id === id ? { ...entry, [field]: value } : entry
+      )
+    );
+  };
+
+  const handleRadioChange = (id, value) => {
+    const finalValue =
+      value === "true" ? true :
+      value === "false" ? false :
+      null;
+
+    handleFieldChange(id, "is_govt_service", finalValue);
+  };
+
+  return (
+    <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden font-sans">
+      
+      {/* Top Banner Header */}
+      <div className="bg-[#1e4a8a] p-4 text-white flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center justify-center bg-white/20 text-white font-semibold text-xs w-5 h-5 rounded-full">
+            6
+          </span>
+          <h3 className="text-base font-semibold tracking-wide">Work Experience</h3>
+        </div>
+      </div>
+
+      {/* Subheader Action Bar */}
+      <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between bg-white">
+        <div className="flex items-center gap-2 text-[#1e4a8a] font-medium text-sm">
+          Employment & Service Records <span className="text-red-500">*</span>
+        </div>
+        <button
+          type="button"
+          onClick={handleAddWork}
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-600 rounded-lg text-blue-600 font-medium text-sm hover:bg-blue-50 transition-colors"
+        >
+          <span className="text-base font-bold leading-none">+</span> Add Work Experience
+        </button>
+      </div>
+
+      {/* Content Body */}
+      <div className="p-6 space-y-6 bg-[#fcfdfd]">
+        {safeData.length === 0 ? (
+          <div className="border border-dashed border-gray-200 rounded-xl py-12 flex flex-col items-center justify-center text-center bg-gray-50/40">
+            <CheckCircle2 size={24} className="text-gray-300 mb-2" />
+            <p className="text-xs md:text-sm text-gray-500">
+              Click "Add Work Experience" to add employment history
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {safeData.map((entry) => (
+              <div
+                key={entry.id}
+                className="p-4 border border-gray-200 rounded-xl bg-white shadow-sm space-y-4 relative"
+              >
+                {/* Row 1: Position Title & Company/Office */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                  <div className="md:col-span-6 space-y-1">
+                    <label className="block text-xs font-semibold text-gray-700">
+                      Position Title <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={entry.position_title || ""}
+                      onChange={(e) => handleFieldChange(entry.id, "position_title", e.target.value)}
+                      placeholder="ADMINISTRATIVE OFFICER"
+                      className="w-full h-10 px-3 border border-gray-300 rounded-lg text-sm bg-white"
+                    />
+                  </div>
+
+                  <div className="md:col-span-6 space-y-1">
+                    <label className="block text-xs font-semibold text-gray-700">
+                      Company / Office Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={entry.company_office || ""}
+                      onChange={(e) => handleFieldChange(entry.id, "company_office", e.target.value)}
+                      placeholder="DEPARTMENT OF HEALTH"
+                      className="w-full h-10 px-3 border border-gray-300 rounded-lg text-sm bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Row 2: Dates, Monthly Salary, Appointment Status */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                  <div className="md:col-span-3 space-y-1">
+                    <label className="block text-xs font-semibold text-gray-700">Date From</label>
+                    <input
+                      type="date"
+                      value={entry.date_from || ""}
+                      onChange={(e) => handleFieldChange(entry.id, "date_from", e.target.value)}
+                      className="w-full h-10 px-3 border border-gray-300 rounded-lg text-sm bg-white"
+                    />
+                  </div>
+
+                  <div className="md:col-span-3 space-y-1">
+                    <label className="block text-xs font-semibold text-gray-700">Date To</label>
+                    <input
+                      type="date"
+                      value={entry.date_to || ""}
+                      onChange={(e) => handleFieldChange(entry.id, "date_to", e.target.value)}
+                      className="w-full h-10 px-3 border border-gray-300 rounded-lg text-sm bg-white"
+                    />
+                  </div>
+
+                  <div className="md:col-span-3 space-y-1">
+                    <label className="block text-xs font-semibold text-gray-700">Monthly Salary</label>
+                    <input
+                      type="number"
+                      value={entry.monthly_salary || ""}
+                      onChange={(e) => handleFieldChange(entry.id, "monthly_salary", e.target.value)}
+                      placeholder="30000"
+                      className="w-full h-10 px-3 border border-gray-300 rounded-lg text-sm bg-white"
+                    />
+                  </div>
+
+                  <div className="md:col-span-3 space-y-1">
+                    <label className="block text-xs font-semibold text-gray-700">Appointment Status</label>
+                    <input
+                      type="text"
+                      value={entry.appointment_status || ""}
+                      onChange={(e) => handleFieldChange(entry.id, "appointment_status", e.target.value)}
+                      placeholder="PERMANENT"
+                      className="w-full h-10 px-3 border border-gray-300 rounded-lg text-sm bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Row 3: Government Service Option & Delete Button Grid Alignment */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                  <div className="md:col-span-11 bg-gray-50/70 border border-gray-200 rounded-xl p-3.5 space-y-2">
+                    <p className="text-xs font-semibold text-gray-700">
+                      Is this item part of Government Service?
+                    </p>
+                    <div className="flex gap-6">
+                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`is_govt_service_${entry.id}`}
+                          value="true"
+                          checked={entry.is_govt_service === true}
+                          onChange={(e) => handleRadioChange(entry.id, e.target.value)}
+                          className="text-blue-600 focus:ring-blue-500"
+                        />
+                        Yes
+                      </label>
+
+                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`is_govt_service_${entry.id}`}
+                          value="false"
+                          checked={entry.is_govt_service === false}
+                          onChange={(e) => handleRadioChange(entry.id, e.target.value)}
+                          className="text-blue-600 focus:ring-blue-500"
+                        />
+                        No
+                      </label>
+
+                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`is_govt_service_${entry.id}`}
+                          value="null"
+                          checked={entry.is_govt_service === null}
+                          onChange={(e) => handleRadioChange(entry.id, e.target.value)}
+                          className="text-blue-600 focus:ring-blue-500"
+                        />
+                        Not Specified
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-1 flex items-end justify-end">
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(entry.id)}
+                      className="p-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors h-10 w-full flex items-center justify-center"
+                      aria-label="Remove work experience"
+                    >
+                      <Trash2 size={16} className="mx-auto" />
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
