@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ClipboardList, Hourglass, UserCheck, Trophy, Eye, UserPlus, Filter
+  ClipboardList, Hourglass, Trophy, Eye, UserPlus, Filter
 } from "lucide-react";
 import { getApplications } from "../api/ApplicationApi";
 import { getVacancies } from "../api/VacancyApi";
@@ -9,9 +9,8 @@ import { getVacancies } from "../api/VacancyApi";
 const getStatusStyles = (status) => {
   switch (status) {
     case "Initial Screening": return "bg-orange-100 text-orange-700";
-    case "For Assessment": return "bg-violet-100 text-violet-700";
-    case "Ranked": return "bg-teal-100 text-teal-700";
-    case "Complete": return "bg-emerald-100 text-emerald-700";
+    case "Complete": return "bg-violet-100 text-violet-700";
+    case "Incomplete": return "bg-emerald-100 text-emerald-700";
     default: return "bg-slate-100 text-slate-700";
   }
 };
@@ -33,8 +32,6 @@ export default function AllApplication() {
         setVacancies(response?.data || []);
       } catch (err) {
         console.error("Failed to load vacancies:", err);
-      } finally {
-        setLoading(false);
       }
     };
     loadVacancies();
@@ -61,45 +58,31 @@ export default function AllApplication() {
     const map = new Map();
     vacancies.forEach((v) => {
       const id = normalizeVacancyId(v.vacancy_id || v.id);
-      map.set(id, v.status);
+      map.set(id, { status: v.status, title: v.position_title || v.title || v.job_title });
     });
     return map;
   }, [vacancies]);
 
-  // Filter and transform status
-  const activeApplications = useMemo(() => {
-    return applications
-      .filter((app) => {
-        const isActive = app.application_status !== "Qualified" && app.application_status !== "Disqualified";
-        const matchesVacancy = selectedVacancy
-          ? normalizeVacancyId(app.vacancy_id) === normalizeVacancyId(selectedVacancy)
-          : true;
-        return isActive && matchesVacancy;
-      })
-      .map((app) => {
-        const vacStatus = vacancyStatusMap.get(normalizeVacancyId(app.vacancy_id));
-        const isVacancyClosed = String(vacStatus).toLowerCase() === "closed";
-        const rawStatus = app.application_status;
+  // Filter applications to only include those with an "Open" vacancy, and apply the dropdown selection filter
+  const filteredApplications = useMemo(() => {
+    return applications.filter((app) => {
+      const vacId = normalizeVacancyId(app.vacancy_id);
+      const vacInfo = vacancyStatusMap.get(vacId);
+      const isOpen = vacInfo && String(vacInfo.status).toLowerCase() === "open";
+      
+      const matchesSelectedVacancy = selectedVacancy
+        ? vacId === normalizeVacancyId(selectedVacancy)
+        : true;
 
-        // ONLY change to "Initial Screening" if the vacancy is Closed AND the applicant status is "Complete"
-        let displayStatus = rawStatus;
-        if (isVacancyClosed && String(rawStatus).toLowerCase() === "complete") {
-          displayStatus = "Initial Screening";
-        }
-
-        return {
-          ...app,
-          application_status: displayStatus,
-        };
-      })
-      .reverse(); // Newest first
-  }, [applications, selectedVacancy, vacancyStatusMap]);
+      return isOpen && matchesSelectedVacancy;
+    });
+  }, [applications, vacancyStatusMap, selectedVacancy]);
 
   const stats = [
-    { title: "Active Total", value: activeApplications.length, icon: ClipboardList, color: "border-[#1E3E74]", bg: "bg-slate-100", iconColor: "text-[#1E3E74]" },
-    { title: "Initial Screening", value: activeApplications.filter(a => a.application_status === 'Initial Screening').length, icon: Hourglass, color: "border-orange-400", bg: "bg-orange-50", iconColor: "text-orange-500" },
-    { title: "For Assessment", value: activeApplications.filter(a => a.application_status === 'For Assessment').length, icon: UserCheck, color: "border-violet-500", bg: "bg-violet-50", iconColor: "text-violet-500" },
-    { title: "Complete", value: activeApplications.filter(a => a.application_status === 'Complete').length, icon: Trophy, color: "border-teal-500", bg: "bg-teal-50", iconColor: "text-teal-500" },
+    { title: "Total Applications", value: filteredApplications.length, icon: ClipboardList, color: "border-[#1E3E74]", bg: "bg-slate-100", iconColor: "text-[#1E3E74]" },
+    { title: "Initial Screening", value: filteredApplications.filter(a => a.application_status === 'Initial Screening').length, icon: Hourglass, color: "border-orange-400", bg: "bg-orange-50", iconColor: "text-orange-500" },
+    { title: "Complete", value: filteredApplications.filter(a => a.application_status === 'Complete').length, icon: Trophy, color: "border-teal-500", bg: "bg-teal-50", iconColor: "text-teal-500" },
+    { title: "Incomplete", value: filteredApplications.filter(a => a.application_status === 'Incomplete').length, icon: UserPlus, color: "border-emerald-500", bg: "bg-emerald-50", iconColor: "text-emerald-500" }
   ];
 
   const handleViewApplication = (id) => {
@@ -116,8 +99,8 @@ export default function AllApplication() {
             <ClipboardList className="text-[#1E3E74]" size={34} />
           </div>
           <div>
-            <h1 className="text-4xl font-bold text-[#1E3E74]">Active Applications</h1>
-            <p className="text-slate-500">Monitoring pending and in-progress applications</p>
+            <h1 className="text-4xl font-bold text-[#1E3E74]">Application Status</h1>
+            <p className="text-slate-500">Overview of current applicant statuses for open vacancies</p>
           </div>
         </div>
         <button
@@ -140,16 +123,18 @@ export default function AllApplication() {
             onChange={(e) => setSelectedVacancy(e.target.value)}
             className="w-full h-11 bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-xl px-3 outline-none focus:border-[#1E3E74] focus:ring-1 focus:ring-[#1E3E74] transition-all"
           >
-            <option value="">All Vacancies</option>
-            {vacancies.map((vacancy) => {
-              const id = normalizeVacancyId(vacancy.vacancy_id || vacancy.id);
-              const title = vacancy.position_title || vacancy.title || vacancy.job_title;
-              return (
-                <option key={id} value={id}>
-                  {title ? `${title} (ID: ${id})` : `Vacancy #${id}`}
-                </option>
-              );
-            })}
+            <option value="">All Open Vacancies</option>
+            {vacancies
+              .filter((v) => String(v.status).toLowerCase() === "open")
+              .map((vacancy) => {
+                const id = normalizeVacancyId(vacancy.vacancy_id || vacancy.id);
+                const title = vacancy.position_title || vacancy.title || vacancy.job_title;
+                return (
+                  <option key={id} value={id}>
+                    {title ? `${title} (ID: ${id})` : `Vacancy #${id}`}
+                  </option>
+                );
+              })}
           </select>
         </div>
       </div>
@@ -179,25 +164,23 @@ export default function AllApplication() {
         <table className="min-w-full">
           <thead className="bg-[#1E3E74] text-white">
             <tr>
-              <th className="px-5 py-4 text-left">Vacancy ID</th>
-              <th className="px-5 py-4 text-left">Applicant Name</th>
-              <th className="px-5 py-4 text-left">Position</th>
-              <th className="px-5 py-4 text-left">Date Applied</th>
-              <th className="px-5 py-4 text-center">Status</th>
-              <th className="px-5 py-4 text-center">Actions</th>
+              <th className="px-6 py-4 text-left">Applicant Name</th>
+              <th className="px-6 py-4 text-left">Position</th>
+              <th className="px-6 py-4 text-center">Status</th>
+              <th className="px-6 py-4 text-center">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="6" className="text-center py-10 text-slate-500 font-medium">Loading applications...</td>
+                <td colSpan="4" className="text-center py-10 text-slate-500 font-medium">Loading applications...</td>
               </tr>
-            ) : activeApplications.length === 0 ? (
+            ) : filteredApplications.length === 0 ? (
               <tr>
-                <td colSpan="6" className="text-center py-10 text-slate-500 font-medium">No active applications found.</td>
+                <td colSpan="4" className="text-center py-10 text-slate-500 font-medium">No applications found.</td>
               </tr>
             ) : (
-              activeApplications.map((app, idx) => {
+              filteredApplications.map((app, idx) => {
                 const targetId = app.job_applications_id || app.applicant_id || app.application_id || app.id;
                 return (
                   <tr 
@@ -205,18 +188,16 @@ export default function AllApplication() {
                     onClick={() => handleViewApplication(targetId)}
                     className="border-b hover:bg-slate-50 cursor-pointer transition-colors"
                   >
-                    <td className="px-5 py-4 font-medium text-[#1E3E74]">{app.vacancy_id}</td>
-                    <td className="px-5 py-4 font-semibold text-slate-700">
+                    <td className="px-6 py-4 font-semibold text-slate-700">
                       {app.last_name && app.first_name ? `${app.last_name}, ${app.first_name}` : "Unknown"}
                     </td>
-                    <td className="px-5 py-4 text-slate-600">{app.position_title || "N/A"}</td>
-                    <td className="px-5 py-4 text-slate-600">{app.date_received || "N/A"}</td>
-                    <td className="px-5 py-4 text-center">
+                    <td className="px-6 py-4 text-slate-600">{app.position_title || "N/A"}</td>
+                    <td className="px-6 py-4 text-center">
                       <span className={`inline-block rounded-full px-4 py-1 text-sm font-semibold ${getStatusStyles(app.application_status)}`}>
                         {app.application_status || "Unknown"}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => handleViewApplication(targetId)}
                         className="inline-flex items-center justify-center p-2 rounded-xl bg-blue-50 text-[#1E3E74] hover:bg-blue-100 transition-colors"

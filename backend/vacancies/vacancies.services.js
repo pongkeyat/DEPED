@@ -230,12 +230,89 @@ export const getVacancyByIdService = async (vacancy_id) => {
 
 // Service 6: Update Vacancy Status Manually (e.g., Close early or Reopen)
 export const updateVacancyStatusService = async (vacancy_id, status) => {
-    const query = `
-        UPDATE vacancies 
-        SET status = $1 
-        WHERE vacancy_id = $2 
-        RETURNING vacancy_id, status;
-    `;
-    const result = await pool.query(query, [status, vacancy_id]);
-    return result.rows[0] || null;
+    const client = await pool.connect();
+
+    try {
+        await client.query("BEGIN");
+
+        // ======================================================
+        // 1. Update vacancy status
+        // ======================================================
+        const vacancyQuery = `
+            UPDATE vacancies
+            SET status = $1
+            WHERE vacancy_id = $2
+            RETURNING vacancy_id, status;
+        `;
+
+        const vacancyResult = await client.query(
+            vacancyQuery,
+            [status, vacancy_id]
+        );
+
+        if (vacancyResult.rows.length === 0) {
+            throw new Error("VACANCY_NOT_FOUND");
+        }
+
+        // ======================================================
+        // 2. If vacancy is CLOSED
+        //    Change COMPLETE applicants to INITIAL SCREENING
+        // ======================================================
+        let applicantsReset = 0;
+
+        if (String(status).toLowerCase() === "closed") {
+
+            const applicantStatusQuery = `
+                UPDATE hr_remarks_final_notes hr
+                SET application_status = 'initial screening'
+
+                FROM applicant_information ai
+                JOIN job_applications ja
+                    ON ja.job_applications_id =
+                       ai.job_applications_id
+
+                WHERE hr.applicant_id = ai.applicant_id
+                  AND ja.vacancy_id = $1
+                  AND LOWER(
+                      TRIM(hr.application_status)
+                  ) = 'complete'
+
+                RETURNING hr.applicant_id;
+            `;
+
+            const applicantResult = await client.query(
+                applicantStatusQuery,
+                [vacancy_id]
+            );
+
+            applicantsReset = applicantResult.rowCount;
+        }
+
+        // ======================================================
+        // 3. Commit both changes
+        // ======================================================
+        await client.query("COMMIT");
+
+        return {
+            ...vacancyResult.rows[0],
+            applicants_reset: applicantsReset
+        };
+
+    } catch (error) {
+
+        // ======================================================
+        // Rollback if anything fails
+        // ======================================================
+        await client.query("ROLLBACK");
+
+        console.error(
+            "Update vacancy status error:",
+            error
+        );
+
+        throw error;
+
+    } finally {
+        client.release();
+    }
 };

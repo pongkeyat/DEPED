@@ -20,11 +20,6 @@ export const getAllPositions = async (req, res) => {
         const conditions = [];
         const params = [];
 
-        // Status filter
-        if (status) {
-            params.push(status);
-            conditions.push(`status = $${params.length}`);
-        }
 
         // Position title filter
         if (position_title) {

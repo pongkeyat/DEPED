@@ -89,7 +89,7 @@ export const logoutUser = async (token) => {
 
 export const updatePasswordApi = async (data, token) => {
 
-    const res = await axios.post(
+    const res = await axios.put(
         UPDATE_PASSWORD_API,
         {
             currentPassword: data.currentPassword,

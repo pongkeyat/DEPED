@@ -2,7 +2,6 @@ import {
     createInitialScreening
 } from "./initialEvaluation.service.js";
 
-
 export const postInitialScreening = async (req, res) => {
 
     try {
@@ -27,6 +26,7 @@ export const postInitialScreening = async (req, res) => {
         |--------------------------------------------------------------------------
         */
 
+        // Either job_applications_id or applicant_id is required
         if (
             job_applications_id === undefined &&
             applicant_id === undefined
@@ -39,6 +39,7 @@ export const postInitialScreening = async (req, res) => {
         }
 
 
+        // All initial screening criteria are required
         if (
             education_passed === undefined ||
             eligibility_passed === undefined ||
@@ -53,6 +54,7 @@ export const postInitialScreening = async (req, res) => {
         }
 
 
+        // Overall result is required
         if (!overall_result) {
 
             return res.status(400).json({
@@ -62,6 +64,7 @@ export const postInitialScreening = async (req, res) => {
         }
 
 
+        // Screened by is required
         if (!screened_by) {
 
             return res.status(400).json({
@@ -106,6 +109,12 @@ export const postInitialScreening = async (req, res) => {
         );
 
 
+        /*
+        |--------------------------------------------------------------------------
+        | SERVICE ERROR
+        |--------------------------------------------------------------------------
+        */
+
         if (error.statusCode) {
 
             return res.status(
@@ -115,6 +124,12 @@ export const postInitialScreening = async (req, res) => {
             });
         }
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | SERVER ERROR
+        |--------------------------------------------------------------------------
+        */
 
         return res.status(500).json({
             error:

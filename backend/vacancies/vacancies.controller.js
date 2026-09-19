@@ -619,196 +619,73 @@ export const getVacancyById = async (req, res) => {
 // Update Vacancy Status
 // ============================================================
 
+// ============================================================
+// PATCH /api/vacancies/:id/status
+// Update Vacancy Status
+// ============================================================
+
 export const updateVacancyStatus = async (req, res) => {
 
     const { id } = req.params;
-
-    const { status } = req.body;
-
+    const { status } = req.body || {};
 
     // ========================================================
-    // Validate Status
+    // 1. Validate Status
     // ========================================================
 
     if (
         !status ||
         !["Open", "Closed"].includes(status)
     ) {
-
         return res.status(400).json({
-
             error:
                 "Status must be provided and set to either 'Open' or 'Closed'."
         });
     }
 
-
-    const client =
-        await pool.connect();
-
-
     try {
 
-        await client.query("BEGIN");
-
-
         // ====================================================
-        // 1. Check Vacancy
+        // 2. Use Existing Service
         // ====================================================
 
-        const vacancyResult =
-            await client.query(
-                `
-                SELECT
-                    vacancy_id,
-                    status
-
-                FROM vacancies
-
-                WHERE vacancy_id = $1
-                `,
-                [id]
-            );
-
-
-        if (
-            vacancyResult.rows.length === 0
-        ) {
-
-            await client.query("ROLLBACK");
-
-
-            return res.status(404).json({
-
-                error:
-                    `Vacancy with ID '${id}' not found.`
-            });
-        }
-
+        const result = await updateVacancyStatusService(
+            id,
+            status
+        );
 
         // ====================================================
-        // 2. Update Vacancy Status
-        // ====================================================
-
-        const vacancyUpdateResult =
-            await client.query(
-                `
-                UPDATE vacancies
-
-                SET status = $1
-
-                WHERE vacancy_id = $2
-
-                RETURNING *
-                `,
-                [
-                    status,
-                    id
-                ]
-            );
-
-
-        // ====================================================
-        // 3. Update Applicants if CLOSED
-        // ====================================================
-
-        let updatedApplicants = 0;
-
-
-        if (status === "Closed") {
-
-            const applicationUpdateResult =
-                await client.query(
-                    `
-                    UPDATE job_applications
-
-                    SET application_status =
-                        CASE
-
-                            WHEN LOWER(
-                                TRIM(application_status)
-                            ) = 'complete'
-
-                            THEN 'initial screening'
-
-
-                            WHEN LOWER(
-                                TRIM(application_status)
-                            ) IN (
-                                'under_review',
-                                'under review',
-                                'incomplete'
-                            )
-
-                            THEN 'unqualified'
-
-
-                            ELSE application_status
-
-                        END
-
-                    WHERE vacancy_id = $1
-
-                      AND LOWER(
-                          TRIM(application_status)
-                      ) IN (
-                          'complete',
-                          'under_review',
-                          'under review',
-                          'incomplete'
-                      )
-                    `,
-                    [id]
-                );
-
-
-            updatedApplicants =
-                applicationUpdateResult.rowCount;
-        }
-
-
-        // ====================================================
-        // 4. Commit
-        // ====================================================
-
-        await client.query("COMMIT");
-
-
-        // ====================================================
-        // 5. Response
+        // 3. Response
         // ====================================================
 
         return res.status(200).json({
-
-            message:
-                `Vacancy status manually set to ${status}.`,
-
-            data:
-                vacancyUpdateResult.rows[0],
-
-            applicantsUpdated:
-                updatedApplicants
+            message: `Vacancy status manually set to ${status}.`,
+            data: result
         });
 
-
     } catch (error) {
-
-        await client.query("ROLLBACK");
-
 
         console.error(
             `Error updating status for vacancy ${id}:`,
             error
         );
 
+        // ====================================================
+        // Vacancy Not Found
+        // ====================================================
+
+        if (error.message === "VACANCY_NOT_FOUND") {
+            return res.status(404).json({
+                error: `Vacancy with ID '${id}' not found.`
+            });
+        }
+
+        // ====================================================
+        // Server Error
+        // ====================================================
 
         return res.status(500).json({
             error: "Internal server error"
         });
-
-
-    } finally {
-
-        client.release();
     }
 };

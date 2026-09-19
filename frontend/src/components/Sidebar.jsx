@@ -61,7 +61,7 @@ export default function SideBar() {
   const menuSections = [
     {
       title: "VACANCY MANAGEMENT",
-      roles: [ROLES.ADMIN], 
+      roles: [ROLES.HRO], 
       items: [
         { label: "Post New Vacancy", to: "/postVacancies", icon: PlusCircle },
         { label: "Vacancy Postings", to: "/vacancyPosting", icon: Briefcase },
@@ -96,7 +96,7 @@ export default function SideBar() {
     },
     {
       title: "Ranking",
-      roles: [ROLES.ADMIN], 
+      roles: [ROLES.ADMIHRMPSBN], 
       items: [
         { label: "Comparative Assessment Result", to: "/comparative-assessment-result", icon: User },
       ]

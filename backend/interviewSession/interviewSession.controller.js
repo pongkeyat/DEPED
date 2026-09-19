@@ -98,7 +98,8 @@ export const getInterviewSessions = async (req, res) => {
                 i.vacancy_id, 
                 i.job_applications_id, 
                 a.applicant_id, 
-                v.position_title, 
+                p.position_title, 
+                p.category, 
                 a.first_name, 
                 a.middle_name, 
                 a.last_name, 
@@ -119,6 +120,9 @@ export const getInterviewSessions = async (req, res) => {
 
             INNER JOIN vacancies v  
                 ON v.vacancy_id = j.vacancy_id 
+
+            INNER JOIN positions p
+                ON p.position_id = v.position_id
 
             INNER JOIN hr_remarks_final_notes h
                 ON h.applicant_id = a.applicant_id

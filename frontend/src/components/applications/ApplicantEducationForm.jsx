@@ -13,7 +13,8 @@ export default function ApplicantEducationForm({
                     level: '',
                     school_name: '',
                     degree_course: '',
-                    honors_awards: ''
+                    honors_awards: '',
+                    units: ''
                 }
             ];
 
@@ -56,7 +57,8 @@ export default function ApplicantEducationForm({
                 level: '',
                 school_name: '',
                 degree_course: '',
-                honors_awards: ''
+                honors_awards: '',
+                units: ''
             }
         ];
 
@@ -88,6 +90,19 @@ export default function ApplicantEducationForm({
         onChange(
             'educationList',
             updatedList
+        );
+    };
+
+
+    // ============================================================
+    // CHECK IF UNITS ARE REQUIRED
+    // ============================================================
+
+    const requiresUnits = (level) => {
+
+        return (
+            level === "MASTER'S DEGREE" ||
+            level === "DOCTORATE DEGREE"
         );
     };
 
@@ -272,7 +287,13 @@ export default function ApplicantEducationForm({
                                     DEGREE
                                 ================================== */}
 
-                                <div className="md:col-span-4 space-y-1">
+                                <div
+                                    className={
+                                        requiresUnits(edu.level)
+                                            ? "md:col-span-3 space-y-1"
+                                            : "md:col-span-4 space-y-1"
+                                    }
+                                >
 
                                     <label className="block text-xs font-semibold text-gray-700">
                                         Degree / Course
@@ -303,10 +324,56 @@ export default function ApplicantEducationForm({
 
 
                                 {/* ==================================
+                                    UNITS
+                                    ONLY FOR MASTER'S / DOCTORATE
+                                ================================== */}
+
+                                {requiresUnits(edu.level) && (
+
+                                    <div className="md:col-span-2 space-y-1">
+
+                                        <label className="block text-xs font-semibold text-gray-700">
+                                            Units Earned
+                                        </label>
+
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+
+                                            value={
+                                                edu.units ?? ''
+                                            }
+
+                                            onChange={(e) =>
+                                                handleInputChange(
+                                                    index,
+                                                    'units',
+                                                    e.target.value
+                                                )
+                                            }
+
+                                            className="w-full h-10 px-3 border border-gray-300 rounded-lg text-sm"
+
+                                            placeholder="Units"
+                                        />
+
+                                    </div>
+
+                                )}
+
+
+                                {/* ==================================
                                     DELETE
                                 ================================== */}
 
-                                <div className="md:col-span-1 flex items-end justify-end">
+                                <div
+                                    className={
+                                        requiresUnits(edu.level)
+                                            ? "md:col-span-0 flex items-end justify-end"
+                                            : "md:col-span-1 flex items-end justify-end"
+                                    }
+                                >
 
                                     {educationList.length > 1 && (
 

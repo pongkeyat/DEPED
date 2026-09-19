@@ -110,23 +110,17 @@ export default function ReceiveApplications() {
     // EDUCATION
     // ==========================================================
 
-    educationData: {
-
-      educationList: [
-
-        {
-          level: "",
-
-          school_name: "",
-
-          degree_course: "",
-
-          honors_awards: ""
-        }
-
-      ]
-
-    },
+      educationData: {
+          educationList: [
+              {
+                  level: "",
+                  school_name: "",
+                  degree_course: "",
+                  honors_awards: "",
+                  units: ""
+              }
+          ]
+      },
 
 
     // ==========================================================
@@ -411,19 +405,13 @@ export default function ReceiveApplications() {
   // WORK EXPERIENCE CHANGE
   // ============================================================
 
-  const handleWorkExperienceChange = (name, value) => {
+  const handleWorkExperienceChange = (updatedList) => {
 
     setFormData((prev) => ({
 
       ...prev,
 
-      workExperienceData: {
-
-        ...prev.workExperienceData,
-
-        [name]: value
-
-      }
+      workExperienceData: updatedList
 
     }));
 

@@ -61,13 +61,13 @@ export const getQualifiedApplicantForAssessment = async (
 |
 */
 
-export const getAssessmentCriteria = async () => {
+export const getAssessmentCriteria = async (position = "", category = "") => {
 
     try {
 
-        const response = await axios.get(
-            ASSESSMENT_CRITERIA_GET
-        );
+        const response = await axios.get(ASSESSMENT_CRITERIA_GET, {
+            params: { position, category },
+        });
 
         return response.data;
 

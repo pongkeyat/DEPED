@@ -43,17 +43,56 @@ export const insertApplicantsEducation = async (
             edu.education_level ||
             null;
 
+
         const schoolName =
             edu.school_name?.trim() ||
             null;
+
 
         const degreeCourse =
             edu.degree_course?.trim() ||
             null;
 
+
         const honorsAwards =
             edu.honors_awards?.trim() ||
             null;
+
+
+        // ========================================================
+        // UNITS
+        // ========================================================
+        //
+        // Only applicable to:
+        // MASTER'S DEGREE
+        // DOCTORATE DEGREE
+        //
+        // Otherwise store NULL.
+        //
+
+        const normalizedEducationLevel =
+            educationLevel
+                ?.trim()
+                .toUpperCase();
+
+
+        let units = null;
+
+
+        if (
+            normalizedEducationLevel ===
+                "MASTER'S DEGREE" ||
+            normalizedEducationLevel ===
+                "DOCTORATE DEGREE"
+        ) {
+
+            units =
+                edu.units !== undefined &&
+                edu.units !== null &&
+                edu.units !== ""
+                    ? Number(edu.units)
+                    : null;
+        }
 
 
         // ========================================================
@@ -64,7 +103,8 @@ export const insertApplicantsEducation = async (
             !educationLevel &&
             !schoolName &&
             !degreeCourse &&
-            !honorsAwards
+            !honorsAwards &&
+            units === null
         ) {
             continue;
         }
@@ -81,9 +121,10 @@ export const insertApplicantsEducation = async (
                 education_level,
                 school_name,
                 degree_course,
-                honors_awards
+                honors_awards,
+                units
             )
-            VALUES ($1, $2, $3, $4, $5)
+            VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING *
             `,
             [
@@ -91,7 +132,8 @@ export const insertApplicantsEducation = async (
                 educationLevel,
                 schoolName,
                 degreeCourse,
-                honorsAwards
+                honorsAwards,
+                units
             ]
         );
 
@@ -99,7 +141,6 @@ export const insertApplicantsEducation = async (
         insertedEducation.push(
             result.rows[0]
         );
-
     }
 
 

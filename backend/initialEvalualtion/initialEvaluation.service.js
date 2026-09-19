@@ -1,717 +1,12 @@
 import pool from "../config/db.js";
 
-/*
-|--------------------------------------------------------------------------
-| SALARY GROUP
-|--------------------------------------------------------------------------
-*/
-
-const getSalaryGroup = (salaryGrade) => {
-    const sg = Number(salaryGrade);
-
-    if (Number.isNaN(sg)) {
-        return null;
-    }
-
-    if (sg >= 1 && sg <= 9) {
-        return "SG_1_9";
-    }
-
-    if (sg >= 10 && sg <= 22) {
-        return "SG_10_22_27";
-    }
-
-    if (sg === 24) {
-        return "SG_24";
-    }
-
-    if (sg === 27) {
-        return "SG_10_22_27";
-    }
-
-    return "GENERAL_SERVICES";
-};
-
-
-/*
-|--------------------------------------------------------------------------
-| EDUCATION CALCULATION
-|--------------------------------------------------------------------------
-|
-| education.education_level
-|          ↓
-| education_increment_rules
-|          ↓
-| increment_level
-|          ↓
-| education_point_rules
-|          ↓
-| education_points
-|
-|--------------------------------------------------------------------------
-*/
-
-const calculateEducation = async (
-    client,
-    applicantId,
-    salaryGroup
-) => {
-
-    /*
-    |--------------------------------------------------------------------------
-    | 1. GET HIGHEST EDUCATIONAL ATTAINMENT
-    |--------------------------------------------------------------------------
-    */
-
-    const educationResult = await client.query(
-        `
-        SELECT
-            e.education_level,
-            e.degree_course,
-            e.school_name,
-            r.increment_level
-
-        FROM education e
-
-        LEFT JOIN education_increment_rules r
-            ON UPPER(TRIM(r.education_level))
-             = UPPER(TRIM(e.education_level))
-
-        WHERE e.applicant_id = $1
-
-        ORDER BY
-            r.increment_level DESC NULLS LAST
-
-        LIMIT 1
-        `,
-        [applicantId]
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | 2. NO EDUCATION RECORD
-    |--------------------------------------------------------------------------
-    */
-
-    if (educationResult.rows.length === 0) {
-
-        return {
-            value: null,
-            increment: null,
-            points: 0
-        };
-    }
-
-
-    const education =
-        educationResult.rows[0];
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | 3. GET EDUCATION INCREMENT
-    |--------------------------------------------------------------------------
-    */
-
-    const educationIncrement =
-        education.increment_level !== null
-            ? Number(education.increment_level)
-            : null;
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | 4. GET EDUCATION POINTS
-    |--------------------------------------------------------------------------
-    */
-
-    let educationPoints = 0;
-
-
-    if (
-        educationIncrement !== null &&
-        salaryGroup
-    ) {
-
-        const pointResult = await client.query(
-            `
-            SELECT
-                points
-
-            FROM education_point_rules
-
-            WHERE salary_group = $1
-
-              AND $2 >= increment_from
-
-              AND (
-                    increment_to IS NULL
-                    OR $2 <= increment_to
-                  )
-
-            ORDER BY
-                increment_from DESC
-
-            LIMIT 1
-            `,
-            [
-                salaryGroup,
-                educationIncrement
-            ]
-        );
-
-
-        if (pointResult.rows.length > 0) {
-
-            educationPoints =
-                Number(
-                    pointResult.rows[0].points
-                );
-        }
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | 5. RETURN EDUCATION RESULT
-    |--------------------------------------------------------------------------
-    */
-
-    return {
-
-        value:
-            educationIncrement,
-
-        increment:
-            educationIncrement,
-
-        points:
-            educationPoints
-    };
-};
-
-
-/*
-|--------------------------------------------------------------------------
-| TRAINING CALCULATION
-|--------------------------------------------------------------------------
-|
-| NOT YET USED.
-|
-| We will implement this after Education has been tested.
-|
-|--------------------------------------------------------------------------
-*/
-
-const calculateTraining = async (
-    client,
-    applicantId,
-    salaryGroup
-) => {
-
-    /*
-    |--------------------------------------------------------------------------
-    | 1. GET TRAINING RECORDS
-    |--------------------------------------------------------------------------
-    */
-
-    const result = await client.query(
-        `
-        SELECT
-            training_title,
-            date_from,
-            date_to,
-            hours_attended,
-            training_type,
-            conducted_by
-
-        FROM relevant_trainings
-
-        WHERE applicant_id = $1
-
-        ORDER BY date_from
-        `,
-        [applicantId]
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | 2. NO TRAINING RECORDS
-    |--------------------------------------------------------------------------
-    */
-
-    if (result.rows.length === 0) {
-
-        return {
-            hours: 0,
-            increment: null,
-            points: 0,
-            records: []
-        };
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | 3. TOTAL TRAINING HOURS
-    |--------------------------------------------------------------------------
-    */
-
-    const totalHours =
-        result.rows.reduce(
-            (total, training) => {
-
-                const hours =
-                    Number(
-                        training.hours_attended
-                    ) || 0;
-
-                return total + hours;
-
-            },
-            0
-        );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | 4. GET TRAINING INCREMENT
-    |--------------------------------------------------------------------------
-    */
-
-    const incrementResult =
-        await client.query(
-            `
-            SELECT
-                increment_level
-
-            FROM training_increment_rules
-
-            WHERE $1 >= hours_from
-
-              AND (
-                    hours_to IS NULL
-                    OR $1 <= hours_to
-                  )
-
-            ORDER BY
-                hours_from DESC
-
-            LIMIT 1
-            `,
-            [totalHours]
-        );
-
-
-    const trainingIncrement =
-        incrementResult.rows.length > 0
-            ? Number(
-                incrementResult.rows[0]
-                    .increment_level
-            )
-            : null;
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | 5. GET TRAINING POINTS
-    |--------------------------------------------------------------------------
-    */
-
-    let trainingPoints = 0;
-
-
-    if (
-        trainingIncrement !== null &&
-        salaryGroup
-    ) {
-
-        const pointResult =
-            await client.query(
-                `
-                SELECT
-                    points
-
-                FROM training_point_rules
-
-                WHERE salary_group = $1
-
-                  AND $2 >= increment_from
-
-                  AND (
-                        increment_to IS NULL
-                        OR $2 <= increment_to
-                      )
-
-                ORDER BY
-                    increment_from DESC
-
-                LIMIT 1
-                `,
-                [
-                    salaryGroup,
-                    trainingIncrement
-                ]
-            );
-
-
-        if (pointResult.rows.length > 0) {
-
-            trainingPoints =
-                Number(
-                    pointResult.rows[0].points
-                );
-        }
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | 6. RETURN TRAINING SCORE
-    |--------------------------------------------------------------------------
-    */
-
-    return {
-
-        hours:
-            totalHours,
-
-        increment:
-            trainingIncrement,
-
-        points:
-            trainingPoints,
-
-        records:
-            result.rows
-    };
-};
-
-
-/*
-|--------------------------------------------------------------------------
-| EXPERIENCE CALCULATION
-|--------------------------------------------------------------------------
-|
-| NOT YET USED.
-|
-|--------------------------------------------------------------------------
-*/
-
-const calculateExperience = async (
-    client,
-    applicantId,
-    salaryGroup
-) => {
-
-    /*
-    |--------------------------------------------------------------------------
-    | 1. GET WORK EXPERIENCE RECORDS
-    |--------------------------------------------------------------------------
-    */
-
-    const experienceResult = await client.query(
-        `
-        SELECT
-            position_title,
-            company_office,
-            date_from,
-            date_to,
-            monthly_salary,
-            appointment_status,
-            is_govt_service
-
-        FROM work_experience
-
-        WHERE applicant_id = $1
-
-        ORDER BY date_from ASC
-        `,
-        [applicantId]
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | 2. NO EXPERIENCE RECORD
-    |--------------------------------------------------------------------------
-    */
-
-    if (experienceResult.rows.length === 0) {
-
-        return {
-            months: 0,
-            increment: 0,
-            points: 0,
-            records: []
-        };
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | 3. CONVERT DATES
-    |--------------------------------------------------------------------------
-    */
-
-    const records = experienceResult.rows
-        .map(record => {
-
-            const startDate = new Date(record.date_from);
-
-            const endDate = record.date_to
-                ? new Date(record.date_to)
-                : new Date();
-
-            return {
-                ...record,
-                startDate,
-                endDate
-            };
-        })
-        .filter(record =>
-            !isNaN(record.startDate.getTime()) &&
-            !isNaN(record.endDate.getTime()) &&
-            record.endDate >= record.startDate
-        );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | 4. SORT BY START DATE
-    |--------------------------------------------------------------------------
-    */
-
-    records.sort(
-        (a, b) =>
-            a.startDate.getTime() -
-            b.startDate.getTime()
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | 5. MERGE OVERLAPPING EXPERIENCE PERIODS
-    |--------------------------------------------------------------------------
-    |
-    | Example:
-    |
-    | Job A: 2021 → Present
-    | Job B: 2022 → 2023
-    |
-    | Job B is already inside Job A.
-    |
-    | Therefore we count the period only once.
-    |
-    */
-
-    const mergedPeriods = [];
-
-    for (const record of records) {
-
-        const currentStart = record.startDate;
-        const currentEnd = record.endDate;
-
-        if (mergedPeriods.length === 0) {
-
-            mergedPeriods.push({
-                startDate: currentStart,
-                endDate: currentEnd
-            });
-
-            continue;
-        }
-
-
-        const lastPeriod =
-            mergedPeriods[mergedPeriods.length - 1];
-
-
-        /*
-        |----------------------------------------------------------------------
-        | If current experience overlaps or directly follows
-        | the previous period, extend the previous period.
-        |----------------------------------------------------------------------
-        */
-
-        if (
-            currentStart.getTime() <=
-            lastPeriod.endDate.getTime() + (24 * 60 * 60 * 1000)
-        ) {
-
-            if (
-                currentEnd.getTime() >
-                lastPeriod.endDate.getTime()
-            ) {
-
-                lastPeriod.endDate =
-                    currentEnd;
-            }
-
-        } else {
-
-            /*
-            |------------------------------------------------------------------
-            | Non-overlapping period
-            |------------------------------------------------------------------
-            */
-
-            mergedPeriods.push({
-                startDate: currentStart,
-                endDate: currentEnd
-            });
-        }
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | 6. CALCULATE TOTAL UNIQUE MONTHS
-    |--------------------------------------------------------------------------
-    */
-
-    let totalMonths = 0;
-
-    for (const period of mergedPeriods) {
-
-        const start = period.startDate;
-        const end = period.endDate;
-
-
-        const years =
-            end.getFullYear() -
-            start.getFullYear();
-
-        const months =
-            end.getMonth() -
-            start.getMonth();
-
-
-        const calculatedMonths =
-            (years * 12) + months;
-
-
-        totalMonths += Math.max(
-            0,
-            calculatedMonths
-        );
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | 7. GET EXPERIENCE INCREMENT
-    |--------------------------------------------------------------------------
-    */
-
-    let experienceIncrement = null;
-
-    const incrementResult = await client.query(
-        `
-        SELECT
-            increment_level
-
-        FROM experience_increment_rules
-
-        WHERE $1 >= months_from
-
-          AND (
-                months_to IS NULL
-                OR $1 <= months_to
-              )
-
-        ORDER BY months_from DESC
-
-        LIMIT 1
-        `,
-        [totalMonths]
-    );
-
-
-    if (incrementResult.rows.length > 0) {
-
-        experienceIncrement =
-            Number(
-                incrementResult.rows[0].increment_level
-            );
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | 8. GET EXPERIENCE POINTS
-    |--------------------------------------------------------------------------
-    */
-
-    let experiencePoints = 0;
-
-
-    if (
-        experienceIncrement !== null &&
-        salaryGroup
-    ) {
-
-        const pointResult = await client.query(
-            `
-            SELECT
-                points
-
-            FROM experience_point_rules
-
-            WHERE salary_group = $1
-
-              AND $2 >= increment_from
-
-              AND (
-                    increment_to IS NULL
-                    OR $2 <= increment_to
-                  )
-
-            ORDER BY increment_from DESC
-
-            LIMIT 1
-            `,
-            [
-                salaryGroup,
-                experienceIncrement
-            ]
-        );
-
-
-        if (pointResult.rows.length > 0) {
-
-            experiencePoints =
-                Number(
-                    pointResult.rows[0].points
-                );
-        }
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | 9. RETURN RESULT
-    |--------------------------------------------------------------------------
-    */
-
-    return {
-
-        months: totalMonths,
-
-        increment:
-            experienceIncrement,
-
-        points:
-            experiencePoints,
-
-        records:
-            experienceResult.rows,
-
-        mergedPeriods
-    };
-};
+import {
+    calculateNonTeachingScoring
+} from "./nonTeaching.service.js";
+
+import {
+    calculateTeacherIInitialScreening
+} from "./teaching.service.js";
 
 
 /*
@@ -720,12 +15,9 @@ const calculateExperience = async (
 |--------------------------------------------------------------------------
 */
 
-export const createInitialScreening = async (
-    data
-) => {
+export const createInitialScreening = async (data) => {
 
     const {
-
         job_applications_id,
         applicant_id,
 
@@ -771,9 +63,7 @@ export const createInitialScreening = async (
         |--------------------------------------------------------------------------
         */
 
-        await client.query(
-            "BEGIN"
-        );
+        await client.query("BEGIN");
 
 
         /*
@@ -902,14 +192,20 @@ export const createInitialScreening = async (
             vacancyResult.rows[0];
 
 
+        /*
+        |--------------------------------------------------------------------------
+        | POSITION INFORMATION
+        |--------------------------------------------------------------------------
+        */
+
+        const positionTitle =
+            vacancy.position_title
+                ?.trim()
+                .toUpperCase();
+
+
         const salaryGrade =
             vacancy.salary_grade;
-
-
-        const salaryGroup =
-            getSalaryGroup(
-                salaryGrade
-            );
 
 
         /*
@@ -963,6 +259,10 @@ export const createInitialScreening = async (
 
         let scoring = {
 
+            salaryGrade,
+
+            salaryGroup: null,
+
             education: {
 
                 value: null,
@@ -979,7 +279,9 @@ export const createInitialScreening = async (
 
                 increment: null,
 
-                points: 0
+                points: 0,
+
+                records: []
 
             },
 
@@ -989,7 +291,11 @@ export const createInitialScreening = async (
 
                 increment: null,
 
-                points: 0
+                points: 0,
+
+                records: [],
+
+                mergedPeriods: []
 
             },
 
@@ -1000,7 +306,12 @@ export const createInitialScreening = async (
 
         /*
         |--------------------------------------------------------------------------
-        | 5. CALCULATE POINTS ONLY FOR QUALIFIED
+        | 5. CALCULATE INITIAL SCREENING POINTS
+        |--------------------------------------------------------------------------
+        |
+        | Teacher I and Non-Teaching positions use
+        | different scoring rules.
+        |
         |--------------------------------------------------------------------------
         */
 
@@ -1009,58 +320,92 @@ export const createInitialScreening = async (
             "QUALIFIED"
         ) {
 
-            /*
-            |--------------------------------------------------------------------------
-            | EDUCATION
-            |--------------------------------------------------------------------------
-            */
-
-            scoring.education =
-                await calculateEducation(
-                    client,
-                    resolvedApplicantId,
-                    salaryGroup
-                );
-
-            scoring.training =
-                await calculateTraining(
-                    client,
-                    resolvedApplicantId,
-                    salaryGroup
-                );
-      
-
 
             /*
             |--------------------------------------------------------------------------
-            | EXPERIENCE
+            | DETERMINE TEACHER I
             |--------------------------------------------------------------------------
             |
-            | Temporarily disabled while Education
-            | is being tested.
+            | Your database currently uses "Teacher 1"
+            | while some records may use "Teacher I".
+            |
+            | Both must use the Teacher I scoring service.
             |
             |--------------------------------------------------------------------------
             */
 
-            scoring.experience =
-                await calculateExperience(
-                    client,
-                    resolvedApplicantId,
-                    salaryGroup
-                );
-    
+            const isTeacherI =
+                positionTitle === "TEACHER I" ||
+                positionTitle === "TEACHER 1";
 
 
             /*
             |--------------------------------------------------------------------------
-            | TOTAL
+            | TEACHER I
+            |--------------------------------------------------------------------------
+            |
+            | Teacher I Initial Screening:
+            |
+            | Education  = 10 maximum
+            | Training   = 10 maximum
+            | Experience = 10 maximum
+            |
+            | Total = 30 maximum
+            |
+            | LET/PBET/LEPT, COI and NCOI are NOT
+            | calculated here.
+            |
             |--------------------------------------------------------------------------
             */
 
-      scoring.total =
-        Number(scoring.education.points || 0) +
-        Number(scoring.training.points || 0) +
-        Number(scoring.experience.points || 0);
+            if (isTeacherI) {
+
+                scoring =
+                    await calculateTeacherIInitialScreening(
+                        client,
+                        resolvedApplicantId
+                    );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Make sure salary information is still
+                | available in the returned object.
+                |--------------------------------------------------------------------------
+                */
+
+                scoring.salaryGrade =
+                    salaryGrade;
+
+
+                scoring.salaryGroup =
+                    null;
+
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | NON-TEACHING
+            |--------------------------------------------------------------------------
+            |
+            | Existing Non-Teaching calculation remains
+            | inside nonTeaching.service.js.
+            |
+            |--------------------------------------------------------------------------
+            */
+
+            else {
+
+                scoring =
+                    await calculateNonTeachingScoring(
+                        client,
+                        resolvedApplicantId,
+                        salaryGrade
+                    );
+
+            }
+
         }
 
 
@@ -1159,27 +504,46 @@ export const createInitialScreening = async (
 
                     resolvedApplicationId,
 
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | SCREENING RESULTS
+                    |--------------------------------------------------------------------------
+                    */
+
                     education_passed,
+
                     education_remarks || null,
 
+
                     eligibility_passed,
+
                     eligibility_remarks || null,
 
+
                     training_passed,
+
                     training_remarks || null,
 
+
                     experience_passed,
+
                     experience_remarks || null,
+
 
                     screeningOverallResult,
 
+
                     general_remarks || null,
 
+
                     screened_by,
+
 
                     submitted_documents_passed !== undefined
                         ? submitted_documents_passed
                         : false,
+
 
                     documents_note || null,
 
@@ -1190,11 +554,16 @@ export const createInitialScreening = async (
                     |--------------------------------------------------------------------------
                     */
 
-                    scoring.education.value,
+                    Number(scoring.education?.value) ??
+                        null,
 
-                    scoring.education.increment,
 
-                    scoring.education.points,
+                    scoring.education?.increment ??
+                        null,
+
+
+                    scoring.education?.points ??
+                        0,
 
 
                     /*
@@ -1203,11 +572,16 @@ export const createInitialScreening = async (
                     |--------------------------------------------------------------------------
                     */
 
-                    scoring.training.hours,
+                    scoring.training?.hours ??
+                        0,
 
-                    scoring.training.increment,
 
-                    scoring.training.points,
+                    scoring.training?.increment ??
+                        null,
+
+
+                    scoring.training?.points ??
+                        0,
 
 
                     /*
@@ -1216,11 +590,16 @@ export const createInitialScreening = async (
                     |--------------------------------------------------------------------------
                     */
 
-                    scoring.experience.months,
+                    scoring.experience?.months ??
+                        0,
 
-                    scoring.experience.increment,
 
-                    scoring.experience.points,
+                    scoring.experience?.increment ??
+                        null,
+
+
+                    scoring.experience?.points ??
+                        0,
 
 
                     /*
@@ -1229,9 +608,11 @@ export const createInitialScreening = async (
                     |--------------------------------------------------------------------------
                     */
 
-                    scoring.total
+                    scoring.total ??
+                        0
 
                 ]
+
             );
 
 
@@ -1287,20 +668,28 @@ export const createInitialScreening = async (
             screening:
                 screeningResult.rows[0],
 
+
             scoring: {
 
-                salaryGrade,
+                salaryGrade:
+                    scoring.salaryGrade,
 
-                salaryGroup,
+
+                salaryGroup:
+                    scoring.salaryGroup,
+
 
                 education:
                     scoring.education,
 
+
                 training:
                     scoring.training,
 
+
                 experience:
                     scoring.experience,
+
 
                 total:
                     scoring.total
@@ -1334,5 +723,7 @@ export const createInitialScreening = async (
         */
 
         client.release();
+
     }
+
 };
