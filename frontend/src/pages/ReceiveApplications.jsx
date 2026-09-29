@@ -784,7 +784,7 @@ export default function ReceiveApplications() {
 
   return (
 
-    <div className="p-5 min-h-screen space-y-6 bg-gray-50 relative">
+    <div className="p-5 min-h-screen space-y-6 relative">
 
 
       {/* ======================================================

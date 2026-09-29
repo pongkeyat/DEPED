@@ -2,42 +2,53 @@ import pool from "../config/db.js";
 
 // POST /api/interview-sessions - Schedule new sessions
 export const postInterviewSession = async (req, res) => {
-    const { vacancy_id, selectedApplicants, session_date, venue, panelists, remarks } = req.body;
+    const {
+        vacancy_id,
+        selectedApplicants,
+        session_date,
+        venue,
+        panelists,
+        remarks
+    } = req.body;
 
-    // 1. Input Validation
+    // 1. Input validation
     if (!vacancy_id || !session_date || !venue || !panelists) {
-        return res.status(400).json({ 
-            error: 'Vacancy ID, Session Date, Venue, and Panelists are required.' 
+        return res.status(400).json({
+            error: "Vacancy ID, Session Date, Venue, and Panelists are required."
         });
     }
 
-    if (!Array.isArray(selectedApplicants) || selectedApplicants.length === 0) {
-        return res.status(400).json({ 
-            error: 'At least one job applicant must be selected.' 
+    if (
+        !Array.isArray(selectedApplicants) ||
+        selectedApplicants.length === 0
+    ) {
+        return res.status(400).json({
+            error: "At least one job applicant must be selected."
         });
     }
 
-    // Acquire a dedicated client for safe transaction execution
     const client = await pool.connect();
 
     try {
-        await client.query('BEGIN');
+        await client.query("BEGIN");
 
         const insertedSessions = [];
 
-        // Loop through each applicant string ID and execute insert
-        for (const applicantId of selectedApplicants) {
+        for (const applicationId of selectedApplicants) {
+
+            // 2. Insert interview session
             const result = await client.query(
-                `INSERT INTO interview_sessions (
-                    vacancy_id, 
-                    job_applications_id, 
-                    session_date, 
-                    venue, 
-                    conducted_by, 
+                `
+                INSERT INTO interview_sessions (
+                    vacancy_id,
+                    job_applications_id,
+                    session_date,
+                    venue,
+                    conducted_by,
                     remarks
                 )
-                VALUES ($1, $2, $3, $4, $5, $6) 
-                RETURNING 
+                VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING
                     session_id,
                     vacancy_id,
                     job_applications_id,
@@ -46,43 +57,92 @@ export const postInterviewSession = async (req, res) => {
                     conducted_by,
                     remarks,
                     status,
-                    created_at;`,
+                    created_at;
+                `,
                 [
-                    String(vacancy_id), 
-                    String(applicantId), 
-                    session_date, 
-                    venue, 
-                    panelists, 
-                    remarks || ''
+                    String(vacancy_id),
+                    String(applicationId),
+                    session_date,
+                    venue,
+                    panelists,
+                    remarks || ""
                 ]
             );
 
             insertedSessions.push(result.rows[0]);
+
+            // 3. Update applicant status to For Assessment
+            // applicationId is job_applications_id
+            // applicant_information links to job_applications
+            // hr_remarks_final_notes links through applicant_id
+
+            const updateStatus = await client.query(
+                `
+                UPDATE hr_remarks_final_notes h
+                SET application_status = 'for assesment'
+                FROM applicant_information ai
+                WHERE ai.applicant_id = h.applicant_id
+                  AND ai.job_applications_id = $1
+                RETURNING
+                    h.applicant_id,
+                    h.application_status;
+                `,
+                [String(applicationId)]
+            );
+
+            // Ensure the applicant's HR status record exists
+            if (updateStatus.rowCount === 0) {
+                throw new Error(
+                    `HR remarks status record not found for application: ${applicationId}`
+                );
+            }
         }
 
-        await client.query('COMMIT');
+        // 4. Commit both session creation and status updates
+        await client.query("COMMIT");
 
-        return res.status(201).json({ 
-            message: 'Assessment sessions successfully scheduled.',
-            sessions: insertedSessions 
+        return res.status(201).json({
+            message: "Interview sessions scheduled successfully. Applicant status updated to For Assessment.",
+            sessions: insertedSessions,
+            applicantStatus: "for assesment"
         });
 
     } catch (error) {
-        await client.query('ROLLBACK');
-        console.error('Error creating interview session entries:', error);
+        await client.query("ROLLBACK");
 
-        if (error.code === '23503') {
-            return res.status(400).json({ 
-                error: 'Invalid database reference constraint. Verify your vacancy and applicant IDs.' 
+        console.error(
+            "Error creating interview sessions:",
+            error
+        );
+
+        if (error.code === "23503") {
+            return res.status(400).json({
+                error: "Invalid database reference. Verify your vacancy and applicant IDs."
             });
         }
-        if (error.code === '23505') {
-            return res.status(409).json({ 
-                error: 'One or more applicants are already scheduled for this vacancy.' 
+
+        if (error.code === "23505") {
+            return res.status(409).json({
+                error: "One or more applicants are already scheduled for this vacancy."
             });
         }
 
-        return res.status(500).json({ error: 'Internal server error.' });
+        if (error.message?.includes("HR remarks status record not found")) {
+            return res.status(404).json({
+                error: error.message
+            });
+        }
+
+        if (error.code === "23514") {
+            return res.status(400).json({
+                error: "The applicant status violates a database constraint. Ensure 'For Assessment' is an allowed status."
+            });
+        }
+
+        return res.status(500).json({
+            error: "Internal server error."
+        });
+
     } finally {
         client.release();
     }
@@ -100,6 +160,29 @@ export const getInterviewSessions = async (req, res) => {
                 a.applicant_id, 
                 p.position_title, 
                 p.category, 
+                CASE
+                    WHEN UPPER(TRIM(p.category)) IN ('TEACHING', 'TEACHING POSITIONS')
+                        THEN 'TEACHING'
+                    WHEN UPPER(TRIM(p.category)) IN (
+                        'RELATED TEACHING',
+                        'RELATED-TEACHING',
+                        'RELATED TEACHING POSITIONS'
+                    )
+                        THEN 'RELATED_TEACHING'
+                    WHEN UPPER(TRIM(p.category)) IN (
+                        'SCHOOL ADMINISTRATION',
+                        'SCHOOL ADMINISTRATION POSITIONS'
+                    )
+                        THEN 'SCHOOL_ADMINISTRATION'
+                    WHEN UPPER(TRIM(p.category)) IN (
+                        'NON-TEACHING',
+                        'NON TEACHING',
+                        'NON-TEACHING POSITIONS',
+                        'NON TEACHING POSITIONS'
+                    )
+                        THEN 'NON_TEACHING'
+                    ELSE NULL
+                END AS assessment_type,
                 a.first_name, 
                 a.middle_name, 
                 a.last_name, 
@@ -127,7 +210,7 @@ export const getInterviewSessions = async (req, res) => {
             INNER JOIN hr_remarks_final_notes h
                 ON h.applicant_id = a.applicant_id
 
-            WHERE LOWER(TRIM(h.application_status)) = 'qualified'
+            WHERE LOWER(TRIM(h.application_status)) = 'for assesment'
 
             ORDER BY 
                 a.last_name ASC, 

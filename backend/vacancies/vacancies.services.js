@@ -316,3 +316,208 @@ export const updateVacancyStatusService = async (vacancy_id, status) => {
         client.release();
     }
 };
+
+
+// Service 7: Edit Vacancy and its Qualifications/Remarks
+export const updateVacancyService = async (vacancy_id, data) => {
+    const client = await pool.connect();
+
+    try {
+        await client.query("BEGIN");
+
+        const {
+            position_id,
+            plantilla_position,
+            office_unit,
+            place_of_assignment,
+            number_of_vacancies,
+            application_posted,
+            application_deadline,
+            qualifications,
+            remark_text
+        } = data;
+
+        // 1. Validate position
+        const positionResult = await client.query(
+            `SELECT position_title, salary_grade
+             FROM positions
+             WHERE position_id = $1`,
+            [position_id]
+        );
+
+        if (positionResult.rows.length === 0) {
+            throw new Error("POSITION_NOT_FOUND");
+        }
+
+        const { position_title, salary_grade } =
+            positionResult.rows[0];
+
+        // 2. Update vacancy details
+        const vacancyResult = await client.query(
+            `UPDATE vacancies
+             SET
+                position_id = $1,
+                plantilla_position = $2,
+                position_title = $3,
+                salary_grade = $4,
+                office_unit = $5,
+                place_of_assignment = $6,
+                number_of_vacancies = $7,
+                application_posted = $8,
+                application_deadline = $9
+             WHERE vacancy_id = $10
+             RETURNING *`,
+            [
+                position_id,
+                plantilla_position,
+                position_title,
+                salary_grade,
+                office_unit,
+                place_of_assignment,
+                number_of_vacancies,
+                application_posted,
+                application_deadline,
+                vacancy_id
+            ]
+        );
+
+        if (vacancyResult.rowCount === 0) {
+            throw new Error("VACANCY_NOT_FOUND");
+        }
+
+        // 3. Update or insert qualifications
+        if (qualifications !== undefined && qualifications !== null) {
+            const {
+                education_requirement,
+                training_requirement,
+                experience_requirement,
+                eligibility_requirement
+            } = qualifications;
+
+            const existingQualification = await client.query(
+                `SELECT qualification_id
+                 FROM vacancy_specific_qualifications
+                 WHERE vacancy_id = $1`,
+                [vacancy_id]
+            );
+
+            if (existingQualification.rowCount > 0) {
+                await client.query(
+                    `UPDATE vacancy_specific_qualifications
+                     SET
+                        education_requirement = $1,
+                        training_requirement = $2,
+                        experience_requirement = $3,
+                        eligibility_requirement = $4
+                     WHERE vacancy_id = $5`,
+                    [
+                        education_requirement,
+                        training_requirement,
+                        experience_requirement,
+                        eligibility_requirement,
+                        vacancy_id
+                    ]
+                );
+            } else {
+                await client.query(
+                    `INSERT INTO vacancy_specific_qualifications (
+                        vacancy_id,
+                        education_requirement,
+                        training_requirement,
+                        experience_requirement,
+                        eligibility_requirement
+                    )
+                    VALUES ($1, $2, $3, $4, $5)`,
+                    [
+                        vacancy_id,
+                        education_requirement,
+                        training_requirement,
+                        experience_requirement,
+                        eligibility_requirement
+                    ]
+                );
+            }
+        }
+
+        // 4. Update, insert, or remove remarks
+        if (remark_text !== undefined) {
+            const existingRemark = await client.query(
+                `SELECT vacancy_id
+                 FROM vacancies_remarks
+                 WHERE vacancy_id = $1`,
+                [vacancy_id]
+            );
+
+            if (String(remark_text ?? "").trim() === "") {
+                await client.query(
+                    `DELETE FROM vacancies_remarks
+                     WHERE vacancy_id = $1`,
+                    [vacancy_id]
+                );
+            } else if (existingRemark.rowCount > 0) {
+                await client.query(
+                    `UPDATE vacancies_remarks
+                     SET remark_text = $1
+                     WHERE vacancy_id = $2`,
+                    [remark_text, vacancy_id]
+                );
+            } else {
+                await client.query(
+                    `INSERT INTO vacancies_remarks (
+                        vacancy_id,
+                        remark_text
+                    )
+                    VALUES ($1, $2)`,
+                    [vacancy_id, remark_text]
+                );
+            }
+        }
+
+        await client.query("COMMIT");
+
+        return await getVacancyByIdService(vacancy_id);
+
+    } catch (error) {
+        await client.query("ROLLBACK");
+        console.error("Update vacancy error:", error);
+        throw error;
+    } finally {
+        client.release();
+    }
+};
+
+
+// Service 8: Archive Vacancy
+export const archiveVacancyService = async (vacancy_id) => {
+    const client = await pool.connect();
+
+    try {
+        await client.query("BEGIN");
+
+        const result = await client.query(
+            `UPDATE vacancies
+             SET status = 'Archive',
+                 is_archived = TRUE
+             WHERE vacancy_id = $1
+             RETURNING *;`,
+            [vacancy_id]
+        );
+
+        if (result.rowCount === 0) {
+            throw new Error("VACANCY_NOT_FOUND");
+        }
+
+        await client.query("COMMIT");
+
+        return result.rows[0];
+
+    } catch (error) {
+        await client.query("ROLLBACK");
+
+        console.error("Archive vacancy error:", error);
+        throw error;
+
+    } finally {
+        client.release();
+    }
+};

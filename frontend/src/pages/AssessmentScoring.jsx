@@ -156,14 +156,18 @@ export default function AssessmentScoring() {
 
     if (
       category === "RELATED TEACHING" ||
-      category === "RELATED-TEACHING"
+      category === "RELATED-TEACHING" ||
+      category === "RELATED_TEACHING" ||
+      category === "RELATED TEACHING POSITIONS"
     ) {
       return "RELATED_TEACHING";
     }
 
     if (
       category === "SCHOOL ADMINISTRATION" ||
-      category === "SCHOOL ADMINISTRATION POSITIONS"
+      category === "SCHOOL ADMINISTRATION POSITIONS" ||
+      category === "SCHOOL ADMINISTRATION POSITION" ||
+      category === "SCHOOL_ADMINISTRATION"
     ) {
       return "SCHOOL_ADMINISTRATION";
     }
@@ -201,6 +205,30 @@ export default function AssessmentScoring() {
     }
 
     return "Non-Teaching";
+  };
+
+  // ============================================================
+  // INTEGRATED 100-POINT CATEGORIES
+  // Related Teaching and School Administration both use
+  // Education + Training + Experience from Initial Screening
+  // as part of the same 100-point assessment.
+  // ============================================================
+
+  const isIntegrated100PointAssessment = (sessionOrType) => {
+    const type =
+      typeof sessionOrType === "string"
+        ? sessionOrType
+        : getAssessmentType(sessionOrType);
+
+    const normalized = String(type || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "_");
+
+    return (
+      normalized === "RELATED_TEACHING" ||
+      normalized === "SCHOOL_ADMINISTRATION"
+    );
   };
 
   // ============================================================
@@ -361,6 +389,35 @@ export default function AssessmentScoring() {
           criteriaData
         );
 
+        const normalizedAssessmentType =
+          String(assessmentType || "")
+            .trim()
+            .toUpperCase()
+            .replace(/\\s+/g, "_");
+
+        const isIntegratedAssessment =
+          isIntegrated100PointAssessment(
+            normalizedAssessmentType
+          );
+
+        const isRelatedTeaching =
+          normalizedAssessmentType === "RELATED_TEACHING";
+
+        const isSchoolAdministration =
+          normalizedAssessmentType === "SCHOOL_ADMINISTRATION";
+
+        /*
+         * Related Teaching is different from the other categories:
+         *
+         * Education + Training + Experience are part of the
+         * 100-point comparative assessment, but their scores are
+         * already computed during Initial Screening.
+         *
+         * Therefore, for Related Teaching only, we take those
+         * three criteria from assessment_criteria and render them
+         * as "initial" criteria. Their scores are read from the
+         * initial screening result instead of being entered again.
+         */
         const processedAssessmentCriteria =
           criteriaData.map((criterion) => {
             const name = String(
@@ -369,13 +426,28 @@ export default function AssessmentScoring() {
                 ""
             ).trim();
 
+            const normalizedName =
+              name
+                .toUpperCase()
+                .replace(/\\s+/g, " ");
+
+            const isIntegratedETE =
+              isIntegratedAssessment &&
+              (
+                normalizedName === "EDUCATION" ||
+                normalizedName === "TRAINING" ||
+                normalizedName === "EXPERIENCE"
+              );
+
             const isManual =
               Boolean(criterion.is_manual);
 
             const type =
-              isManual
-                ? "text"
-                : "dropdown";
+              isIntegratedETE
+                ? "initial"
+                : isManual
+                  ? "text"
+                  : "dropdown";
 
             const options =
               Array.isArray(criterion.options)
@@ -408,20 +480,99 @@ export default function AssessmentScoring() {
                   criterion.max_points || 0
                 ),
 
-              options,
+              options:
+
+                options,
 
               assessmentType:
                 criterion.assessment_type ||
                 assessmentType,
 
               isManual,
+
+              isIntegratedETE,
+              // Keep this property for compatibility with existing ApplicantRow code.
+              isRelatedTeachingETE: isRelatedTeaching && isIntegratedETE,
+              isSchoolAdministrationETE:
+                isSchoolAdministration && isIntegratedETE,
             };
           });
 
-        const finalCriteria = [
-          ...initialCriteria,
-          ...processedAssessmentCriteria,
-        ];
+        /*
+         * For Related Teaching, do NOT prepend BASE_CRITERIA_CONFIG.
+         * Education, Training and Experience already come from the
+         * database criteria and are included in the 100-point RT
+         * assessment.
+         *
+         * For other categories, keep the existing BASE criteria.
+         */
+        const integratedOrder = {
+          EDUCATION: 1,
+          TRAINING: 2,
+          EXPERIENCE: 3,
+        };
+
+        const orderedProcessedAssessmentCriteria =
+          isIntegratedAssessment
+            ? [...processedAssessmentCriteria].sort(
+                (a, b) => {
+                  const aName = String(a.name || "")
+                    .trim()
+                    .toUpperCase();
+
+                  const bName = String(b.name || "")
+                    .trim()
+                    .toUpperCase();
+
+                  const aOrder = integratedOrder[aName] || 99;
+                  const bOrder = integratedOrder[bName] || 99;
+
+                  if (aOrder !== bOrder) {
+                    return aOrder - bOrder;
+                  }
+
+                  return Number(a.id || 0) - Number(b.id || 0);
+                }
+              )
+            : processedAssessmentCriteria;
+
+        if (isIntegratedAssessment) {
+          const eteCriteria =
+            orderedProcessedAssessmentCriteria.filter(
+              (criterion) => criterion.isIntegratedETE
+            );
+
+          if (eteCriteria.length !== 3) {
+            setCriteria([]);
+            showErrorModal(
+              "Integrated Assessment Criteria Missing",
+              `${getSessionCategoryName(selectedSessionData)} requires Education, Training, and Experience criteria in assessment_criteria.`
+            );
+            return;
+          }
+
+          const eteMax = eteCriteria.reduce(
+            (sum, criterion) =>
+              sum + Number(criterion.max || 0),
+            0
+          );
+
+          if (eteMax !== 30) {
+            setCriteria([]);
+            showErrorModal(
+              "Invalid ETE Configuration",
+              `${getSessionCategoryName(selectedSessionData)} requires Education, Training, and Experience to total 30 points.`
+            );
+            return;
+          }
+        }
+
+        const finalCriteria = isIntegratedAssessment
+          ? orderedProcessedAssessmentCriteria
+          : [
+              ...initialCriteria,
+              ...processedAssessmentCriteria,
+            ];
 
         console.log(
           "FINAL CRITERIA:",
@@ -604,52 +755,44 @@ export default function AssessmentScoring() {
   const computeGrandTotal = (
     item
   ) => {
-    const id =
-      getApplicantId(item);
+    const id = getApplicantId(item);
 
-    const initialTotal =
-      getInitialScreeningScore(
-        item,
-        "Education"
-      ) +
-      getInitialScreeningScore(
-        item,
-        "Training"
-      ) +
-      getInitialScreeningScore(
-        item,
-        "Experience"
+    const integrated = isIntegrated100PointAssessment(
+      selectedSessionData
+    );
+
+    const initialTotal = integrated
+      ? criteria
+          .filter((criterion) => criterion.isIntegratedETE)
+          .reduce(
+            (sum, criterion) =>
+              sum +
+              getInitialScreeningScore(
+                item,
+                criterion.name
+              ),
+            0
+          )
+      : getInitialScreeningScore(item, "Education") +
+        getInitialScreeningScore(item, "Training") +
+        getInitialScreeningScore(item, "Experience");
+
+    const selectedScores = applicantScores[id] || {};
+
+    const assessmentTotal = criteria
+      .filter(
+        (criterion) =>
+          criterion.type === "dropdown" ||
+          criterion.type === "text"
+      )
+      .reduce(
+        (sum, criterion) =>
+          sum +
+          Number(selectedScores[criterion.id] || 0),
+        0
       );
 
-    const selectedScores =
-      applicantScores[id] || {};
-
-    const assessmentTotal =
-      criteria
-        .filter(
-          (criterion) =>
-            criterion.type ===
-              "dropdown" ||
-            criterion.type === "text"
-        )
-        .reduce(
-          (
-            sum,
-            criterion
-          ) =>
-            sum +
-            Number(
-              selectedScores[
-                criterion.id
-              ] || 0
-            ),
-          0
-        );
-
-    return (
-      initialTotal +
-      assessmentTotal
-    );
+    return initialTotal + assessmentTotal;
   };
 
   // ============================================================
@@ -758,13 +901,45 @@ export default function AssessmentScoring() {
         applicantId
       ] || {};
 
+    const isIntegratedAssessment =
+      isIntegrated100PointAssessment(selectedSessionData);
+
     // ----------------------------------------------------------
-    // Check every actual assessment criterion
+    // Check every editable assessment criterion.
+    //
+    // Related Teaching ETE criteria are read-only because their
+    // scores come from Initial Screening.
     // ----------------------------------------------------------
 
     for (
       const criterion of criteria
     ) {
+      if (
+        criterion.isIntegratedETE
+      ) {
+        const eteScore =
+          getInitialScreeningScore(
+            item,
+            criterion.name
+          );
+
+        if (
+          !Number.isFinite(eteScore) ||
+          eteScore < 0 ||
+          eteScore >
+            Number(criterion.max || 0)
+        ) {
+          showErrorModal(
+            "Invalid Initial Screening Score",
+            `${criterion.name} has an invalid Initial Screening score.`
+          );
+
+          return;
+        }
+
+        continue;
+      }
+
       if (
         criterion.type !==
           "dropdown" &&
@@ -842,6 +1017,38 @@ export default function AssessmentScoring() {
       }
     }
 
+    if (
+      isIntegratedAssessment
+    ) {
+      const eteTotal =
+        criteria
+          .filter(
+            (criterion) =>
+              criterion.isIntegratedETE
+          )
+          .reduce(
+            (
+              sum,
+              criterion
+            ) =>
+              sum +
+              getInitialScreeningScore(
+                item,
+                criterion.name
+              ),
+            0
+          );
+
+      if (eteTotal > 30) {
+        showErrorModal(
+          "Invalid Related Teaching Score",
+          "Education, Training, and Experience may not exceed 30 points in total."
+        );
+
+        return;
+      }
+    }
+
     const applicantName =
       `${item?.first_name || ""} ${
         item?.middle_name || ""
@@ -904,31 +1111,55 @@ export default function AssessmentScoring() {
           applicantId
         ] || {};
 
-      // --------------------------------------------------------
-      // Only submit actual assessment criteria
-      // Do NOT submit Education / Training / Experience
-      // --------------------------------------------------------
+      const isIntegratedAssessment =
+        isIntegrated100PointAssessment(selectedSessionData);
 
+      /*
+       * Related Teaching must submit all eight criteria:
+       *
+       *   Education              10
+       *   Training              10
+       *   Experience            10
+       *   Performance            20
+       *   Outstanding Accomplishments 10
+       *   Application of Education   10
+       *   Application of Learning & Development 10
+       *   Potential              20
+       *
+       * The first three are read-only in this screen and their
+       * scores come from Initial Screening.
+       *
+       * Other categories keep the existing behavior.
+       */
       const submissionScores =
         criteria
           .filter(
             (criterion) =>
               criterion.type ===
                 "dropdown" ||
-              criterion.type === "text"
+              criterion.type === "text" ||
+              (
+                isIntegratedAssessment &&
+                criterion.isIntegratedETE
+              )
           )
           .map(
             (criterion) => {
               const score =
-                Number(
-                  selectedScores[
-                    criterion.id
-                  ]
-                );
+                criterion.isIntegratedETE
+                  ? getInitialScreeningScore(
+                      item,
+                      criterion.name
+                    )
+                  : Number(
+                      selectedScores[
+                        criterion.id
+                      ]
+                    );
 
               const selectedOption =
                 criterion.type ===
-                "dropdown"
+                  "dropdown"
                   ? criterion.options?.find(
                       (opt) =>
                         Number(
@@ -1156,21 +1387,54 @@ export default function AssessmentScoring() {
                 </div>
 
                 <p className="mt-2 text-sm text-gray-500">
-                  Initial Screening:{" "}
-                  <strong>30 points</strong>
-                  {" "}+
-                  {" "}
-                  Assessment:{" "}
-                  <strong>
-                    {criteria
-                      .filter((c) => c.type !== "initial")
-                      .reduce(
-                        (sum, c) =>
-                          sum + Number(c.max || 0),
-                        0
-                      )}{" "}
-                    points
-                  </strong>
+                  {isIntegrated100PointAssessment(selectedSessionData) ? (
+                    <>
+                      Initial Screening ETE:{" "}
+                      <strong>30 points</strong>
+                      {" "}+
+                      {" "}
+                      Other Assessment:{" "}
+                      <strong>
+                        {criteria
+                          .filter(
+                            (c) =>
+                              c.type !== "initial"
+                          )
+                          .reduce(
+                            (sum, c) =>
+                              sum +
+                              Number(c.max || 0),
+                            0
+                          )}{" "}
+                        points
+                      </strong>
+                      {" "}=
+                      {" "}
+                      <strong>100 points</strong>
+                    </>
+                  ) : (
+                    <>
+                      Initial Screening:{" "}
+                      <strong>30 points</strong>
+                      {" "}+
+                      {" "}
+                      Assessment:{" "}
+                      <strong>
+                        {criteria
+                          .filter(
+                            (c) =>
+                              c.type !== "initial"
+                          )
+                          .reduce(
+                            (sum, c) =>
+                              sum +
+                              Number(c.max || 0),
+                            0
+                          )}{" "}
+                        points
+                      </strong>
+                    </>
+                  )}
                 </p>
 
               </div>
@@ -1205,135 +1469,38 @@ export default function AssessmentScoring() {
             ) : (
               <div className="overflow-x-auto">
 
-                <table className="min-w-[1900px] w-full text-left">
+                <table className="min-w-max w-full border-collapse text-left">
 
                   {/* =================================================
                       TABLE HEADER
                   ================================================= */}
 
-                  <thead className="border-b border-gray-200 bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-600">
-
+                  <thead className="border-b border-gray-200 bg-gray-50 text-xs font-semibold text-gray-700">
                     <tr>
-
-                      <th className="sticky left-0 z-20 min-w-[240px] bg-gray-50 px-4 py-4">
-                        Applicant
+                      <th className="sticky left-0 z-20 min-w-[240px] border border-gray-300 bg-gray-50 px-3 py-3 text-center">
+                        Name of Applicant
                       </th>
 
-                      {/* =================================================
-                          CRITERIA
-                      ================================================= */}
-
-                      {criteria.map(
-                        (criterion) => (
-                          <th
-                            key={
-                              criterion.id
-                            }
-                            className="min-w-[160px] px-4 py-4 text-center"
-                          >
-
-                            <div>
-                              {
-                                criterion.name
-                              }
+                      {criteria.map((criterion) => (
+                        <th
+                          key={criterion.id}
+                          className="min-w-[100px] border border-gray-300 bg-gray-50 px-2 py-3 text-center align-middle"
+                        >
+                          <div className="normal-case leading-tight">
+                            {criterion.name}
+                          </div>
+                          {criterion.type !== "initial" && Number(criterion.max) > 0 && (
+                            <div className="mt-1 text-[10px] font-normal normal-case text-gray-500">
+                              Max: {criterion.max}
                             </div>
+                          )}
+                        </th>
+                      ))}
 
-                            {criterion.type ===
-                              "initial" && (
-                              <div className="mt-1 text-[10px] font-normal normal-case text-gray-400">
-                                Initial Screening
-                              </div>
-                            )}
-
-                            {criterion.type !==
-                              "initial" &&
-                              criterion.max >
-                                0 && (
-                                <div className="mt-1 text-[10px] font-normal normal-case text-gray-400">
-                                  Max:{" "}
-                                  {
-                                    criterion.max
-                                  }
-                                </div>
-                              )}
-
-                          </th>
-                        )
-                      )}
-
-                      {/* =================================================
-                          INITIAL TOTAL
-                      ================================================= */}
-
-                      <th className="min-w-[120px] px-4 py-4 text-center">
-
-                        <div>
-                          Initial
-                        </div>
-
-                        <div className="text-[10px] font-normal">
-                          / 30
-                        </div>
-
+                      <th className="min-w-[120px] border border-gray-300 bg-gray-50 px-3 py-3 text-center">
+                        Total
                       </th>
-
-                      {/* =================================================
-                          ASSESSMENT TOTAL
-                      ================================================= */}
-
-                      <th className="min-w-[120px] px-4 py-4 text-center">
-
-                        <div>
-                          Assessment
-                        </div>
-
-                        <div className="text-[10px] font-normal">
-                          /{" "}
-                          {criteria
-                            .filter((c) => c.type !== "initial")
-                            .reduce(
-                              (sum, c) =>
-                                sum + Number(c.max || 0),
-                              0
-                            )}
-                        </div>
-
-                      </th>
-
-                      {/* =================================================
-                          GRAND TOTAL
-                      ================================================= */}
-
-                      <th className="min-w-[130px] px-4 py-4 text-center">
-
-                        <div>
-                          Grand Total
-                        </div>
-
-                        <div className="text-[10px] font-normal">
-                          / 100
-                        </div>
-
-                      </th>
-
-                      {/* =================================================
-                          STATUS
-                      ================================================= */}
-
-                      <th className="min-w-[120px] px-4 py-4 text-center">
-                        Status
-                      </th>
-
-                      {/* =================================================
-                          ACTION
-                      ================================================= */}
-
-                      <th className="min-w-[140px] px-4 py-4 text-right">
-                        Action
-                      </th>
-
                     </tr>
-
                   </thead>
 
                   {/* ==================================================

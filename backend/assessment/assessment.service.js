@@ -136,9 +136,7 @@ export const getQualifiedApplicantForAssessment = async (
             education: {
 
                 value:
-                    Number(
-                        applicant.education_value || 0
-                    ),
+                    applicant.education_value,
 
                 increment:
                     Number(
@@ -196,25 +194,10 @@ export const getQualifiedApplicantForAssessment = async (
 | GET ASSESSMENT CRITERIA BY ASSESSMENT TYPE
 |--------------------------------------------------------------------------
 |
-| Example:
-|
 | TEACHING
-|   -> LET/PBET/LEPT
-|   -> COI
-|   -> NCOI
-|
-| NON_TEACHING
-|   -> Performance
-|   -> Outstanding Accomplishments
-|   -> Application of Education
-|   -> Application of Learning & Development
-|   -> Potential
-|
 | RELATED_TEACHING
-|   -> whatever criteria are assigned in DB
-|
 | SCHOOL_ADMINISTRATION
-|   -> whatever criteria are assigned in DB
+| NON_TEACHING
 |
 |--------------------------------------------------------------------------
 */
@@ -262,7 +245,6 @@ export const getAssessmentCriteriaByType = async (
                         ao.points
 
                     )
-
                     ORDER BY
                         ao.points DESC,
                         ao.assessment_option_id ASC
@@ -369,15 +351,6 @@ export const getAssessmentCriteriaByType = async (
 |--------------------------------------------------------------------------
 | GET ASSESSMENT CRITERIA
 |--------------------------------------------------------------------------
-|
-| This replaces the old position/category filtering.
-|
-| getAssessmentCriteria("TEACHING")
-| getAssessmentCriteria("NON_TEACHING")
-| getAssessmentCriteria("RELATED_TEACHING")
-| getAssessmentCriteria("SCHOOL_ADMINISTRATION")
-|
-|--------------------------------------------------------------------------
 */
 
 export const getAssessmentCriteria = async (
@@ -399,9 +372,6 @@ export const getAssessmentCriteria = async (
 /*
 |--------------------------------------------------------------------------
 | GET OPTIONS BY CRITERION
-|--------------------------------------------------------------------------
-|
-| Kept for compatibility with your existing frontend/API.
 |--------------------------------------------------------------------------
 */
 
@@ -476,12 +446,6 @@ export const getAssessmentCriteriaOption =
 /*
 |--------------------------------------------------------------------------
 | GET OPTIONS BY ASSESSMENT TYPE
-|--------------------------------------------------------------------------
-|
-| Optional helper.
-|
-| This allows you to get ALL options belonging to an
-| assessment type.
 |--------------------------------------------------------------------------
 */
 
@@ -575,68 +539,13 @@ export const getAssessmentOptionsByType =
 
 /*
 |--------------------------------------------------------------------------
-| GET CRITERION MAP
+| SUBMIT ASSESSMENT
 |--------------------------------------------------------------------------
 */
 
-const getCriteriaMap = (
-    criteria
+export const submitAssessment = async (
+    data
 ) => {
-
-    const map = new Map();
-
-    for (
-        const criterion
-        of criteria
-    ) {
-
-        map.set(
-            Number(
-                criterion.assessment_criteria_id
-            ),
-            criterion
-        );
-    }
-
-    return map;
-};
-
-
-/*
-|--------------------------------------------------------------------------
-| SUBMIT ASSESSMENT
-|--------------------------------------------------------------------------
-*/
-
-/*
-|--------------------------------------------------------------------------
-| SUBMIT ASSESSMENT
-|--------------------------------------------------------------------------
-|
-| assessment_type exists ONLY in assessment_criteria.
-|
-| Applicant category:
-|
-| TEACHING
-|     -> TEACHING
-|
-| NON-TEACHING
-|     -> NON_TEACHING
-|
-| RELATED TEACHING
-|     -> RELATED_TEACHING
-|
-| SCHOOL ADMINISTRATION
-|     -> SCHOOL_ADMINISTRATION
-|
-| The actual criteria are then retrieved from:
-|
-| assessment_criteria.assessment_type
-|
-|--------------------------------------------------------------------------
-*/
-
-export const submitAssessment = async (data) => {
 
     const {
         applicant_id,
@@ -644,11 +553,15 @@ export const submitAssessment = async (data) => {
         scored_by
     } = data;
 
-    const client = await pool.connect();
+    const client =
+        await pool.connect();
 
     try {
 
-        await client.query("BEGIN");
+        await client.query(
+            "BEGIN"
+        );
+
 
         /*
         |--------------------------------------------------------------------------
@@ -662,10 +575,12 @@ export const submitAssessment = async (data) => {
             );
         }
 
+
         if (
             !Array.isArray(scores) ||
             scores.length === 0
         ) {
+
             throw new Error(
                 "INVALID_SCORES"
             );
@@ -678,8 +593,9 @@ export const submitAssessment = async (data) => {
         |--------------------------------------------------------------------------
         */
 
-        const applicantResult = await client.query(
-            `
+        const applicantResult =
+            await client.query(
+                `
                 SELECT
 
                     ai.applicant_id,
@@ -689,7 +605,6 @@ export const submitAssessment = async (data) => {
                     ja.vacancy_id,
 
                     v.position_id,
-
                     v.position_title,
 
                     p.position_title
@@ -703,7 +618,13 @@ export const submitAssessment = async (data) => {
 
                     ins.overall_result,
 
-                    ins.initial_screening_points
+                    ins.initial_screening_points,
+
+                    ins.education_points,
+
+                    ins.training_points,
+
+                    ins.experience_points
 
                 FROM applicant_information ai
 
@@ -735,9 +656,9 @@ export const submitAssessment = async (data) => {
                     ins.screening_id DESC
 
                 LIMIT 1
-            `,
-            [applicant_id]
-        );
+                `,
+                [applicant_id]
+            );
 
 
         /*
@@ -749,10 +670,12 @@ export const submitAssessment = async (data) => {
         if (
             applicantResult.rows.length === 0
         ) {
+
             throw new Error(
                 "APPLICANT_NOT_QUALIFIED"
             );
         }
+
 
         const applicant =
             applicantResult.rows[0];
@@ -760,38 +683,21 @@ export const submitAssessment = async (data) => {
 
         /*
         |--------------------------------------------------------------------------
-        | 4. GET CATEGORY
+        | 4. DETERMINE ASSESSMENT TYPE
         |--------------------------------------------------------------------------
         */
 
         const category =
-            String(
-                applicant.category || ""
-            )
-                .trim()
-                .toUpperCase()
-                .replace(/\s+/g, " ");
+            normalize(
+                applicant.category
+            );
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | 5. DETERMINE ASSESSMENT TYPE
-        |--------------------------------------------------------------------------
-        |
-        | IMPORTANT:
-        |
-        | assessment_type is NOT read from positions
-        | or vacancies.
-        |
-        | It is stored in assessment_criteria.
-        |
-        |--------------------------------------------------------------------------
-        */
 
         let assessmentType = "";
 
 
         /*
+        |--------------------------------------------------------------------------
         | TEACHING
         |--------------------------------------------------------------------------
         */
@@ -807,6 +713,7 @@ export const submitAssessment = async (data) => {
 
 
         /*
+        |--------------------------------------------------------------------------
         | RELATED TEACHING
         |--------------------------------------------------------------------------
         */
@@ -823,13 +730,15 @@ export const submitAssessment = async (data) => {
 
 
         /*
+        |--------------------------------------------------------------------------
         | SCHOOL ADMINISTRATION
         |--------------------------------------------------------------------------
         */
 
         else if (
             category === "SCHOOL ADMINISTRATION" ||
-            category === "SCHOOL ADMINISTRATION POSITIONS"
+            category === "SCHOOL ADMINISTRATION POSITIONS" ||
+            category === "SCHOOL ADMINISTRATION POSITION"
         ) {
 
             assessmentType =
@@ -838,6 +747,7 @@ export const submitAssessment = async (data) => {
 
 
         /*
+        |--------------------------------------------------------------------------
         | NON-TEACHING
         |--------------------------------------------------------------------------
         */
@@ -856,7 +766,7 @@ export const submitAssessment = async (data) => {
 
         /*
         |--------------------------------------------------------------------------
-        | 6. VALIDATE ASSESSMENT TYPE
+        | 5. VALIDATE ASSESSMENT TYPE
         |--------------------------------------------------------------------------
         */
 
@@ -921,43 +831,39 @@ export const submitAssessment = async (data) => {
 
         /*
         |--------------------------------------------------------------------------
-        | 7. GET CRITERIA FROM DATABASE
-        |--------------------------------------------------------------------------
-        |
-        | assessment_type is taken from assessment_criteria.
-        |
+        | 6. GET CRITERIA
         |--------------------------------------------------------------------------
         */
 
         const criteriaResult =
             await client.query(
                 `
-                    SELECT
+                SELECT
 
-                        assessment_criteria_id,
+                    assessment_criteria_id,
 
-                        criterion_name,
+                    criterion_name,
 
-                        max_points,
+                    max_points,
 
-                        is_manual,
+                    is_manual,
 
-                        is_active,
+                    is_active,
 
-                        assessment_type
+                    assessment_type
 
-                    FROM assessment_criteria
+                FROM assessment_criteria
 
-                    WHERE is_active = TRUE
+                WHERE is_active = TRUE
 
-                      AND UPPER(
-                            TRIM(
-                                assessment_type
-                            )
-                      ) = $1
+                  AND UPPER(
+                        TRIM(
+                            assessment_type
+                        )
+                  ) = $1
 
-                    ORDER BY
-                        assessment_criteria_id ASC
+                ORDER BY
+                    assessment_criteria_id ASC
                 `,
                 [
                     assessmentType
@@ -971,7 +877,7 @@ export const submitAssessment = async (data) => {
 
         /*
         |--------------------------------------------------------------------------
-        | 8. CHECK CRITERIA
+        | 7. CHECK CRITERIA
         |--------------------------------------------------------------------------
         */
 
@@ -979,46 +885,93 @@ export const submitAssessment = async (data) => {
             criteriaRows.length === 0
         ) {
 
-            console.error(
-                "NO ASSESSMENT CRITERIA FOUND",
-                {
-                    applicant_id,
-
-                    position:
-                        applicant.actual_position_title ||
-                        applicant.position_title,
-
-                    category:
-                        applicant.category,
-
-                    assessmentType
-                }
-            );
-
             throw new Error(
                 "NO_ASSESSMENT_CRITERIA_FOUND"
             );
         }
 
 
-        console.log(
-            "VALID CRITERIA:",
-            criteriaRows.map(
-                criterion => ({
-                    id:
-                        criterion.assessment_criteria_id,
+        /*
+        |--------------------------------------------------------------------------
+        | 8. RELATED TEACHING /
+        |    SCHOOL ADMINISTRATION
+        |    MUST HAVE 8 CRITERIA
+        |--------------------------------------------------------------------------
+        */
 
-                    name:
-                        criterion.criterion_name,
+        const requiresEightCriteria =
+            assessmentType === "RELATED_TEACHING" ||
+            assessmentType === "SCHOOL_ADMINISTRATION";
 
-                    max:
-                        criterion.max_points,
 
-                    type:
-                        criterion.assessment_type
-                })
-            )
-        );
+        if (requiresEightCriteria) {
+
+            const requiredCriteria = [
+
+                "EDUCATION",
+
+                "TRAINING",
+
+                "EXPERIENCE",
+
+                "PERFORMANCE",
+
+                "OUTSTANDING ACCOMPLISHMENTS",
+
+                "APPLICATION OF EDUCATION",
+
+                "APPLICATION OF LEARNING & DEVELOPMENT",
+
+                "POTENTIAL"
+
+            ];
+
+
+            const existingCriteriaNames =
+                criteriaRows.map(
+                    criterion =>
+                        normalize(
+                            criterion.criterion_name
+                        )
+                );
+
+
+            const missingCriteria =
+                requiredCriteria.filter(
+                    required =>
+                        !existingCriteriaNames.includes(
+                            required
+                        )
+                );
+
+
+            if (
+                missingCriteria.length > 0
+            ) {
+
+                console.error(
+                    "INCOMPLETE ASSESSMENT CRITERIA",
+                    {
+                        assessmentType,
+
+                        missingCriteria,
+
+                        existingCriteria:
+                            existingCriteriaNames
+                    }
+                );
+
+
+                throw new Error(
+                    assessmentType ===
+                    "RELATED_TEACHING"
+
+                        ? "INCOMPLETE_RELATED_TEACHING_CRITERIA"
+
+                        : "INCOMPLETE_SCHOOL_ADMINISTRATION_CRITERIA"
+                );
+            }
+        }
 
 
         /*
@@ -1030,6 +983,7 @@ export const submitAssessment = async (data) => {
         const criteriaMap =
             new Map();
 
+
         criteriaRows.forEach(
             criterion => {
 
@@ -1039,13 +993,14 @@ export const submitAssessment = async (data) => {
                     ),
                     criterion
                 );
+
             }
         );
 
 
         /*
         |--------------------------------------------------------------------------
-        | 10. PREVENT DUPLICATE CRITERIA
+        | 10. PREVENT DUPLICATES
         |--------------------------------------------------------------------------
         */
 
@@ -1094,6 +1049,18 @@ export const submitAssessment = async (data) => {
                 );
 
 
+            if (
+                !Number.isInteger(
+                    criterionId
+                )
+            ) {
+
+                throw new Error(
+                    "INVALID_ASSESSMENT_CRITERIA_ID"
+                );
+            }
+
+
             /*
             |--------------------------------------------------------------------------
             | DUPLICATE CHECK
@@ -1119,7 +1086,7 @@ export const submitAssessment = async (data) => {
 
             /*
             |--------------------------------------------------------------------------
-            | CHECK CRITERION BELONGS TO ASSESSMENT TYPE
+            | CHECK CRITERION
             |--------------------------------------------------------------------------
             */
 
@@ -1152,12 +1119,13 @@ export const submitAssessment = async (data) => {
                                     name:
                                         row.criterion_name,
 
-                                    assessment_type:
+                                    type:
                                         row.assessment_type
                                 })
                             )
                     }
                 );
+
 
                 throw new Error(
                     "INVALID_ASSESSMENT_CRITERIA_FOR_POSITION"
@@ -1167,22 +1135,135 @@ export const submitAssessment = async (data) => {
 
             /*
             |--------------------------------------------------------------------------
-            | 12. CALCULATE SCORE
+            | CRITERION NAME
             |--------------------------------------------------------------------------
             */
+
+            const criterionName =
+                normalize(
+                    criterion.criterion_name
+                );
+
 
             let finalScore = 0;
 
 
             /*
             |--------------------------------------------------------------------------
-            | MANUAL CRITERION
+            | 12. RELATED TEACHING /
+            |     SCHOOL ADMINISTRATION ETE
+            |--------------------------------------------------------------------------
+            |
+            | Education, Training and Experience
+            | come from initial_screening.
+            |
+            | Frontend cannot change these values.
+            |
             |--------------------------------------------------------------------------
             */
 
+            const isETE =
+                (
+                    assessmentType ===
+                        "RELATED_TEACHING" ||
+
+                    assessmentType ===
+                        "SCHOOL_ADMINISTRATION"
+                ) &&
+
+                [
+                    "EDUCATION",
+                    "TRAINING",
+                    "EXPERIENCE"
+                ].includes(
+                    criterionName
+                );
+
+
             if (
+                isETE
+            ) {
+
+                /*
+                |--------------------------------------------------------------------------
+                | EDUCATION
+                |--------------------------------------------------------------------------
+                */
+
+                if (
+                    criterionName ===
+                    "EDUCATION"
+                ) {
+
+                    finalScore =
+                        Number(
+                            applicant.education_points ||
+                            0
+                        );
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | TRAINING
+                |--------------------------------------------------------------------------
+                */
+
+                else if (
+                    criterionName ===
+                    "TRAINING"
+                ) {
+
+                    finalScore =
+                        Number(
+                            applicant.training_points ||
+                            0
+                        );
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | EXPERIENCE
+                |--------------------------------------------------------------------------
+                */
+
+                else if (
+                    criterionName ===
+                    "EXPERIENCE"
+                ) {
+
+                    finalScore =
+                        Number(
+                            applicant.experience_points ||
+                            0
+                        );
+                }
+
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | 13. MANUAL CRITERION
+            |--------------------------------------------------------------------------
+            */
+
+            else if (
                 criterion.is_manual === true
             ) {
+
+                if (
+                    score === null ||
+                    score === undefined ||
+                    String(score).trim() === ""
+                ) {
+
+                    throw new Error(
+                        `INVALID_SCORE_${criterion.criterion_name}`
+                    );
+                }
+
 
                 finalScore =
                     Number(score);
@@ -1198,12 +1279,13 @@ export const submitAssessment = async (data) => {
                         `INVALID_SCORE_${criterion.criterion_name}`
                     );
                 }
+
             }
 
 
             /*
             |--------------------------------------------------------------------------
-            | OPTION-BASED CRITERION
+            | 14. OPTION-BASED CRITERION
             |--------------------------------------------------------------------------
             */
 
@@ -1228,25 +1310,25 @@ export const submitAssessment = async (data) => {
                 const optionResult =
                     await client.query(
                         `
-                            SELECT
+                        SELECT
 
-                                assessment_option_id,
+                            assessment_option_id,
 
-                                assessment_criteria_id,
+                            assessment_criteria_id,
 
-                                option_label,
+                            option_label,
 
-                                points
+                            points
 
-                            FROM assessment_options
+                        FROM assessment_options
 
-                            WHERE assessment_option_id = $1
+                        WHERE assessment_option_id = $1
 
-                              AND assessment_criteria_id = $2
+                          AND assessment_criteria_id = $2
 
-                              AND is_active = TRUE
+                          AND is_active = TRUE
 
-                            LIMIT 1
+                        LIMIT 1
                         `,
                         [
                             assessment_option_id,
@@ -1260,17 +1342,6 @@ export const submitAssessment = async (data) => {
                     optionResult.rows.length === 0
                 ) {
 
-                    console.error(
-                        "INVALID ASSESSMENT OPTION",
-                        {
-                            applicant_id,
-
-                            criterionId,
-
-                            assessment_option_id
-                        }
-                    );
-
                     throw new Error(
                         "INVALID_ASSESSMENT_OPTION"
                     );
@@ -1280,14 +1351,27 @@ export const submitAssessment = async (data) => {
                 finalScore =
                     Number(
                         optionResult.rows[0]
-                            .points
+                            .points || 0
                     );
+
+
+                if (
+                    Number.isNaN(
+                        finalScore
+                    )
+                ) {
+
+                    throw new Error(
+                        `INVALID_SCORE_${criterion.criterion_name}`
+                    );
+                }
+
             }
 
 
             /*
             |--------------------------------------------------------------------------
-            | 13. VALIDATE MAXIMUM SCORE
+            | 15. VALIDATE MAXIMUM SCORE
             |--------------------------------------------------------------------------
             */
 
@@ -1299,9 +1383,17 @@ export const submitAssessment = async (data) => {
 
             if (
                 Number.isNaN(
+                    maxPoints
+                ) ||
+
+                maxPoints < 0 ||
+
+                Number.isNaN(
                     finalScore
                 ) ||
+
                 finalScore < 0 ||
+
                 finalScore > maxPoints
             ) {
 
@@ -1313,66 +1405,71 @@ export const submitAssessment = async (data) => {
 
             /*
             |--------------------------------------------------------------------------
-            | 14. SAVE ASSESSMENT SCORE
+            | 16. SAVE SCORE
             |--------------------------------------------------------------------------
             */
 
             await client.query(
                 `
-                    INSERT INTO assessment_scores (
+                INSERT INTO assessment_scores (
 
-                        applicant_id,
+                    applicant_id,
 
-                        assessment_criteria_id,
+                    assessment_criteria_id,
 
-                        assessment_option_id,
+                    assessment_option_id,
 
-                        score,
+                    score,
 
-                        remarks,
+                    remarks,
 
-                        scored_by
+                    scored_by
 
-                    )
+                )
 
-                    VALUES (
-                        $1,
-                        $2,
-                        $3,
-                        $4,
-                        $5,
-                        $6
-                    )
+                VALUES (
+                    $1,
+                    $2,
+                    $3,
+                    $4,
+                    $5,
+                    $6
+                )
 
-                    ON CONFLICT (
-                        applicant_id,
-                        assessment_criteria_id
-                    )
+                ON CONFLICT (
+                    applicant_id,
+                    assessment_criteria_id
+                )
 
-                    DO UPDATE SET
+                DO UPDATE SET
 
-                        assessment_option_id =
-                            EXCLUDED.assessment_option_id,
+                    assessment_option_id =
+                        EXCLUDED.assessment_option_id,
 
-                        score =
-                            EXCLUDED.score,
+                    score =
+                        EXCLUDED.score,
 
-                        remarks =
-                            EXCLUDED.remarks,
+                    remarks =
+                        EXCLUDED.remarks,
 
-                        scored_by =
-                            EXCLUDED.scored_by,
+                    scored_by =
+                        EXCLUDED.scored_by,
 
-                        updated_at =
-                            CURRENT_TIMESTAMP
+                    updated_at =
+                        CURRENT_TIMESTAMP
                 `,
                 [
+
                     applicant_id,
 
                     criterionId,
 
-                    assessment_option_id ||
-                        null,
+                    isETE
+                        ? null
+                        : (
+                            assessment_option_id ||
+                            null
+                        ),
 
                     finalScore,
 
@@ -1381,64 +1478,112 @@ export const submitAssessment = async (data) => {
 
                     scored_by ||
                         null
+
                 ]
+            );
+
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | 17. REQUIRE ALL CRITERIA
+        |--------------------------------------------------------------------------
+        */
+
+        const requiredCriteriaIds =
+            criteriaRows.map(
+                criterion =>
+                    Number(
+                        criterion.assessment_criteria_id
+                    )
+            );
+
+
+        const missingCriteriaIds =
+            requiredCriteriaIds.filter(
+                id =>
+                    !submittedCriteriaIds.has(
+                        id
+                    )
+            );
+
+
+        if (
+            missingCriteriaIds.length > 0
+        ) {
+
+            console.error(
+                "Missing assessment criteria",
+                {
+                    applicant_id,
+
+                    assessmentType,
+
+                    missingCriteriaIds
+                }
+            );
+
+
+            throw new Error(
+                "ALL_ASSESSMENT_CRITERIA_REQUIRED"
             );
         }
 
 
         /*
         |--------------------------------------------------------------------------
-        | 15. GET SAVED SCORES
+        | 18. GET SAVED SCORES
         |--------------------------------------------------------------------------
         */
 
         const scoresResult =
             await client.query(
                 `
-                    SELECT
+                SELECT
 
-                        ac.assessment_criteria_id,
+                    ac.assessment_criteria_id,
 
-                        ac.criterion_name,
+                    ac.criterion_name,
 
-                        ac.max_points,
+                    ac.max_points,
 
-                        ac.is_manual,
+                    ac.is_manual,
 
-                        ac.assessment_type,
+                    ac.assessment_type,
 
-                        ases.assessment_option_id,
+                    ases.assessment_option_id,
 
-                        ao.option_label,
+                    ao.option_label,
 
-                        ases.score,
+                    ases.score,
 
-                        ases.remarks,
+                    ases.remarks,
 
-                        ases.scored_by
+                    ases.scored_by
 
-                    FROM assessment_scores ases
+                FROM assessment_scores ases
 
-                    JOIN assessment_criteria ac
-                        ON ac.assessment_criteria_id =
-                           ases.assessment_criteria_id
+                JOIN assessment_criteria ac
+                    ON ac.assessment_criteria_id =
+                       ases.assessment_criteria_id
 
-                    LEFT JOIN assessment_options ao
-                        ON ao.assessment_option_id =
-                           ases.assessment_option_id
+                LEFT JOIN assessment_options ao
+                    ON ao.assessment_option_id =
+                       ases.assessment_option_id
 
-                    WHERE ases.applicant_id = $1
+                WHERE ases.applicant_id = $1
 
-                      AND ac.is_active = TRUE
+                  AND ac.is_active = TRUE
 
-                      AND UPPER(
-                            TRIM(
-                                ac.assessment_type
-                            )
-                      ) = $2
+                  AND UPPER(
+                        TRIM(
+                            ac.assessment_type
+                        )
+                  ) = $2
 
-                    ORDER BY
-                        ac.assessment_criteria_id ASC
+                ORDER BY
+                    ac.assessment_criteria_id ASC
                 `,
                 [
                     applicant_id,
@@ -1450,7 +1595,7 @@ export const submitAssessment = async (data) => {
 
         /*
         |--------------------------------------------------------------------------
-        | 16. CALCULATE ASSESSMENT TOTAL
+        | 19. CALCULATE ASSESSMENT TOTAL
         |--------------------------------------------------------------------------
         */
 
@@ -1467,6 +1612,7 @@ export const submitAssessment = async (data) => {
                             row.score || 0
                         )
                     );
+
                 },
                 0
             );
@@ -1474,7 +1620,7 @@ export const submitAssessment = async (data) => {
 
         /*
         |--------------------------------------------------------------------------
-        | 17. CALCULATE MAXIMUM ASSESSMENT SCORE
+        | 20. CALCULATE MAXIMUM
         |--------------------------------------------------------------------------
         */
 
@@ -1491,6 +1637,7 @@ export const submitAssessment = async (data) => {
                             criterion.max_points || 0
                         )
                     );
+
                 },
                 0
             );
@@ -1498,7 +1645,64 @@ export const submitAssessment = async (data) => {
 
         /*
         |--------------------------------------------------------------------------
-        | 18. INITIAL SCREENING POINTS
+        | 21. RELATED TEACHING /
+        |     SCHOOL ADMINISTRATION
+        |     MUST BE 100 POINTS
+        |--------------------------------------------------------------------------
+        */
+
+        const requires100PointAssessment =
+            assessmentType ===
+                "RELATED_TEACHING" ||
+
+            assessmentType ===
+                "SCHOOL_ADMINISTRATION";
+
+
+        if (
+            requires100PointAssessment &&
+
+            maximumAssessmentScore !==
+                100
+        ) {
+
+            console.error(
+                "ASSESSMENT MAXIMUM IS NOT 100",
+                {
+                    assessmentType,
+
+                    maximumAssessmentScore,
+
+                    criteria:
+                        criteriaRows.map(
+                            criterion => ({
+                                name:
+                                    criterion.criterion_name,
+
+                                max:
+                                    criterion.max_points
+                            })
+                        )
+                }
+            );
+
+
+            throw new Error(
+
+                assessmentType ===
+                "RELATED_TEACHING"
+
+                    ? "INVALID_RELATED_TEACHING_MAXIMUM"
+
+                    : "INVALID_SCHOOL_ADMINISTRATION_MAXIMUM"
+
+            );
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | 22. INITIAL SCREENING POINTS
         |--------------------------------------------------------------------------
         */
 
@@ -1511,18 +1715,45 @@ export const submitAssessment = async (data) => {
 
         /*
         |--------------------------------------------------------------------------
-        | 19. COMBINED TOTAL
+        | 23. COMBINED TOTAL
+        |--------------------------------------------------------------------------
+        |
+        | RELATED TEACHING:
+        | SCHOOL ADMINISTRATION:
+        |
+        | Education + Training + Experience
+        | are already included in the 100-point
+        | assessment.
+        |
+        | Therefore:
+        |
+        | combinedTotal = assessmentTotal
+        |
+        | Do NOT add initial_screening_points again.
+        |
         |--------------------------------------------------------------------------
         */
 
+        const is100PointIntegratedAssessment =
+            assessmentType ===
+                "RELATED_TEACHING" ||
+
+            assessmentType ===
+                "SCHOOL_ADMINISTRATION";
+
+
         const combinedTotal =
-            initialScreeningPoints +
-            assessmentTotal;
+            is100PointIntegratedAssessment
+
+                ? assessmentTotal
+
+                : initialScreeningPoints +
+                  assessmentTotal;
 
 
         /*
         |--------------------------------------------------------------------------
-        | 20. COMMIT
+        | 24. COMMIT
         |--------------------------------------------------------------------------
         */
 
@@ -1533,7 +1764,7 @@ export const submitAssessment = async (data) => {
 
         /*
         |--------------------------------------------------------------------------
-        | 21. RETURN
+        | 25. RETURN
         |--------------------------------------------------------------------------
         */
 
@@ -1586,15 +1817,20 @@ export const submitAssessment = async (data) => {
             "ROLLBACK"
         );
 
+
         console.error(
             "Submit assessment error:",
             error
         );
 
+
         throw error;
+
 
     } finally {
 
         client.release();
+
     }
+
 };

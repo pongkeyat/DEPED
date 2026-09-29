@@ -854,14 +854,45 @@ export default function InterviewSessionModal({
                             <option value="">
                                 {loadingPanelists
                                     ? 'Loading panelists...'
-                                    : panelists.length === 0
-                                        ? '-- No panelists available --'
+                                    : panelists.filter((panelist) => {
+                                        const fullName = [
+                                            panelist.first_name,
+                                            panelist.middle_name,
+                                            panelist.last_name,
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' ');
+
+                                        return (
+                                            fullName &&
+                                            !formData.conducted_by.includes(fullName)
+                                        );
+                                    }).length === 0
+                                        ? (
+                                            formData.conducted_by.length > 0
+                                                ? '-- All panelists selected --'
+                                                : '-- No panelists available --'
+                                        )
                                         : '-- Select Panel Member --'}
                             </option>
 
-                            {panelists.map(
-                                (panelist) => {
+                            {panelists
+                                .filter((panelist) => {
+                                    const fullName = [
+                                        panelist.first_name,
+                                        panelist.middle_name,
+                                        panelist.last_name,
+                                    ]
+                                        .filter(Boolean)
+                                        .join(' ');
 
+                                    // Hide panelists already selected.
+                                    return (
+                                        fullName &&
+                                        !formData.conducted_by.includes(fullName)
+                                    );
+                                })
+                                .map((panelist) => {
                                     const fullName = [
                                         panelist.first_name,
                                         panelist.middle_name,
@@ -872,16 +903,13 @@ export default function InterviewSessionModal({
 
                                     return (
                                         <option
-                                            key={
-                                                panelist.panelist_id
-                                            }
+                                            key={panelist.panelist_id}
                                             value={fullName}
                                         >
                                             {fullName}
                                         </option>
                                     );
-                                }
-                            )}
+                                })}
 
                         </select>
 

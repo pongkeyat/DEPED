@@ -57,84 +57,10 @@ export default function HeroContent({ searchTerm, setSearchTerm, jobs = [] }) {
         </p>
 
         {/* SEARCH COMPONENT BOX */}
-        <div className="flex items-center bg-[#253d66]/80 backdrop-blur-sm border border-white/10 rounded-full p-1.5 pl-4 max-w-md mb-3 shadow-lg focus-within:border-amber-500/50 transition">
-          <svg 
-            xmlns="http://www.w3.org/2000/svg" 
-            fill="none" 
-            viewBox="0 0 24 24" 
-            strokeWidth={2.5} 
-            stroke="currentColor" 
-            className="w-4 h-4 text-gray-400 mr-2.5 shrink-0"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.642 10.642Z" />
-          </svg>
-
-          <input
-            type="text"
-            placeholder="Search position title..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="bg-transparent border-none outline-none text-sm text-white placeholder-gray-400 flex-grow"
-          />
-          
-          {searchTerm && (
-            <button 
-              onClick={() => setSearchTerm("")}
-              className="text-xs text-gray-400 hover:text-white mr-3 transition font-medium"
-            >
-              Clear
-            </button>
-          )}
-          
-          <button 
-            onClick={handleVacanciesClick}
-            className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold px-6 py-2 rounded-full transition text-sm shadow-sm"
-          >
-            Search
-          </button>
-        </div>
-
-        {/* QUICK SUGGESTIONS FILTER */}
-        <div className="flex items-center gap-2 mb-10 text-xs text-gray-400 pl-2">
-          <span>Popular:</span>
-          {quickTags.map((tag) => (
-            <button
-              key={tag}
-              onClick={() => setSearchTerm(tag)}
-              className={`px-2 py-0.5 rounded border transition-all ${
-                searchTerm.toLowerCase() === tag.toLowerCase()
-                  ? "border-amber-500 text-amber-500 bg-amber-500/10"
-                  : "border-white/10 text-gray-300 hover:border-white/30 hover:text-white"
-              }`}
-            >
-              {tag}
-            </button>
-          ))}
-        </div>
+   
 
         {/* STATS COUNT (Now Dynamic) */}
-        <div className="flex gap-12 border-t border-white/5 pt-6">
-          <div>
-            <div className="text-3xl font-black text-amber-500">{openPositionsCount}</div>
-            <div className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mt-0.5">
-              Open Positions
-            </div>
-          </div>
 
-          <div>
-            <div className="text-3xl font-black text-amber-500">{totalSlots}</div>
-            <div className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mt-0.5">
-              Available Slots
-            </div>
-          </div>
-
-          <div>
-            <div className="text-3xl font-black text-amber-500">{uniqueOfficesCount}</div>
-            <div className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mt-0.5">
-              Office Units
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* RIGHT SIDE: UNIFIED WRAPPER FOR CARDS AND REMINDERS */}

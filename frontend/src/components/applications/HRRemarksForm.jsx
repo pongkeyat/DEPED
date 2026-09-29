@@ -14,7 +14,7 @@ export default function HRRemarksForm({ data, onChange }) {
         <div className="flex items-center gap-3">
           {/* Section Number Badge */}
           <span className="flex items-center justify-center bg-white/20 text-white font-semibold text-sm w-6 h-6 rounded-full">
-            5
+            9
           </span>
 
           {/* Header Icon */}
@@ -35,22 +35,6 @@ export default function HRRemarksForm({ data, onChange }) {
       <div className="p-6 bg-[#fcfdfd] space-y-5">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-          {/* Application Status */}
-          <div className="space-y-1.5 md:col-span-1">
-            <label className="block text-[15px] font-medium text-gray-800">
-              Initial Application Status
-            </label>
-
-            <input
-              type="text"
-              name="application_status"
-              value="Complete"
-              readOnly
-              className="w-full h-11 px-4 border border-gray-300 rounded-xl
-                         focus:outline-none text-sm bg-gray-100
-                         text-gray-700 shadow-sm cursor-not-allowed"
-            />
-          </div>
 
           {/* HR Evaluation Remarks Notes */}
           <div className="md:col-span-3 space-y-1.5">

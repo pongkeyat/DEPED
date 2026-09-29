@@ -23,9 +23,12 @@ import InterviewSession from '../pages/InterviewSession';
 import InitialEvaluationResults from '../pages/InitialEvaluationResults';
 import AssessmentScoring from '../pages/AssessmentScoring';
 import Ranking from '../pages/Ranking';
+import CARRQA from '../pages/CARRQA';
 import PositionsManagement from '../pages/PositionsManagement';
 import PanelistManagement from '../pages/PanelistManagement';
 import UserManagement from '../pages/UserManagement';
+import DatabaseBackup from '../pages/DatabaseBackup';
+import AuditLogs from '../pages/AuditLogs';
 
 function AppLayout() {
   const { token } = useAuth();
@@ -33,12 +36,14 @@ function AppLayout() {
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-[#edf2f8]">
       {/* Top Header */}
+      <div className="print:hidden">
       <Header isLoggedIn={!!token} />
+      </div>
 
       {/* Main Container */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar Container */}
-        <aside className="w-64 flex-shrink-0 h-full overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-amber-500/40 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.1)_transparent]">
+        <aside className="print:hidden w-64 flex-shrink-0 h-full overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-amber-500/40 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.1)_transparent]">
           <SideBar />
         </aside>
 
@@ -73,12 +78,15 @@ export default function PublicRoutes() {
           <Route path="/initialEvaluationResults" element={<InitialEvaluationResults />} />
           <Route path="/Scoring" element ={<AssessmentScoring />} />
           <Route path="/comparative-assessment-result" element={<Ranking />} />
+          <Route path="/carrqa" element={<CARRQA />} />
           <Route path="/positions" element={<PositionsManagement />} />
           <Route path="/panelists" element={<PanelistManagement />} />
           {/* Applicant Routes */}
           <Route path="/applicants/:id" element={<ApplicantDetails />} />
           <Route path="/applicants/:id/evaluation" element={<ApplicantEvaluation />} />
           <Route path="/users" element={<UserManagement />} />
+          <Route path="/database-backup" element={<DatabaseBackup />}/>
+          <Route path="/audit-logs" element={<AuditLogs />} />
         </Route>
 
         {/* Fallback Catch-All Route */}

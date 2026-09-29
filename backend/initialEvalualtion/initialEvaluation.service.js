@@ -8,6 +8,14 @@ import {
     calculateTeacherIInitialScreening
 } from "./teaching.service.js";
 
+import {
+    calculateRelatedTeachingInitialScreening
+} from "./relatedteaching.service.js";
+
+import {
+    calculateSchoolAdministrationInitialScreening
+} from "./schoolAdministration.service.js";
+
 
 /*
 |--------------------------------------------------------------------------
@@ -80,9 +88,7 @@ export const createInitialScreening = async (data) => {
                     SELECT
                         job_applications_id,
                         applicant_id
-
                     FROM applicant_information
-
                     WHERE job_applications_id = $1
                     `,
                     [
@@ -95,9 +101,7 @@ export const createInitialScreening = async (data) => {
                     SELECT
                         job_applications_id,
                         applicant_id
-
                     FROM applicant_information
-
                     WHERE applicant_id = $1
                     `,
                     [
@@ -150,14 +154,20 @@ export const createInitialScreening = async (data) => {
                 `
                 SELECT
                     ja.vacancy_id,
+                    v.position_id,
                     v.position_title,
-                    v.salary_grade
+                    v.salary_grade,
+                    p.category
 
                 FROM job_applications ja
 
                 INNER JOIN vacancies v
                     ON v.vacancy_id =
                        ja.vacancy_id
+
+                LEFT JOIN positions p
+                    ON p.position_id =
+                       v.position_id
 
                 WHERE ja.job_applications_id = $1
                 `,
@@ -194,14 +204,25 @@ export const createInitialScreening = async (data) => {
 
         /*
         |--------------------------------------------------------------------------
-        | POSITION INFORMATION
+        | 3. POSITION INFORMATION
         |--------------------------------------------------------------------------
         */
 
         const positionTitle =
-            vacancy.position_title
-                ?.trim()
+            String(
+                vacancy.position_title || ""
+            )
+                .trim()
                 .toUpperCase();
+
+
+        const positionCategory =
+            String(
+                vacancy.category || ""
+            )
+                .trim()
+                .toUpperCase()
+                .replace(/\s+/g, " ");
 
 
         const salaryGrade =
@@ -210,12 +231,14 @@ export const createInitialScreening = async (data) => {
 
         /*
         |--------------------------------------------------------------------------
-        | 3. STANDARDIZE SCREENING RESULT
+        | 4. STANDARDIZE SCREENING RESULT
         |--------------------------------------------------------------------------
         */
 
         const rawResult =
-            overall_result
+            String(
+                overall_result || ""
+            )
                 .trim()
                 .toLowerCase();
 
@@ -230,7 +253,9 @@ export const createInitialScreening = async (data) => {
             screeningOverallResult =
                 "QUALIFIED";
 
-        } else if (
+        }
+
+        else if (
             rawResult === "unqualified" ||
             rawResult === "disqualified"
         ) {
@@ -238,7 +263,9 @@ export const createInitialScreening = async (data) => {
             screeningOverallResult =
                 "DISQUALIFIED";
 
-        } else {
+        }
+
+        else {
 
             const error =
                 new Error(
@@ -253,8 +280,11 @@ export const createInitialScreening = async (data) => {
 
         /*
         |--------------------------------------------------------------------------
-        | 4. DEFAULT SCORING
+        | 5. DEFAULT SCORING
         |--------------------------------------------------------------------------
+        |
+        | No scoring is performed until the applicant is QUALIFIED.
+        |
         */
 
         let scoring = {
@@ -306,11 +336,22 @@ export const createInitialScreening = async (data) => {
 
         /*
         |--------------------------------------------------------------------------
-        | 5. CALCULATE INITIAL SCREENING POINTS
+        | 6. CALCULATE INITIAL SCREENING POINTS
         |--------------------------------------------------------------------------
         |
-        | Teacher I and Non-Teaching positions use
-        | different scoring rules.
+        | QUALIFIED applicants are routed by position type:
+        |
+        | TEACHING
+        |      -> Teacher I service
+        |
+        | RELATED-TEACHING
+        |      -> Related Teaching service
+        |
+        | SCHOOL ADMINISTRATION
+        |      -> School Administration service
+        |
+        | NON-TEACHING
+        |      -> Non-Teaching service
         |
         |--------------------------------------------------------------------------
         */
@@ -325,13 +366,6 @@ export const createInitialScreening = async (data) => {
             |--------------------------------------------------------------------------
             | DETERMINE TEACHER I
             |--------------------------------------------------------------------------
-            |
-            | Your database currently uses "Teacher 1"
-            | while some records may use "Teacher I".
-            |
-            | Both must use the Teacher I scoring service.
-            |
-            |--------------------------------------------------------------------------
             */
 
             const isTeacherI =
@@ -341,19 +375,41 @@ export const createInitialScreening = async (data) => {
 
             /*
             |--------------------------------------------------------------------------
+            | DETERMINE RELATED-TEACHING
+            |--------------------------------------------------------------------------
+            */
+
+            const isRelatedTeaching =
+                positionCategory === "RELATED_TEACHING" ||
+                positionCategory === "RELATED TEACHING" ||
+                positionCategory === "RELATED-TEACHING" ||
+                positionCategory === "RELATED TEACHING POSITIONS";
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | DETERMINE SCHOOL ADMINISTRATION
+            |--------------------------------------------------------------------------
+            */
+
+            const isSchoolAdministration =
+                positionCategory === "SCHOOL_ADMINISTRATION" ||
+                positionCategory === "SCHOOL ADMINISTRATION POSITIONS" ||
+                positionCategory === "SCHOOL ADMINISTRATION POSITION";
+
+
+            /*
+            |--------------------------------------------------------------------------
             | TEACHER I
             |--------------------------------------------------------------------------
             |
-            | Teacher I Initial Screening:
+            | Teacher I initial screening:
             |
             | Education  = 10 maximum
             | Training   = 10 maximum
             | Experience = 10 maximum
             |
             | Total = 30 maximum
-            |
-            | LET/PBET/LEPT, COI and NCOI are NOT
-            | calculated here.
             |
             |--------------------------------------------------------------------------
             */
@@ -367,12 +423,41 @@ export const createInitialScreening = async (data) => {
                     );
 
 
-                /*
-                |--------------------------------------------------------------------------
-                | Make sure salary information is still
-                | available in the returned object.
-                |--------------------------------------------------------------------------
-                */
+                scoring.salaryGrade =
+                    salaryGrade;
+
+
+                scoring.salaryGroup =
+                    null;
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | RELATED-TEACHING
+            |--------------------------------------------------------------------------
+            |
+            | Related-Teaching ETE:
+            |
+            | Education  = 10 maximum
+            | Training   = 10 maximum
+            | Experience = 10 maximum
+            |
+            | These points belong to the 100-point
+            | Related-Teaching comparative assessment.
+            |
+            |--------------------------------------------------------------------------
+            */
+
+            else if (isRelatedTeaching) {
+
+                scoring =
+                    await calculateRelatedTeachingInitialScreening(
+                        client,
+                        resolvedApplicantId,
+                        vacancy.vacancy_id
+                    );
+
 
                 scoring.salaryGrade =
                     salaryGrade;
@@ -380,18 +465,48 @@ export const createInitialScreening = async (data) => {
 
                 scoring.salaryGroup =
                     null;
+            }
 
+
+            /*
+            |--------------------------------------------------------------------------
+            | SCHOOL ADMINISTRATION
+            |--------------------------------------------------------------------------
+            |
+            | School Administration ETE:
+            |
+            | Education  = 10 maximum
+            | Training   = 10 maximum
+            | Experience = 10 maximum
+            |
+            | These points belong to the 100-point
+            | School Administration comparative assessment.
+            |
+            |--------------------------------------------------------------------------
+            */
+
+            else if (isSchoolAdministration) {
+
+                scoring =
+                    await calculateSchoolAdministrationInitialScreening(
+                        client,
+                        resolvedApplicantId,
+                        vacancy.vacancy_id
+                    );
+
+
+                scoring.salaryGrade =
+                    salaryGrade;
+
+
+                scoring.salaryGroup =
+                    null;
             }
 
 
             /*
             |--------------------------------------------------------------------------
             | NON-TEACHING
-            |--------------------------------------------------------------------------
-            |
-            | Existing Non-Teaching calculation remains
-            | inside nonTeaching.service.js.
-            |
             |--------------------------------------------------------------------------
             */
 
@@ -403,7 +518,6 @@ export const createInitialScreening = async (data) => {
                         resolvedApplicantId,
                         salaryGrade
                     );
-
             }
 
         }
@@ -411,7 +525,7 @@ export const createInitialScreening = async (data) => {
 
         /*
         |--------------------------------------------------------------------------
-        | 6. INSERT INITIAL SCREENING
+        | 7. INSERT INITIAL SCREENING
         |--------------------------------------------------------------------------
         */
 
@@ -552,18 +666,19 @@ export const createInitialScreening = async (data) => {
                     |--------------------------------------------------------------------------
                     | EDUCATION
                     |--------------------------------------------------------------------------
+                    |
+                    | Education value may be text such as:
+                    |
+                    | "BACHELOR'S DEGREE"
+                    |
+                    | Therefore do NOT use Number().
+                    |
+                    |--------------------------------------------------------------------------
                     */
 
-                    Number(scoring.education?.value) ??
-                        null,
-
-
-                    scoring.education?.increment ??
-                        null,
-
-
-                    scoring.education?.points ??
-                        0,
+                    scoring.education?.increment,
+                    scoring.education?.increment,
+                    scoring.education?.points,
 
 
                     /*
@@ -618,7 +733,7 @@ export const createInitialScreening = async (data) => {
 
         /*
         |--------------------------------------------------------------------------
-        | 7. UPDATE HR REMARKS
+        | 8. UPDATE HR REMARKS
         |--------------------------------------------------------------------------
         */
 
@@ -648,7 +763,7 @@ export const createInitialScreening = async (data) => {
 
         /*
         |--------------------------------------------------------------------------
-        | 8. COMMIT
+        | 9. COMMIT
         |--------------------------------------------------------------------------
         */
 
@@ -659,7 +774,7 @@ export const createInitialScreening = async (data) => {
 
         /*
         |--------------------------------------------------------------------------
-        | 9. RETURN RESPONSE
+        | 10. RETURN RESPONSE
         |--------------------------------------------------------------------------
         */
 
@@ -710,6 +825,7 @@ export const createInitialScreening = async (data) => {
         await client.query(
             "ROLLBACK"
         );
+
 
         throw error;
 

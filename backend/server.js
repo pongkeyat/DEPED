@@ -11,6 +11,8 @@ import interviewSessionRoutes from './interviewSession/interviewSession.routes.j
 import assessmentRoutes from './assessment/assessment.route.js';
 import rankingRoutes from "./ranking/ranking.routes.js";
 import panelistRoutes from "./panelist/panelist.route.js";
+import databaseRoutes from "./backup/database.route.js";
+import auditLogsRoutes from "./auditLogs/auditLogs.routes.js";
 import path from 'path';
 
 const app = express();
@@ -34,6 +36,8 @@ app.use('/api/', interviewSessionRoutes)
 app.use("/api/assessment", assessmentRoutes );
 app.use("/api/", rankingRoutes);
 app.use("/api/panelists", panelistRoutes);
+app.use("/api/database", databaseRoutes);
+app.use("/api/audit-logs", auditLogsRoutes);
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 

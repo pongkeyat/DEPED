@@ -1487,3 +1487,443 @@ export const updateApplicationStatus = async (req, res) => {
     }
 
 };
+
+
+
+/**
+ * ============================================================
+ * 5. UPDATE FULL APPLICANT
+ * ============================================================
+ *
+ * PUT /api/applications/updateApplicant/:id
+ *
+ * Accepts applicant_id or job_applications_id.
+ * Does not generate new applicant or application IDs.
+ */
+
+export const updateFullApplicant = async (req, res) => {
+    const { id } = req.params;
+    const client = await pool.connect();
+
+    try {
+        const payload = req.body?.payload;
+        const body = typeof payload === "string"
+            ? JSON.parse(payload)
+            : payload || req.body || {};
+
+        await client.query("BEGIN");
+
+        // 1. Find the existing applicant
+        const applicantResult = await client.query(
+            `
+            SELECT
+                ai.applicant_id,
+                ai.job_applications_id
+            FROM applicant_information ai
+            WHERE ai.applicant_id = $1
+               OR ai.job_applications_id = $1
+            FOR UPDATE
+            `,
+            [id]
+        );
+
+        if (!applicantResult.rows.length) {
+            await client.query("ROLLBACK");
+
+            return res.status(404).json({
+                success: false,
+                message: "Applicant not found."
+            });
+        }
+
+        const {
+            applicant_id,
+            job_applications_id
+        } = applicantResult.rows[0];
+
+        const job_application =
+            body.job_application ?? body.job_applications;
+
+        const {
+            applicant_info,
+            equal_opportunity,
+            document_checklist,
+            uploaded_files,
+            education_list,
+            work_experience_list,
+            trainings_list,
+            eligibility_list,
+            hr_remarks
+        } = body;
+
+        // 2. Update job application
+        if (job_application) {
+            const fields = [
+                "vacancy_id",
+                "date_received",
+                "time_received",
+                "received_by",
+                "submission_type"
+            ].filter(field =>
+                Object.prototype.hasOwnProperty.call(
+                    job_application,
+                    field
+                )
+            );
+
+            if (fields.length) {
+                const assignments = fields.map(
+                    (field, index) => `${field} = $${index + 1}`
+                );
+                const values = fields.map(
+                    field => job_application[field] ?? null
+                );
+
+                await client.query(
+                    `
+                    UPDATE job_applications
+                    SET ${assignments.join(", ")}
+                    WHERE job_applications_id = $${fields.length + 1}
+                    `,
+                    [...values, job_applications_id]
+                );
+            }
+        }
+
+        // 3. Update applicant information
+        if (applicant_info) {
+            const fields = [
+                "last_name",
+                "first_name",
+                "middle_name",
+                "suffix",
+                "sex",
+                "date_of_birth",
+                "civil_status",
+                "contact_number",
+                "email_address",
+                "residential_address"
+            ];
+
+            const suppliedFields = fields.filter(field =>
+                Object.prototype.hasOwnProperty.call(
+                    applicant_info,
+                    field
+                )
+            );
+
+            if (suppliedFields.length) {
+                const assignments = suppliedFields.map(
+                    (field, index) => `${field} = $${index + 1}`
+                );
+                const values = suppliedFields.map(
+                    field => applicant_info[field] ?? null
+                );
+
+                await client.query(
+                    `
+                    UPDATE applicant_information
+                    SET ${assignments.join(", ")}
+                    WHERE applicant_id = $${suppliedFields.length + 1}
+                    `,
+                    [...values, applicant_id]
+                );
+            }
+        }
+
+        // 4. Equal opportunity declarations
+        if (equal_opportunity) {
+            await client.query(
+                `
+                INSERT INTO equal_opportunity_declarations (
+                    applicant_id,
+                    is_pwd,
+                    is_solo_parent,
+                    is_indigenous_person
+                )
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (applicant_id)
+                DO UPDATE SET
+                    is_pwd = EXCLUDED.is_pwd,
+                    is_solo_parent = EXCLUDED.is_solo_parent,
+                    is_indigenous_person =
+                        EXCLUDED.is_indigenous_person
+                `,
+                [
+                    applicant_id,
+                    equal_opportunity.is_pwd ?? false,
+                    equal_opportunity.is_solo_parent ?? false,
+                    equal_opportunity.is_indigenous_person ?? false
+                ]
+            );
+        }
+
+        // 5. Document checklist
+        if (document_checklist) {
+            await client.query(
+                `
+                INSERT INTO applicant_documents (
+                    applicant_id,
+                    has_application_letter,
+                    has_personal_data_sheet,
+                    has_prc_license_id,
+                    has_civil_service_eligibility_cert,
+                    has_diploma,
+                    has_transcript_of_records,
+                    has_training_certificates,
+                    has_certificate_of_employment,
+                    has_service_record,
+                    has_latest_appointment,
+                    has_performance_rating,
+                    has_omnibus_sworn_statement
+                )
+                VALUES (
+                    $1, $2, $3, $4, $5, $6, $7,
+                    $8, $9, $10, $11, $12, $13
+                )
+                ON CONFLICT (applicant_id)
+                DO UPDATE SET
+                    has_application_letter =
+                        EXCLUDED.has_application_letter,
+                    has_personal_data_sheet =
+                        EXCLUDED.has_personal_data_sheet,
+                    has_prc_license_id =
+                        EXCLUDED.has_prc_license_id,
+                    has_civil_service_eligibility_cert =
+                        EXCLUDED.has_civil_service_eligibility_cert,
+                    has_diploma =
+                        EXCLUDED.has_diploma,
+                    has_transcript_of_records =
+                        EXCLUDED.has_transcript_of_records,
+                    has_training_certificates =
+                        EXCLUDED.has_training_certificates,
+                    has_certificate_of_employment =
+                        EXCLUDED.has_certificate_of_employment,
+                    has_service_record =
+                        EXCLUDED.has_service_record,
+                    has_latest_appointment =
+                        EXCLUDED.has_latest_appointment,
+                    has_performance_rating =
+                        EXCLUDED.has_performance_rating,
+                    has_omnibus_sworn_statement =
+                        EXCLUDED.has_omnibus_sworn_statement
+                `,
+                [
+                    applicant_id,
+                    document_checklist.has_application_letter ?? false,
+                    document_checklist.has_personal_data_sheet ?? false,
+                    document_checklist.has_prc_license_id ?? false,
+                    document_checklist.has_civil_service_eligibility_cert ?? false,
+                    document_checklist.has_diploma ?? false,
+                    document_checklist.has_transcript_of_records ?? false,
+                    document_checklist.has_training_certificates ?? false,
+                    document_checklist.has_certificate_of_employment ?? false,
+                    document_checklist.has_service_record ?? false,
+                    document_checklist.has_latest_appointment ?? false,
+                    document_checklist.has_performance_rating ?? false,
+                    document_checklist.has_omnibus_sworn_statement ?? false
+                ]
+            );
+        }
+
+        // 6. Replace submitted applicant detail lists
+        if (Array.isArray(education_list)) {
+            await client.query(
+                "DELETE FROM education WHERE applicant_id = $1",
+                [applicant_id]
+            );
+            await insertApplicantsEducation(
+                client,
+                applicant_id,
+                education_list
+            );
+        }
+
+        if (Array.isArray(work_experience_list)) {
+            await client.query(
+                "DELETE FROM work_experience WHERE applicant_id = $1",
+                [applicant_id]
+            );
+            for (const workItem of work_experience_list) {
+                await insertApplicantsWorkExperience(
+                    client,
+                    applicant_id,
+                    workItem
+                );
+            }
+        }
+
+        if (Array.isArray(trainings_list)) {
+            await client.query(
+                "DELETE FROM relevant_trainings WHERE applicant_id = $1",
+                [applicant_id]
+            );
+            for (const trainingItem of trainings_list) {
+                await insertApplicantsTraining(
+                    client,
+                    applicant_id,
+                    trainingItem
+                );
+            }
+        }
+
+        if (Array.isArray(eligibility_list)) {
+            await client.query(
+                "DELETE FROM civil_service_eligibility WHERE applicant_id = $1",
+                [applicant_id]
+            );
+            for (const eligibilityItem of eligibility_list) {
+                await insertApplicantsCivilServiceEligibility(
+                    client,
+                    applicant_id,
+                    eligibilityItem
+                );
+            }
+        }
+
+        // 6. Uploaded files
+        // Store paths for newly uploaded files alongside supplied paths.
+        const uploadedFilePaths = (req.files || []).reduce(
+            (files, file) => {
+                const documentName = file.fieldname.replace(/_file$/, "");
+                const normalizedDocumentName = {
+                    oath_of_office: "latest_appointment",
+                    birth_certificate: "omnibus_sworn_statement",
+                    tin_id_or_verification: "prc_license_id"
+                }[documentName] || documentName;
+                const pathKey = `${normalizedDocumentName}_path`;
+                const pathValue = `/uploads/${file.filename}`;
+
+                if (documentName === "training_certificates") {
+                    files[pathKey] ||= [];
+                    files[pathKey].push(pathValue);
+                } else {
+                    files[pathKey] = pathValue;
+                }
+
+                return files;
+            },
+            {}
+        );
+        const filesToSave = {
+            ...(uploaded_files || {}),
+            ...uploadedFilePaths
+        };
+
+        if (Object.keys(filesToSave).length) {
+            const columns = [
+                "application_letter_path",
+                "personal_data_sheet_path",
+                "prc_license_id_path",
+                "civil_service_eligibility_cert_path",
+                "diploma_path",
+                "transcript_of_records_path",
+                "training_certificates_path",
+                "certificate_of_employment_path",
+                "service_record_path",
+                "latest_appointment_path",
+                "performance_rating_path",
+                "omnibus_sworn_statement_path"
+            ];
+
+            const suppliedColumns = columns.filter(
+                column =>
+                    Object.prototype.hasOwnProperty.call(
+                        filesToSave,
+                        column
+                    )
+            );
+
+            if (suppliedColumns.length) {
+                const values = suppliedColumns.map(
+                    column => filesToSave[column]
+                );
+
+                const insertColumns = [
+                    "applicant_id",
+                    ...suppliedColumns
+                ];
+
+                const placeholders = insertColumns.map(
+                    (_, index) => `$${index + 1}`
+                );
+
+                const updates = suppliedColumns.map(
+                    column =>
+                        `${column} = EXCLUDED.${column}`
+                );
+
+                await client.query(
+                    `
+                    INSERT INTO applicant_uploaded_files (
+                        ${insertColumns.join(", ")}
+                    )
+                    VALUES (${placeholders.join(", ")})
+                    ON CONFLICT (applicant_id)
+                    DO UPDATE SET
+                        ${updates.join(", ")},
+                        updated_at = CURRENT_TIMESTAMP
+                    `,
+                    [applicant_id, ...values]
+                );
+            }
+        }
+
+        // 7. HR remarks
+        if (hr_remarks) {
+            await client.query(
+                `
+                INSERT INTO hr_remarks_final_notes (
+                    applicant_id,
+                    hr_remarks_notes,
+                    application_status
+                )
+                VALUES ($1, $2, $3)
+                ON CONFLICT (applicant_id)
+                DO UPDATE SET
+                    hr_remarks_notes =
+                        COALESCE(
+                            EXCLUDED.hr_remarks_notes,
+                            hr_remarks_final_notes.hr_remarks_notes
+                        ),
+                    application_status =
+                        COALESCE(
+                            EXCLUDED.application_status,
+                            hr_remarks_final_notes.application_status
+                        ),
+                    updated_at = CURRENT_TIMESTAMP
+                `,
+                [
+                    applicant_id,
+                    hr_remarks.hr_remarks_notes ?? null,
+                    hr_remarks.application_status ?? null
+                ]
+            );
+        }
+
+        await client.query("COMMIT");
+
+        return res.status(200).json({
+            success: true,
+            message: "Applicant updated successfully.",
+            data: {
+                applicant_id,
+                job_applications_id
+            }
+        });
+
+    } catch (error) {
+        await client.query("ROLLBACK");
+
+        console.error("Update applicant error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to update applicant.",
+            error: error.message
+        });
+
+    } finally {
+        client.release();
+    }
+};

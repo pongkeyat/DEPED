@@ -6,7 +6,8 @@ import {
   submitFullApplication, 
   getFullApplicants, 
   getApplicantById, 
-  updateApplicationStatus 
+  updateApplicationStatus,
+    updateFullApplicant
 } from './applications.controller.js';
 
 const router = express.Router();
@@ -43,5 +44,7 @@ router.post('/submit', upload.any(), submitFullApplication);
 router.get('/getFullApplicants', getFullApplicants);
 router.put('/updateApplicationStatus/:id', updateApplicationStatus);
 router.get('/getApplicantById/:id', getApplicantById);
+router.put("/updateApplicant/:id",upload.any(), updateFullApplicant
+);
 
 export default router;

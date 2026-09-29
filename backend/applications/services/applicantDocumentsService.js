@@ -174,3 +174,5 @@ export const insertApplicantDocuments = async (client, applicantId, data) => {
 
     return result.rows[0];
 };
+
+

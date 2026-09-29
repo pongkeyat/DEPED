@@ -64,13 +64,6 @@ export default function ApplicantForm({ formData, onChange }) {
             Applicant Information
           </h2>
         </div>
-        <button
-          type="button"
-          className="flex items-center gap-2 rounded-md bg-white px-4 py-2 text-sm text-slate-800 shadow hover:bg-slate-100"
-        >
-          <Search size={17} />
-          Search Existing Applicant
-        </button>
       </div>
 
       {/* BODY */}

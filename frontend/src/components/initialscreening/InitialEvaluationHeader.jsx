@@ -1,50 +1,46 @@
-import { Users, ArrowLeft, ClipboardCheck } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Printer,
+} from "lucide-react";
 
 export default function InitialEvaluationHeader({
   onBack,
   onProceed,
+  onPrint,
 }) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-      <div className="flex items-center justify-between px-8 py-6">
-        {/* Left */}
-        <div className="flex items-start gap-4">
-          {/* Blue Accent */}
-          <div className="w-1 self-stretch rounded-full bg-[#1E3A6D]" />
+    <div className="print:hidden flex flex-col gap-4 rounded-2xl border border-gray-100 bg-white px-6 py-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
 
-          <div>
-            <div className="flex items-center gap-2">
-              <Users size={20} className="text-green-600" />
-              <h1 className="text-3xl font-bold text-[#1E3A6D]">
-                Initial evaluation Results
-              </h1>
-            </div>
+      {/* LEFT SIDE */}
+      <div>
+        <h1 className="text-xl font-bold text-[#1E3E74]">
+          Initial Evaluation Results
+        </h1>
 
-            <p className="mt-1 text-gray-500 text-sm">
-              Applicants who passed and Failed the initial screening and are eligible and not for
-              HRMPSB assessment
-            </p>
-          </div>
-        </div>
+        <p className="mt-1 text-sm text-gray-500">
+          Review qualified and unqualified applicants
+        </p>
+      </div>
 
-        {/* Right Buttons */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition"
-          >
-            <ArrowLeft size={18} />
-            Back to Screening
-          </button>
+      {/* RIGHT SIDE */}
+      <div className="flex flex-wrap items-center gap-3">
 
-          <button
-            onClick={onProceed}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-[#1E3A6D] text-white font-medium hover:bg-[#16335e] transition"
-          >
-            <ClipboardCheck size={18} />
-            Proceed to Assessment
-          </button>
-        </div>
+        {/* BACK */}
+
+
+        {/* PRINT */}
+        <button
+          type="button"
+          onClick={onPrint}
+          className="inline-flex items-center gap-2 rounded-lg bg-[#1E3E74] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#17325e]"
+        >
+          <Printer size={17} />
+          Print IER
+        </button>
+
+
+
       </div>
     </div>
   );

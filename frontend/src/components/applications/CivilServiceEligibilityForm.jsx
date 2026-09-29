@@ -5,7 +5,6 @@ const ELIGIBILITY_OPTIONS = [
   "CAREER SERVICE PROFESSIONAL",
   "CAREER SERVICE SUBPROFESSIONAL",
   "RA 1080 (BOARD/BAR)",
-  "PD 907",
   "HONOR GRADUATE",
   "SKILLS TEST/PRACTICAL EXAM",
   "OTHERS",
@@ -48,17 +47,24 @@ export default function CivilServiceEligibilityForm({ data, onChange }) {
         );
       };
 
+  const normalizedEntries = safeData.map((entry, index) => ({
+    ...entry,
+    id:
+      entry?.id ||
+      `eligibility-${index}-${entry?.eligibility_type || "new"}-${entry?.license_number || "none"}`
+  }));
+
   const handleAddEligibility = () => {
-    safeOnChange([...safeData, emptyEntry()]);
+    safeOnChange([...normalizedEntries, emptyEntry()]);
   };
 
   const handleRemove = (id) => {
-    safeOnChange(safeData.filter((entry) => entry.id !== id));
+    safeOnChange(normalizedEntries.filter((entry) => entry.id !== id));
   };
 
   const handleFieldChange = (id, field, value) => {
     safeOnChange(
-      safeData.map((entry) =>
+      normalizedEntries.map((entry) =>
         entry.id === id ? { ...entry, [field]: value } : entry
       )
     );
@@ -93,7 +99,7 @@ export default function CivilServiceEligibilityForm({ data, onChange }) {
 
       {/* Content Body */}
       <div className="p-6 space-y-6 bg-[#fcfdfd]">
-        {safeData.length === 0 ? (
+        {normalizedEntries.length === 0 ? (
           <div className="border border-dashed border-gray-200 rounded-xl py-12 flex flex-col items-center justify-center text-center bg-gray-50/40">
             <CheckCircle2 size={24} className="text-gray-300 mb-2" />
             <p className="text-xs md:text-sm text-gray-500">
@@ -102,9 +108,9 @@ export default function CivilServiceEligibilityForm({ data, onChange }) {
           </div>
         ) : (
           <div className="space-y-6">
-            {safeData.map((entry) => (
+            {normalizedEntries.map((entry) => (
               <div
-                key={entry.id}
+                key={entry.id || `eligibility-${entry.eligibility_type || "new"}-${Math.random()}`}
                 className="p-4 border border-gray-200 rounded-xl bg-white shadow-sm space-y-4 relative"
               >
                 {/* Unified 12-Column Grid Matching Education Form Layout */}

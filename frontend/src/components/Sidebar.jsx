@@ -12,7 +12,8 @@ import {
   User,
   CalendarCheck ,
   CirclePlus,
-  ContactRound
+  ContactRound,
+  Database
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -65,6 +66,7 @@ export default function SideBar() {
       items: [
         { label: "Post New Vacancy", to: "/postVacancies", icon: PlusCircle },
         { label: "Vacancy Postings", to: "/vacancyPosting", icon: Briefcase },
+        { label: "Positions Management", to: "/positions", icon: Briefcase },
      
       ]
     },    
@@ -74,10 +76,11 @@ export default function SideBar() {
       items: [
         { label: "Receive Application", to: "/receiveApplicant", icon: FolderDown },
         { label: "All Applications", to: "/allApplications", icon: FileText },
+
       ]
     },
     {
-      title: "SCREENING",
+      title: "EVALUATION",
       roles: [ROLES.HRO], 
       items: [
         { label: "Initial Evaluation", to: "/initialScreening", icon: ClipboardCheck },
@@ -89,29 +92,32 @@ export default function SideBar() {
       title: "ASSESSMENT",
       roles: [ROLES.HRMPSB], 
       items: [
-        { label: "Interview Session", to: "/interviewSession", icon: ClipboardCheck },
-        { label: "Score", to: "/Scoring", icon: CirclePlus },
+        { label: "Assessment Session", to: "/interviewSession", icon: ClipboardCheck },
+        { label: "Scoring", to: "/Scoring", icon: CirclePlus },
+        { label: "Panelist members Management", to: "/panelists", icon: ContactRound },
 
       ]
     },
     {
       title: "Ranking",
-      roles: [ROLES.ADMIHRMPSBN], 
+      roles: [ROLES.ADMIN, ROLES.HRMPSB], 
       items: [
         { label: "Comparative Assessment Result", to: "/comparative-assessment-result", icon: User },
+        { label: "Comparative Assessment Result/RQA", to: "/carrqa", icon: User },
       ]
     },
         {
       title: "ADMIN",
       roles: [ROLES.ADMIN], 
       items: [
-        { label: "Positions", to: "/positions", icon: Briefcase },
-        { label: "Panelist", to: "/panelists", icon: ContactRound },
         { label: "User Management", to: "/users", icon: ContactRound },
+        { label: "Database Backup", to: "/database-backup", icon: Database },
+        { label: "Audit Logs", to: "/audit-logs", icon: FileText },
       ]
     },
 
   ];
+
 
 
 

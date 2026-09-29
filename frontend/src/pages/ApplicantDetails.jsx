@@ -15,7 +15,8 @@ import {
   MapPin,
   CheckCircle2,
   XCircle,
-  Eye
+  Eye,
+  Pencil
 } from "lucide-react";
 
 import {
@@ -24,6 +25,7 @@ import {
 } from "../api/ApplicationApi";
 
 import ActionModal from "../components/ActionModal";
+import ApplicantEditModal from "../components/applications/ApplicantEditModal";
 
 
 const API_BASE_URL =
@@ -342,6 +344,9 @@ export default function ApplicantDetails() {
   // ==========================================================
   // MODALS
   // ==========================================================
+
+  const [showEditModal, setShowEditModal] =
+    useState(false);
 
   const [showConfirmModal, setShowConfirmModal] =
     useState(false);
@@ -813,6 +818,16 @@ export default function ApplicantDetails() {
             </button>
 
           )}
+
+          {/* EDIT APPLICANT BUTTON - BESIDE ACTION BUTTON */}
+          <button
+            type="button"
+            onClick={() => setShowEditModal(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-[#1E3E74] px-5 py-2 text-sm font-semibold text-white shadow transition-colors hover:bg-[#17325e]"
+          >
+            <Pencil size={16} />
+            Edit Applicant
+          </button>
 
         </div>
 
@@ -1680,6 +1695,30 @@ export default function ApplicantDetails() {
           setModalError(null)
         }
 
+      />
+
+      {/* ======================================================
+          EDIT APPLICANT MODAL
+          ====================================================== */}
+      <ApplicantEditModal
+        isOpen={showEditModal}
+        applicant={applicant}
+        applicantId={
+          applicant?.job_applications_id ||
+          applicant?.applicant_id ||
+          id
+        }
+        onClose={() => setShowEditModal(false)}
+        onUpdated={async () => {
+          try {
+            const response = await getApplicationById(id);
+            const data = response?.data ?? response;
+            setApplicant(data);
+          } catch (err) {
+            console.error("Failed to refresh applicant after update:", err);
+            setError("Applicant was updated, but refreshing the details failed. Please reload the page.");
+          }
+        }}
       />
 
     </div>

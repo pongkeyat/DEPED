@@ -5,7 +5,7 @@ export default function PostQualificationsForm({ formData, onChange }) {
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
             <div className="flex items-center gap-2 bg-[#1b4584] p-3 text-white">
                 <SlidersHorizontal size={16} />
-                <span className="font-medium text-sm sm:text-base">Vacancy-Specific Qualifications</span>
+                <span className="font-medium text-sm sm:text-base">Qualifications Standard</span>
             </div>
 
 

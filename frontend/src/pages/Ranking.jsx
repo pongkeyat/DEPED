@@ -1,8 +1,19 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+
 import { getRankingByVacancy } from "../api/rankingAPI";
 import { getVacancies } from "../api/VacancyApi";
 
+import CARPrintForm from "../components/ranking/CARPrintForm";
+import RankingHeader from "../components/ranking/RankingHeader";
+
 const Ranking = () => {
+    const navigate = useNavigate();
+
+    // ============================================================
+    // STATE
+    // ============================================================
+
     const [vacancies, setVacancies] = useState([]);
     const [selectedVacancy, setSelectedVacancy] = useState("");
     const [ranking, setRanking] = useState([]);
@@ -12,11 +23,9 @@ const Ranking = () => {
 
     const [error, setError] = useState("");
 
-    /*
-    |--------------------------------------------------------------------------
-    | GET VACANCIES
-    |--------------------------------------------------------------------------
-    */
+    // ============================================================
+    // GET VACANCIES
+    // ============================================================
 
     useEffect(() => {
         const fetchVacancies = async () => {
@@ -24,9 +33,34 @@ const Ranking = () => {
                 setLoadingVacancies(true);
                 setError("");
 
-                const response = await getVacancies();
-                setVacancies(response?.data || []);
+                const response = await getVacancies({
+                    limit: 1000,
+                });
 
+                const data = Array.isArray(response)
+                    ? response
+                    : Array.isArray(response?.data)
+                        ? response.data
+                        : [];
+
+                // ----------------------------------------------------
+                // Keep non-teaching / related teaching /
+                // school administration vacancies.
+                // ----------------------------------------------------
+
+                const nonTeachingVacancies = data.filter((vacancy) => {
+                    const category = String(vacancy.category || "")
+                        .trim()
+                        .toLowerCase()
+                        .replace(/\s+/g, " ");
+
+                    return (
+                        category !== "teaching" &&
+                        category !== "teaching positions"
+                    );
+                });
+
+                setVacancies(nonTeachingVacancies);
             } catch (error) {
                 console.error(
                     "Error fetching vacancies:",
@@ -34,7 +68,7 @@ const Ranking = () => {
                 );
 
                 setError("Failed to load vacancies.");
-
+                setVacancies([]);
             } finally {
                 setLoadingVacancies(false);
             }
@@ -43,12 +77,9 @@ const Ranking = () => {
         fetchVacancies();
     }, []);
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | GET RANKING WHEN VACANCY IS SELECTED
-    |--------------------------------------------------------------------------
-    */
+    // ============================================================
+    // GET RANKING WHEN VACANCY IS SELECTED
+    // ============================================================
 
     const handleVacancyChange = async (event) => {
         const vacancyId = event.target.value;
@@ -67,15 +98,13 @@ const Ranking = () => {
             const response =
                 await getRankingByVacancy(vacancyId);
 
-            const rankingData =
-                Array.isArray(response)
-                    ? response
-                    : Array.isArray(response?.data)
-                        ? response.data
-                        : [];
+            const rankingData = Array.isArray(response)
+                ? response
+                : Array.isArray(response?.data)
+                    ? response.data
+                    : [];
 
             setRanking(rankingData);
-
         } catch (error) {
             console.error(
                 "Error fetching ranking:",
@@ -84,419 +113,822 @@ const Ranking = () => {
 
             setError(
                 error.response?.data?.error ||
+                error.response?.data?.message ||
                 "Failed to load ranking."
             );
 
             setRanking([]);
-
         } finally {
             setLoadingRanking(false);
         }
     };
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | SELECTED VACANCY
-    |--------------------------------------------------------------------------
-    */
+    // ============================================================
+    // SELECTED VACANCY
+    // ============================================================
 
     const selectedVacancyData = vacancies.find(
         (vacancy) =>
-            vacancy.vacancy_id === selectedVacancy
+            String(vacancy.vacancy_id) ===
+            String(selectedVacancy)
     );
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | FORMAT SCORE
-    |--------------------------------------------------------------------------
-    */
+    // ============================================================
+    // FORMAT SCORE
+    // ============================================================
 
     const formatScore = (score) => {
-        return Number(score || 0).toFixed(2);
+        if (
+            score === null ||
+            score === undefined ||
+            score === ""
+        ) {
+            return "0.00";
+        }
+
+        const numericScore = Number(score);
+
+        if (!Number.isFinite(numericScore)) {
+            return "0.00";
+        }
+
+        return numericScore.toFixed(2);
     };
 
+    // ============================================================
+    // GET APPLICANT NAME
+    // ============================================================
 
-    /*
-    |--------------------------------------------------------------------------
-    | RENDER
-    |--------------------------------------------------------------------------
-    */
+    const getApplicantName = (applicant) => {
+        if (applicant?.applicant_name) {
+            return applicant.applicant_name;
+        }
+
+        const name = [
+            applicant?.first_name,
+            applicant?.middle_name,
+            applicant?.last_name,
+            applicant?.suffix,
+        ]
+            .filter(Boolean)
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+        return name || "Unnamed Applicant";
+    };
+
+    // ============================================================
+    // GET APPLICATION CODE
+    // ============================================================
+
+    const getApplicationCode = (applicant) => {
+        return (
+            applicant?.application_code ||
+            applicant?.applicationCode ||
+            applicant?.application_id ||
+            applicant?.job_application_code ||
+            applicant?.job_applications_id ||
+            "—"
+        );
+    };
+
+    // ============================================================
+    // GET ASSESSMENT SCORE
+    // ============================================================
+
+    const getAssessmentScore = (
+        applicant,
+        criterionName
+    ) => {
+        const normalizedName = String(
+            criterionName || ""
+        )
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, " ");
+
+        // --------------------------------------------------------
+        // Direct property mappings
+        // --------------------------------------------------------
+
+        const directMappings = {
+            performance: [
+                "performance",
+                "performance_points",
+                "performance_score",
+            ],
+
+            "outstanding accomplishments": [
+                "outstanding_accomplishments",
+                "outstanding_accomplishments_points",
+                "outstanding_accomplishments_score",
+                "outstanding_points",
+            ],
+
+            "application of education": [
+                "application_of_education",
+                "application_of_education_points",
+                "application_of_education_score",
+            ],
+
+            "application of l&d": [
+                "application_of_learning_development",
+                "application_of_learning_and_development",
+                "application_of_l_and_d",
+                "application_of_ld",
+                "application_of_lnd",
+                "application_of_learning_development_points",
+                "application_of_learning_development_score",
+            ],
+
+            potential: [
+                "potential",
+                "potential_points",
+                "potential_score",
+            ],
+        };
+
+        const possibleKeys =
+            directMappings[normalizedName] || [];
+
+        for (const key of possibleKeys) {
+            if (
+                applicant?.[key] !== undefined &&
+                applicant?.[key] !== null
+            ) {
+                return applicant[key];
+            }
+        }
+
+        // --------------------------------------------------------
+        // Look inside assessment object
+        // --------------------------------------------------------
+
+        const assessment =
+            applicant?.assessment ||
+            applicant?.assessment_scores ||
+            applicant?.assessmentScores ||
+            applicant?.scores ||
+            {};
+
+        for (const key of possibleKeys) {
+            if (
+                assessment?.[key] !== undefined &&
+                assessment?.[key] !== null
+            ) {
+                return assessment[key];
+            }
+        }
+
+        // --------------------------------------------------------
+        // Look inside assessment criteria array
+        // --------------------------------------------------------
+
+        const assessmentList =
+            applicant?.assessment_criteria ||
+            applicant?.assessmentCriteria ||
+            applicant?.criteria ||
+            [];
+
+        if (Array.isArray(assessmentList)) {
+            const found = assessmentList.find((item) => {
+                const itemName = String(
+                    item?.criterion_name ||
+                    item?.name ||
+                    item?.criterion ||
+                    ""
+                )
+                    .trim()
+                    .toLowerCase()
+                    .replace(/\s+/g, " ");
+
+                return itemName === normalizedName;
+            });
+
+            if (found) {
+                return (
+                    found?.points ??
+                    found?.score ??
+                    found?.value ??
+                    0
+                );
+            }
+        }
+
+        return 0;
+    };
+
+    // ============================================================
+    // GET EDUCATION
+    // ============================================================
+
+    const getEducationScore = (applicant) => {
+        return (
+            applicant?.education?.points ??
+            applicant?.education_points ??
+            applicant?.education_score ??
+            0
+        );
+    };
+
+    // ============================================================
+    // GET TRAINING
+    // ============================================================
+
+    const getTrainingScore = (applicant) => {
+        return (
+            applicant?.training?.points ??
+            applicant?.training_points ??
+            applicant?.training_score ??
+            0
+        );
+    };
+
+    // ============================================================
+    // GET EXPERIENCE
+    // ============================================================
+
+    const getExperienceScore = (applicant) => {
+        return (
+            applicant?.experience?.points ??
+            applicant?.experience_points ??
+            applicant?.experience_score ??
+            0
+        );
+    };
+
+    // ============================================================
+    // GET TOTAL
+    // ============================================================
+
+    const getTotalScore = (applicant) => {
+        return (
+            applicant?.combined_total ??
+            applicant?.grand_total ??
+            applicant?.total_score ??
+            applicant?.total ??
+            0
+        );
+    };
+
+    // ============================================================
+    // PRINT
+    // ============================================================
+
+    const handlePrint = () => {
+        if (!selectedVacancy) {
+            setError(
+                "Please select a vacancy before printing."
+            );
+            return;
+        }
+
+        if (ranking.length === 0) {
+            setError(
+                "There are no ranked applicants to print."
+            );
+            return;
+        }
+
+        window.print();
+    };
+
+    // ============================================================
+    // RENDER
+    // ============================================================
 
     return (
-        <div className="min-h-screen bg-gray-100 p-6">
+        <div className="min-h-screen bg-gray-50 p-6">
 
-            {/* =========================================================
-                HEADER
-            ========================================================= */}
+            {/* =====================================================
+                EVERYTHING ON SCREEN
+                HIDDEN WHEN PRINTING
+            ===================================================== */}
 
-            <div className="mb-6">
+            <div className="print:hidden">
 
-                <h1 className="text-2xl font-bold text-[#1f3f73]">
-                    Ranking
-                </h1>
+                {/* =================================================
+                    HEADER
+                ================================================= */}
 
-                <p className="mt-1 text-sm text-gray-500">
-                    View qualified applicants ranked according to
-                    their overall evaluation scores.
-                </p>
+                <RankingHeader
+                    onBack={() => navigate("/")}
+                    onPrint={handlePrint}
+                />
 
-            </div>
+                {/* =================================================
+                    VACANCY SELECTOR
+                ================================================= */}
 
+                <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
 
-            {/* =========================================================
-                VACANCY CONTAINER
-            ========================================================= */}
-
-            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-
-                <label
-                    htmlFor="vacancy"
-                    className="block text-sm font-semibold text-gray-700"
-                >
-                    Select Vacancy
-                </label>
-
-                <p className="mt-1 text-xs text-gray-500">
-                    Select a vacancy to display its applicant ranking.
-                </p>
-
-
-                <select
-                    id="vacancy"
-                    value={selectedVacancy}
-                    onChange={handleVacancyChange}
-                    disabled={loadingVacancies}
-                    className="mt-4 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-[#1f3f73] focus:ring-2 focus:ring-[#1f3f73]/20 disabled:bg-gray-100"
-                >
-
-                    <option value="">
-                        {loadingVacancies
-                            ? "Loading vacancies..."
-                            : "Select a vacancy"}
-                    </option>
-
-
-                    {vacancies.map((vacancy) => (
-                        <option
-                            key={vacancy.vacancy_id}
-                            value={vacancy.vacancy_id}
+                    <div className="flex flex-col gap-1">
+                        <label
+                            htmlFor="vacancy"
+                            className="text-sm font-semibold text-gray-800"
                         >
-                            {vacancy.position_title}
-                            {" — "}
-                            {vacancy.vacancy_id}
+                            Select Vacancy
+                        </label>
+
+                        <p className="text-xs text-gray-500">
+                            Select a vacancy to display its
+                            applicant ranking.
+                        </p>
+                    </div>
+
+                    <select
+                        id="vacancy"
+                        value={selectedVacancy}
+                        onChange={handleVacancyChange}
+                        disabled={loadingVacancies}
+                        className="mt-4 w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-[#1f3f73] focus:ring-2 focus:ring-[#1f3f73]/20 disabled:bg-gray-100"
+                    >
+                        <option value="">
+                            {loadingVacancies
+                                ? "Loading vacancies..."
+                                : "Select a vacancy"}
                         </option>
-                    ))}
 
-                </select>
+                        {vacancies.map((vacancy) => (
+                            <option
+                                key={vacancy.vacancy_id}
+                                value={vacancy.vacancy_id}
+                            >
+                                {vacancy.position_title}
+                                {" — "}
+                                {vacancy.vacancy_id}
+                                {" — "}
+                                {vacancy.category || "N/A"}
+                            </option>
+                        ))}
+                    </select>
 
-            </div>
-
-
-            {/* =========================================================
-                ERROR
-            ========================================================= */}
-
-            {error && (
-                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-                    {error}
                 </div>
-            )}
 
+                {/* =================================================
+                    ERROR
+                ================================================= */}
 
-            {/* =========================================================
-                RANKING
-            ========================================================= */}
+                {error && (
+                    <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                        {error}
+                    </div>
+                )}
 
-            {selectedVacancy && (
+                {/* =================================================
+                    RANKING
+                ================================================= */}
 
-                <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                {selectedVacancy && (
 
-                    {/* -------------------------------------------------
-                        RANKING HEADER
-                    ------------------------------------------------- */}
+                    <div className="mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
 
-                    <div className="border-b border-gray-200 px-6 py-5">
+                        {/* =============================================
+                            RANKING HEADER
+                        ============================================= */}
 
-                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div className="border-b border-gray-200 px-6 py-5">
 
-                            <div>
+                            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 
-                                <h2 className="text-lg font-bold text-[#1f3f73]">
-                                    Applicant Ranking
-                                </h2>
+                                <div>
 
-                                {selectedVacancyData && (
-                                    <p className="mt-1 text-sm text-gray-500">
+                                    <h2 className="text-lg font-bold text-gray-900">
+                                        Comparative Assessment Results
+                                    </h2>
 
-                                        {selectedVacancyData.position_title}
+                                    {selectedVacancyData && (
+                                        <div className="mt-2 flex flex-wrap items-center gap-2">
 
-                                        <span className="mx-2">
-                                            •
-                                        </span>
+                                            <span className="rounded-lg bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
+                                                {selectedVacancyData.position_title}
+                                            </span>
 
-                                        {selectedVacancyData.vacancy_id}
+                                            <span className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-medium text-[#1f3f73]">
+                                                {selectedVacancyData.vacancy_id}
+                                            </span>
 
-                                    </p>
+                                            <span className="rounded-lg bg-purple-50 px-3 py-1 text-xs font-medium text-purple-700">
+                                                {selectedVacancyData.category ||
+                                                    "N/A"}
+                                            </span>
+
+                                        </div>
+                                    )}
+
+                                </div>
+
+                                {!loadingRanking && (
+                                    <div className="rounded-xl bg-[#1f3f73]/10 px-4 py-2 text-sm font-semibold text-[#1f3f73]">
+                                        {ranking.length} Qualified Applicant
+                                        {ranking.length !== 1
+                                            ? "s"
+                                            : ""}
+                                    </div>
                                 )}
 
                             </div>
 
-
-                            {!loadingRanking && (
-                                <div className="rounded-lg bg-[#1f3f73]/10 px-4 py-2 text-sm font-semibold text-[#1f3f73]">
-
-                                    {ranking.length} Qualified Applicant
-                                    {ranking.length !== 1 ? "s" : ""}
-
-                                </div>
-                            )}
-
                         </div>
 
-                    </div>
+                        {/* =============================================
+                            LOADING
+                        ============================================= */}
 
+                        {loadingRanking && (
 
-                    {/* -------------------------------------------------
-                        LOADING
-                    ------------------------------------------------- */}
+                            <div className="flex flex-col items-center justify-center px-6 py-16">
 
-                    {loadingRanking && (
+                                <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#1f3f73]" />
 
-                        <div className="flex flex-col items-center justify-center px-6 py-16">
-
-                            <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#1f3f73]" />
-
-                            <p className="mt-4 text-sm text-gray-500">
-                                Loading applicant ranking...
-                            </p>
-
-                        </div>
-
-                    )}
-
-
-                    {/* -------------------------------------------------
-                        NO RESULTS
-                    ------------------------------------------------- */}
-
-                    {!loadingRanking &&
-                        ranking.length === 0 && (
-
-                            <div className="px-6 py-16 text-center">
-
-                                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
-
-                                    <span className="text-xl">
-                                        📋
-                                    </span>
-
-                                </div>
-
-                                <h3 className="mt-4 text-sm font-semibold text-gray-700">
-                                    No ranking available
-                                </h3>
-
-                                <p className="mt-1 text-sm text-gray-500">
-                                    No qualified applicants were found
-                                    for this vacancy.
+                                <p className="mt-4 text-sm text-gray-500">
+                                    Loading applicant ranking...
                                 </p>
 
                             </div>
 
                         )}
 
+                        {/* =============================================
+                            NO RESULTS
+                        ============================================= */}
 
-                    {/* -------------------------------------------------
-                        RANKING TABLE
-                    ------------------------------------------------- */}
+                        {!loadingRanking &&
+                            ranking.length === 0 && (
 
-                    {!loadingRanking &&
-                        ranking.length > 0 && (
+                                <div className="px-6 py-16 text-center">
 
-                            <div className="overflow-x-auto">
+                                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100">
+                                        <span className="text-xl">
+                                            📋
+                                        </span>
+                                    </div>
 
-                                <table className="w-full min-w-[1000px]">
+                                    <h3 className="mt-4 text-sm font-semibold text-gray-700">
+                                        No ranking available
+                                    </h3>
 
-                                    <thead>
+                                    <p className="mt-1 text-sm text-gray-500">
+                                        No qualified applicants were
+                                        found for this vacancy.
+                                    </p>
 
-                                        <tr className="border-b border-gray-200 bg-gray-50">
+                                </div>
+                            )}
 
-                                            <th className="px-5 py-4 text-center text-xs font-bold uppercase tracking-wide text-gray-500">
-                                                Rank
-                                            </th>
+                        {/* =============================================
+                            RANKING TABLE
+                        ============================================= */}
 
-                                            <th className="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
-                                                Applicant
-                                            </th>
+                        {!loadingRanking &&
+                            ranking.length > 0 && (
 
-                                            <th className="px-5 py-4 text-center text-xs font-bold uppercase tracking-wide text-gray-500">
-                                                Education
-                                            </th>
+                                <div className="p-5">
 
-                                            <th className="px-5 py-4 text-center text-xs font-bold uppercase tracking-wide text-gray-500">
-                                                Training
-                                            </th>
+                                    <div className="overflow-x-auto">
 
-                                            <th className="px-5 py-4 text-center text-xs font-bold uppercase tracking-wide text-gray-500">
-                                                Experience
-                                            </th>
+                                        <table className="w-full min-w-[1500px] border-separate border-spacing-y-2">
 
-                                            <th className="px-5 py-4 text-center text-xs font-bold uppercase tracking-wide text-gray-500">
-                                                Initial Screening
-                                            </th>
+                                            {/* =================================
+                                                TABLE HEADER
+                                            ================================= */}
 
-                                            <th className="px-5 py-4 text-center text-xs font-bold uppercase tracking-wide text-gray-500">
-                                                Assessment
-                                            </th>
+                                            <thead>
 
-                                            <th className="px-5 py-4 text-center text-xs font-bold uppercase tracking-wide text-gray-500">
-                                                Overall Score
-                                            </th>
+                                                <tr>
 
-                                        </tr>
+                                                    <th className="rounded-l-xl bg-gray-50 px-4 py-4 text-center text-xs font-bold uppercase tracking-wide text-gray-500">
+                                                        No.
+                                                    </th>
 
-                                    </thead>
+                                                    <th className="bg-gray-50 px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
+                                                        Name of Applicant
+                                                    </th>
 
+                                                    <th className="bg-gray-50 px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
+                                                        Application Code
+                                                    </th>
+
+                                                    <th className="bg-gray-50 px-4 py-4 text-center text-xs font-bold uppercase tracking-wide text-gray-500">
+                                                        Education
+                                                    </th>
+
+                                                    <th className="bg-gray-50 px-4 py-4 text-center text-xs font-bold uppercase tracking-wide text-gray-500">
+                                                        Training
+                                                    </th>
+
+                                                    <th className="bg-gray-50 px-4 py-4 text-center text-xs font-bold uppercase tracking-wide text-gray-500">
+                                                        Experience
+                                                    </th>
+
+                                                    <th className="bg-gray-50 px-4 py-4 text-center text-xs font-bold uppercase tracking-wide text-gray-500">
+                                                        Performance
+                                                    </th>
+
+                                                    <th className="bg-gray-50 px-4 py-4 text-center text-xs font-bold uppercase tracking-wide text-gray-500">
+                                                        Outstanding
+                                                        <br />
+                                                        Accomplishments
+                                                    </th>
+
+                                                    <th className="bg-gray-50 px-4 py-4 text-center text-xs font-bold uppercase tracking-wide text-gray-500">
+                                                        Application
+                                                        <br />
+                                                        of Education
+                                                    </th>
+
+                                                    <th className="bg-gray-50 px-4 py-4 text-center text-xs font-bold uppercase tracking-wide text-gray-500">
+                                                        Application
+                                                        <br />
+                                                        of L&D
+                                                    </th>
+
+                                                    <th className="bg-gray-50 px-4 py-4 text-center text-xs font-bold uppercase tracking-wide text-gray-500">
+                                                        Potential
+                                                    </th>
+
+                                                    <th className="rounded-r-xl bg-gray-50 px-4 py-4 text-center text-xs font-bold uppercase tracking-wide text-gray-500">
+                                                        Total
+                                                    </th>
+
+                                                </tr>
+
+                                            </thead>
+
+                                            {/* =================================
+                                                TABLE BODY
+                                            ================================= */}
+
+                                            <tbody>
+
+                                                {ranking.map(
+                                                    (applicant, index) => {
+
+                                                        const education =
+                                                            getEducationScore(
+                                                                applicant
+                                                            );
+
+                                                        const training =
+                                                            getTrainingScore(
+                                                                applicant
+                                                            );
+
+                                                        const experience =
+                                                            getExperienceScore(
+                                                                applicant
+                                                            );
+
+                                                        const performance =
+                                                            getAssessmentScore(
+                                                                applicant,
+                                                                "Performance"
+                                                            );
+
+                                                        const outstanding =
+                                                            getAssessmentScore(
+                                                                applicant,
+                                                                "Outstanding Accomplishments"
+                                                            );
+
+                                                        const applicationEducation =
+                                                            getAssessmentScore(
+                                                                applicant,
+                                                                "Application of Education"
+                                                            );
+
+                                                        const applicationLD =
+                                                            getAssessmentScore(
+                                                                applicant,
+                                                                "Application of L&D"
+                                                            );
+
+                                                        const potential =
+                                                            getAssessmentScore(
+                                                                applicant,
+                                                                "Potential"
+                                                            );
+
+                                                        const total =
+                                                            getTotalScore(
+                                                                applicant
+                                                            );
+
+                                                        return (
+                                                            <tr
+                                                                key={
+                                                                    applicant.applicant_id ||
+                                                                    applicant.job_applications_id ||
+                                                                    index
+                                                                }
+                                                                className="group"
+                                                            >
+
+                                                                {/* =================
+                                                                    NO.
+                                                                ================= */}
+
+                                                                <td className="rounded-l-xl bg-white px-4 py-4 text-center align-middle shadow-sm ring-1 ring-gray-100">
 
-                                    <tbody>
+                                                                    <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-sm font-semibold text-gray-600">
+                                                                        {index + 1}
+                                                                    </div>
 
-                                        {ranking.map((applicant, index) => (
+                                                                </td>
 
-                                            <tr
-                                                key={
-                                                    applicant.applicant_id ||
-                                                    applicant.job_applications_id ||
-                                                    index
-                                                }
-                                                className="border-b border-gray-100 transition hover:bg-gray-50"
-                                            >
+                                                                {/* =================
+                                                                    NAME
+                                                                ================= */}
+
+                                                                <td className="bg-white px-4 py-4 align-middle shadow-sm ring-y-1 ring-gray-100">
 
-                                                {/* RANK */}
+                                                                    <div className="font-semibold text-gray-800">
+                                                                        {getApplicantName(
+                                                                            applicant
+                                                                        )}
+                                                                    </div>
 
-                                                <td className="px-5 py-4 text-center">
+                                                                    {applicant.applicant_id && (
+                                                                        <div className="mt-1 text-xs text-gray-400">
+                                                                            {
+                                                                                applicant.applicant_id
+                                                                            }
+                                                                        </div>
+                                                                    )}
 
-                                                    <div
-                                                        className={`mx-auto flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${
-                                                            applicant.rank === 1
-                                                                ? "bg-yellow-100 text-yellow-700"
-                                                                : applicant.rank === 2
-                                                                    ? "bg-gray-200 text-gray-700"
-                                                                    : applicant.rank === 3
-                                                                        ? "bg-orange-100 text-orange-700"
-                                                                        : "bg-gray-100 text-gray-600"
-                                                        }`}
-                                                    >
-                                                        {applicant.rank}
-                                                    </div>
+                                                                </td>
 
-                                                </td>
+                                                                {/* =================
+                                                                    APPLICATION CODE
+                                                                ================= */}
 
+                                                                <td className="bg-white px-4 py-4 align-middle shadow-sm ring-y-1 ring-gray-100">
 
-                                                {/* APPLICANT */}
+                                                                    <span className="inline-flex rounded-lg bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-600">
+                                                                        {getApplicationCode(
+                                                                            applicant
+                                                                        )}
+                                                                    </span>
 
-                                                <td className="px-5 py-4">
+                                                                </td>
 
-                                                    <div className="font-semibold text-gray-800">
-                                                        {applicant.applicant_name}
-                                                    </div>
+                                                                {/* =================
+                                                                    EDUCATION
+                                                                ================= */}
 
-                                                    <div className="mt-1 text-xs text-gray-400">
-                                                        {applicant.applicant_id}
-                                                    </div>
+                                                                <td className="bg-white px-4 py-4 text-center align-middle shadow-sm ring-y-1 ring-gray-100">
 
-                                                </td>
+                                                                    <span className="font-semibold text-gray-700">
+                                                                        {formatScore(
+                                                                            education
+                                                                        )}
+                                                                    </span>
 
+                                                                </td>
 
-                                                {/* EDUCATION */}
+                                                                {/* =================
+                                                                    TRAINING
+                                                                ================= */}
 
-                                                <td className="px-5 py-4 text-center text-sm text-gray-700">
+                                                                <td className="bg-white px-4 py-4 text-center align-middle shadow-sm ring-y-1 ring-gray-100">
 
-                                                    {formatScore(
-                                                        applicant.education?.points
-                                                    )}
+                                                                    <span className="font-semibold text-gray-700">
+                                                                        {formatScore(
+                                                                            training
+                                                                        )}
+                                                                    </span>
 
-                                                </td>
+                                                                </td>
 
+                                                                {/* =================
+                                                                    EXPERIENCE
+                                                                ================= */}
 
-                                                {/* TRAINING */}
+                                                                <td className="bg-white px-4 py-4 text-center align-middle shadow-sm ring-y-1 ring-gray-100">
 
-                                                <td className="px-5 py-4 text-center text-sm text-gray-700">
+                                                                    <span className="font-semibold text-gray-700">
+                                                                        {formatScore(
+                                                                            experience
+                                                                        )}
+                                                                    </span>
 
-                                                    {formatScore(
-                                                        applicant.training?.points
-                                                    )}
+                                                                </td>
 
-                                                </td>
+                                                                {/* =================
+                                                                    PERFORMANCE
+                                                                ================= */}
 
+                                                                <td className="bg-white px-4 py-4 text-center align-middle shadow-sm ring-y-1 ring-gray-100">
 
-                                                {/* EXPERIENCE */}
+                                                                    <span className="font-semibold text-gray-700">
+                                                                        {formatScore(
+                                                                            performance
+                                                                        )}
+                                                                    </span>
 
-                                                <td className="px-5 py-4 text-center text-sm text-gray-700">
+                                                                </td>
 
-                                                    {formatScore(
-                                                        applicant.experience?.points
-                                                    )}
+                                                                {/* =================
+                                                                    OUTSTANDING
+                                                                ================= */}
 
-                                                </td>
+                                                                <td className="bg-white px-4 py-4 text-center align-middle shadow-sm ring-y-1 ring-gray-100">
 
+                                                                    <span className="font-semibold text-gray-700">
+                                                                        {formatScore(
+                                                                            outstanding
+                                                                        )}
+                                                                    </span>
 
-                                                {/* INITIAL SCREENING */}
+                                                                </td>
 
-                                                <td className="px-5 py-4 text-center">
+                                                                {/* =================
+                                                                    APPLICATION EDUCATION
+                                                                ================= */}
 
-                                                    <span className="font-semibold text-[#1f3f73]">
+                                                                <td className="bg-white px-4 py-4 text-center align-middle shadow-sm ring-y-1 ring-gray-100">
 
-                                                        {formatScore(
-                                                            applicant.initial_screening_points
-                                                        )}
+                                                                    <span className="font-semibold text-gray-700">
+                                                                        {formatScore(
+                                                                            applicationEducation
+                                                                        )}
+                                                                    </span>
 
-                                                    </span>
+                                                                </td>
 
-                                                </td>
+                                                                {/* =================
+                                                                    APPLICATION L&D
+                                                                ================= */}
 
+                                                                <td className="bg-white px-4 py-4 text-center align-middle shadow-sm ring-y-1 ring-gray-100">
 
-                                                {/* ASSESSMENT */}
+                                                                    <span className="font-semibold text-gray-700">
+                                                                        {formatScore(
+                                                                            applicationLD
+                                                                        )}
+                                                                    </span>
 
-                                                <td className="px-5 py-4 text-center text-sm text-gray-700">
+                                                                </td>
 
-                                                    {formatScore(
-                                                        applicant.assessment_total
-                                                    )}
+                                                                {/* =================
+                                                                    POTENTIAL
+                                                                ================= */}
 
-                                                </td>
+                                                                <td className="bg-white px-4 py-4 text-center align-middle shadow-sm ring-y-1 ring-gray-100">
 
+                                                                    <span className="font-semibold text-gray-700">
+                                                                        {formatScore(
+                                                                            potential
+                                                                        )}
+                                                                    </span>
 
-                                                {/* OVERALL SCORE */}
+                                                                </td>
 
-                                                <td className="px-5 py-4 text-center">
+                                                                {/* =================
+                                                                    TOTAL
+                                                                ================= */}
 
-                                                    <span className="text-base font-bold text-[#1f3f73]">
+                                                                <td className="rounded-r-xl bg-white px-4 py-4 text-center align-middle shadow-sm ring-1 ring-gray-100">
 
-                                                        {formatScore(
-                                                            applicant.combined_total
-                                                        )}
+                                                                    <span className="inline-flex min-w-[70px] items-center justify-center rounded-lg bg-[#1f3f73]/10 px-3 py-2 text-sm font-bold text-[#1f3f73]">
+                                                                        {formatScore(
+                                                                            total
+                                                                        )}
+                                                                    </span>
 
-                                                    </span>
+                                                                </td>
 
-                                                </td>
+                                                            </tr>
+                                                        );
+                                                    }
+                                                )}
 
-                                            </tr>
+                                            </tbody>
 
-                                        ))}
+                                        </table>
 
-                                    </tbody>
+                                    </div>
 
-                                </table>
+                                </div>
 
-                            </div>
+                            )}
 
-                        )}
+                    </div>
 
-                </div>
+                )}
 
-            )}
+            </div>
+
+            {/* =========================================================
+                PRINT ONLY
+                ANNEX I — COMPARATIVE ASSESSMENT RESULT
+            ========================================================= */}
+
+            <CARPrintForm
+                vacancy={selectedVacancyData}
+                ranking={ranking}
+            />
 
         </div>
     );
