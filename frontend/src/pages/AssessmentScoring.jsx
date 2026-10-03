@@ -1262,7 +1262,7 @@ export default function AssessmentScoring() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6">
+      <div className="min-h-screen p-6">
         <div className="mx-auto max-w-7xl rounded-xl bg-white p-10 text-center shadow-sm">
           <p className="text-gray-500">
             Loading assessment sessions and criteria...
@@ -1295,7 +1295,7 @@ export default function AssessmentScoring() {
   // ============================================================
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen p-6">
 
       <div className="mx-auto max-w-[1800px]">
 
@@ -1303,16 +1303,16 @@ export default function AssessmentScoring() {
             PAGE HEADER
         ====================================================== */}
 
-        <header className="mb-6">
-
-          <h1 className="text-2xl font-bold text-gray-900">
-            Applicant Assessment
-          </h1>
-
-          <p className="mt-1 text-sm text-gray-500">
-            Select an assessment session to evaluate and rank applicants.
-          </p>
-
+        <header className="relative mb-6 min-h-[88px] overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm">
+          <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1E3E74]" />
+          <div className="pl-3">
+            <h1 className="text-2xl font-bold text-gray-900">
+              Applicant Assessment
+            </h1>
+            <p className="mt-1 text-sm text-gray-500">
+              Select an assessment session to evaluate and rank applicants.
+            </p>
+          </div>
         </header>
 
         {/* ======================================================
@@ -1346,7 +1346,7 @@ export default function AssessmentScoring() {
 
           </div>
         ) : (
-          <div className="mt-6 overflow-hidden rounded-xl bg-white shadow-sm">
+          <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
 
             {/* ==================================================
                 SESSION INFORMATION

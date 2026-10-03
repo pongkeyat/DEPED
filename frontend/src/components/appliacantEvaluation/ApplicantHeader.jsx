@@ -11,7 +11,8 @@ export default function ApplicantHeader({ applicant }) {
   const residentialAddress = applicant.address || applicant.residential_address || "N/A";
 
   return (
-    <div className="mb-8 rounded-3xl bg-white p-6 shadow-md border border-slate-100">
+    <div className="relative mb-8 min-h-[88px] overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm">
+      <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1E3E74]" />
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div className="flex items-center gap-5">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#1E3E74]/10 text-[#1E3E74]">

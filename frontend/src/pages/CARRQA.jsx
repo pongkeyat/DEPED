@@ -311,12 +311,7 @@ const CARRQA = () => {
                 .toLowerCase()
                 .replace(/\s+/g, " ");
 
-        // ========================================================
-        // POSSIBLE FIELD NAMES
-        // ========================================================
-
         const mappings = {
-
             "pbet/let/lept rating": [
                 "pbet_let_lept_rating",
                 "pbet_let_lept",
@@ -328,8 +323,18 @@ const CARRQA = () => {
                 "let_rating",
                 "lept_rating",
                 "pbet_rating",
+                "license_rating",
+                "let_points",
+                "lept_points",
+                "pbet_points",
+                "licensure_points",
+                "eligibility_rating",
+                "eligibility_points",
+                "let_score",
+                "lept_score",
+                "pbet_score",
+                "eligibility_score",
             ],
-
             "ppst cois": [
                 "ppst_cois",
                 "ppst_coi",
@@ -338,8 +343,13 @@ const CARRQA = () => {
                 "classroom_observation",
                 "classroom_observation_points",
                 "classroom_observation_score",
+                "ppst_coi_score",
+                "coi_score",
+                "coi_points",
+                "ppst_coi_points",
+                "classroom_observation_rating",
+                "coi_rating",
             ],
-
             "ppst ncois": [
                 "ppst_ncois",
                 "ppst_ncoi",
@@ -348,6 +358,12 @@ const CARRQA = () => {
                 "teacher_reflection",
                 "teacher_reflection_points",
                 "teacher_reflection_score",
+                "ncoi_score",
+                "ppst_ncoi_score",
+                "ncoi_points",
+                "ppst_ncoi_points",
+                "teacher_reflection_rating",
+                "ncoi_rating",
             ],
         };
 
@@ -356,26 +372,59 @@ const CARRQA = () => {
                 normalizedName
             ] || [];
 
-        // ========================================================
-        // CHECK DIRECT APPLICANT PROPERTIES
-        // ========================================================
+        const getNumericValue = (
+            value
+        ) => {
+            const numericValue =
+                Number(value);
 
-        for (
-            const key of possibleKeys
-        ) {
-            if (
-                applicant?.[key] !==
-                    undefined &&
-                applicant?.[key] !==
-                    null
-            ) {
-                return applicant[key];
+            return Number.isFinite(
+                numericValue
+            )
+                ? numericValue
+                : null;
+        };
+
+        const findNestedScore = (
+            source,
+            keys
+        ) => {
+            for (const key of keys) {
+                const value =
+                    source?.[key];
+
+                if (
+                    value !==
+                        undefined &&
+                    value !== null &&
+                    value !== ""
+                ) {
+                    const numericValue =
+                        getNumericValue(
+                            value
+                        );
+
+                    if (
+                        numericValue !==
+                        null
+                    ) {
+                        return numericValue;
+                    }
+                }
             }
-        }
 
-        // ========================================================
-        // CHECK ASSESSMENT OBJECT
-        // ========================================================
+            return null;
+        };
+
+        const directScore =
+            findNestedScore(
+                applicant,
+                possibleKeys
+            );
+
+        if (directScore !== null) {
+            return directScore;
+        }
 
         const assessment =
             applicant?.assessment ||
@@ -384,22 +433,34 @@ const CARRQA = () => {
             applicant?.scores ||
             {};
 
-        for (
-            const key of possibleKeys
-        ) {
-            if (
-                assessment?.[key] !==
-                    undefined &&
-                assessment?.[key] !==
-                    null
-            ) {
-                return assessment[key];
-            }
+        const assessmentScore =
+            findNestedScore(
+                assessment,
+                possibleKeys
+            );
+
+        if (assessmentScore !== null) {
+            return assessmentScore;
         }
 
-        // ========================================================
-        // CHECK ASSESSMENT CRITERIA ARRAY
-        // ========================================================
+        const possibleContainers = [
+            applicant?.initial_screening,
+            applicant?.initialScreening,
+            applicant?.comparative_assessment,
+            applicant?.comparativeAssessment,
+        ];
+
+        for (const container of possibleContainers) {
+            const nestedScore =
+                findNestedScore(
+                    container,
+                    possibleKeys
+                );
+
+            if (nestedScore !== null) {
+                return nestedScore;
+            }
+        }
 
         const assessmentList =
             applicant?.assessment_criteria ||
@@ -412,15 +473,15 @@ const CARRQA = () => {
                 assessmentList
             )
         ) {
-            const found =
+            const matchedCriterion =
                 assessmentList.find(
                     (item) => {
-
                         const itemName =
                             String(
                                 item?.criterion_name ||
                                 item?.name ||
                                 item?.criterion ||
+                                item?.label ||
                                 ""
                             )
                                 .trim()
@@ -432,18 +493,90 @@ const CARRQA = () => {
 
                         return (
                             itemName ===
-                            normalizedName
+                            normalizedName ||
+                            itemName.includes(
+                                normalizedName
+                            ) ||
+                            normalizedName.includes(
+                                itemName
+                            )
                         );
                     }
                 );
 
-            if (found) {
-                return (
-                    found?.points ??
-                    found?.score ??
-                    found?.value ??
-                    0
+            if (matchedCriterion) {
+                const criterionScore =
+                    findNestedScore(
+                        matchedCriterion,
+                        [
+                            "points",
+                            "score",
+                            "value",
+                            "total",
+                            "rating",
+                            "result",
+                        ]
+                    );
+
+                if (
+                    criterionScore !==
+                    null
+                ) {
+                    return criterionScore;
+                }
+            }
+
+            const fallbackMatched =
+                assessmentList.find(
+                    (item) => {
+                        const itemName =
+                            String(
+                                item?.criterion_name ||
+                                item?.name ||
+                                item?.criterion ||
+                                item?.label ||
+                                ""
+                            )
+                                .trim()
+                                .toLowerCase();
+
+                        return (
+                            itemName.includes(
+                                "let"
+                            ) ||
+                            itemName.includes(
+                                "coi"
+                            ) ||
+                            itemName.includes(
+                                "ncoi"
+                            ) ||
+                            itemName.includes(
+                                "pbet"
+                            )
+                        );
+                    }
                 );
+
+            if (fallbackMatched) {
+                const criterionScore =
+                    findNestedScore(
+                        fallbackMatched,
+                        [
+                            "points",
+                            "score",
+                            "value",
+                            "total",
+                            "rating",
+                            "result",
+                        ]
+                    );
+
+                if (
+                    criterionScore !==
+                    null
+                ) {
+                    return criterionScore;
+                }
             }
         }
 
@@ -457,12 +590,90 @@ const CARRQA = () => {
     const getTotalScore = (
         applicant
     ) => {
+        const explicitTotal = [
+            applicant?.combined_total,
+            applicant?.grand_total,
+            applicant?.total_score,
+            applicant?.total,
+            applicant?.overall_score,
+            applicant?.final_total,
+            applicant?.overall_total,
+            applicant?.screening_total,
+            applicant?.assessment_total &&
+                applicant?.initial_screening_points
+                ? applicant.assessment_total +
+                applicant.initial_screening_points
+                : null,
+        ].find(
+            (value) =>
+                value !== undefined &&
+                value !== null &&
+                value !== ""
+        );
+
+        if (
+            explicitTotal !==
+            undefined
+        ) {
+            const numericValue =
+                Number(explicitTotal);
+
+            if (
+                Number.isFinite(
+                    numericValue
+                )
+            ) {
+                return numericValue;
+            }
+        }
+
+        const education =
+            Number(
+                getEducationScore(
+                    applicant
+                ) || 0
+            );
+        const training =
+            Number(
+                getTrainingScore(
+                    applicant
+                ) || 0
+            );
+        const experience =
+            Number(
+                getExperienceScore(
+                    applicant
+                ) || 0
+            );
+        const pbetLetLept =
+            Number(
+                getAssessmentScore(
+                    applicant,
+                    "PBET/LET/LEPT Rating"
+                ) || 0
+            );
+        const ppstCois =
+            Number(
+                getAssessmentScore(
+                    applicant,
+                    "PPST COIs"
+                ) || 0
+            );
+        const ppstNcois =
+            Number(
+                getAssessmentScore(
+                    applicant,
+                    "PPST NCOIs"
+                ) || 0
+            );
+
         return (
-            applicant?.combined_total ??
-            applicant?.grand_total ??
-            applicant?.total_score ??
-            applicant?.total ??
-            0
+            education +
+            training +
+            experience +
+            pbetLetLept +
+            ppstCois +
+            ppstNcois
         );
     };
 
@@ -493,7 +704,7 @@ const CARRQA = () => {
     // ============================================================
 
     return (
-        <div className="min-h-screen bg-gray-50 p-6">
+        <div className="min-h-screen p-6">
 
             {/* =====================================================
                 SCREEN ONLY

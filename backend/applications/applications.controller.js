@@ -11,79 +11,23 @@ import { insertApplicantsWorkExperience } from './services/workExperienceService
 import { insertApplicantsTraining } from './services/trainingService.js';
 import { insertApplicantsCivilServiceEligibility } from './services/eligibilityService.js';
 import { insertHRRemarks } from './services/hrRemarksService.js';
+import { sendApplicationReceivedEmail } from "../applications/services/email.services.js";
 
 
-/**
- * ============================================================
- * 1. SUBMIT FULL APPLICATION
- * ============================================================
- *
- * Handles full job application submission within a single
- * SQL transaction.
- *
-
- * URL:
- * POST /api/applications/submit
- *
- * Document checklist is based on:
- *
- * A. Letter of Intent
- * B. PDS with Work Experience Sheet
- * C. PRC License/ID, if applicable
- * D. Certificate of Eligibility/Rating, if applicable
- * E. Diploma / Academic Record / TOR
- * F. Certificate/s of Training
- * G. Certificate of Employment / Contract of Service /
- *    Service Record
- * H. Latest Appointment, if applicable
- * I. Performance Rating
- * J. Checklist of Requirements and Omnibus Sworn Statement
- */
 export const submitFullApplication = async (req, res) => {
 
-    // Acquire a dedicated client connection
+
     const client = await pool.connect();
 
     try {
 
-        // ======================================================
-        // 1. START TRANSACTION
-        // ======================================================
-
         await client.query('BEGIN');
-
-
-        // ======================================================
-        // 2. PARSE REQUEST BODY
-        // ======================================================
 
         const body = req.body || {};
 
         const parsedBody = body.payload
             ? JSON.parse(body.payload)
             : body;
-
-
-        // ======================================================
-        // 3. PROCESS UPLOADED FILES
-        // ======================================================
-        //
-        // Converts:
-        //
-        // application_letter_file
-        //        ↓
-        // application_letter_path
-        //
-        // prc_license_id_file
-        //        ↓
-        // prc_license_id_path
-        //
-        // training_certificates_file
-        //        ↓
-        // training_certificates_path[]
-        //
-        // Training certificates are treated as multiple files.
-        // ======================================================
 
         const uploadedFilePaths = (req.files || []).reduce(
             (files, file) => {
@@ -106,12 +50,9 @@ export const submitFullApplication = async (req, res) => {
 
                 const pathValue = `/uploads/${file.filename}`;
 
-                const pathKey = `${normalizedDocumentName}_path`;
+                const pathKey =
+                    `${normalizedDocumentName}_path`;
 
-
-                // ------------------------------------------------
-                // Training certificates can contain multiple files
-                // ------------------------------------------------
 
                 if (documentName === 'training_certificates') {
 
@@ -134,16 +75,12 @@ export const submitFullApplication = async (req, res) => {
             {}
         );
 
+
         uploadedFilePaths.diploma_path ||=
             uploadedFilePaths.transcript_of_records_path;
 
         uploadedFilePaths.certificate_of_employment_path ||=
             uploadedFilePaths.service_record_path;
-
-
-        // ======================================================
-        // 4. EXTRACT APPLICATION DATA
-        // ======================================================
 
         const {
             job_application = parsedBody.job_applications,
@@ -168,11 +105,6 @@ export const submitFullApplication = async (req, res) => {
 
         } = parsedBody;
 
-
-        // ======================================================
-        // 5. BASIC VALIDATION
-        // ======================================================
-
         if (!job_application || !applicant_info) {
 
             return res.status(400).json({
@@ -183,29 +115,11 @@ export const submitFullApplication = async (req, res) => {
 
         }
 
-
-        // ======================================================
-        // STEP 1: MASTER APPLICATION RECORD
-        // ======================================================
-        //
-        // Returns generated job_applications_id
-        // Example:
-        // JA-0001
-        // ======================================================
-
         const jobApplicationId =
             await insertJobApplication(
                 client,
                 job_application
             );
-
-
-        // ======================================================
-        // STEP 2: APPLICANT INFORMATION
-        // ======================================================
-        //
-        // Generates applicant_id linked to jobApplicationId
-        // ======================================================
 
         const applicantInfoRecord =
             await insertApplicantInformation(
@@ -217,11 +131,6 @@ export const submitFullApplication = async (req, res) => {
         const applicantId =
             applicantInfoRecord.applicant_id;
 
-
-        // ======================================================
-        // STEP 3: EQUAL OPPORTUNITY DECLARATION
-        // ======================================================
-
         if (equal_opportunity) {
 
             await insertEqualOpportunityDeclarations(
@@ -231,11 +140,6 @@ export const submitFullApplication = async (req, res) => {
             );
 
         }
-
-
-        // ======================================================
-        // STEP 4: DOCUMENT CHECKLIST
-        // ======================================================
 
         if (document_checklist) {
 
@@ -247,11 +151,6 @@ export const submitFullApplication = async (req, res) => {
 
         }
 
-
-        // ======================================================
-        // STEP 5: UPLOADED DOCUMENT FILES
-        // ======================================================
-
         if (uploaded_files) {
 
             await insertApplicantUploadedFiles(
@@ -262,10 +161,6 @@ export const submitFullApplication = async (req, res) => {
 
         }
 
-
-        // ======================================================
-        // STEP 6: EDUCATION
-        // ======================================================
 
         if (
             Array.isArray(education_list) &&
@@ -279,11 +174,6 @@ export const submitFullApplication = async (req, res) => {
             );
 
         }
-
-
-        // ======================================================
-        // STEP 7: WORK EXPERIENCE
-        // ======================================================
 
         if (
             Array.isArray(work_experience_list) &&
@@ -302,11 +192,6 @@ export const submitFullApplication = async (req, res) => {
 
         }
 
-
-        // ======================================================
-        // STEP 8: TRAININGS
-        // ======================================================
-
         if (
             Array.isArray(trainings_list) &&
             trainings_list.length > 0
@@ -323,11 +208,6 @@ export const submitFullApplication = async (req, res) => {
             }
 
         }
-
-
-        // ======================================================
-        // STEP 9: CIVIL SERVICE ELIGIBILITY
-        // ======================================================
 
         if (
             Array.isArray(eligibility_list) &&
@@ -346,15 +226,6 @@ export const submitFullApplication = async (req, res) => {
 
         }
 
-
-        // ======================================================
-        // STEP 10: INITIAL HR REMARKS / APPLICATION STATUS
-        // ======================================================
-        //
-        // Initial status is:
-        // Initial Screening
-        // ======================================================
-
         const initialStatusData = hr_remarks || {
 
             application_status: 'Initial Screening',
@@ -370,47 +241,56 @@ export const submitFullApplication = async (req, res) => {
             initialStatusData
         );
 
-
-        // ======================================================
-        // COMMIT TRANSACTION
-        // ======================================================
-
         await client.query('COMMIT');
 
 
-        // ======================================================
-        // SUCCESS RESPONSE
-        // ======================================================
+        if (applicant_info?.email_address) {
 
-        return res.status(201).json({
+            try {
 
-            success: true,
+                await sendApplicationReceivedEmail(
+                    applicant_info.email_address,
+                    applicant_info.first_name,
+                    applicant_info.last_name
+                );
 
-            message:
-                'Application successfully submitted.',
+                console.log(
+                    `✅ Application received email sent to ${applicant_info.email_address}`
+                );
 
-            data: {
+            } catch (emailError) {
 
-                job_applications_id:
-                    jobApplicationId,
-
-                applicant_id:
-                    applicantId
+                console.error(
+                    '⚠️ Application saved, but email could not be sent:',
+                    emailError
+                );
 
             }
 
+        } else {
+
+            console.warn(
+                '⚠️ Application submitted without an email address.'
+            );
+
+        }
+
+
+
+        return res.status(201).json({
+            success: true,
+            message:
+                'Application successfully submitted.',
+            data: {
+                job_applications_id:
+                    jobApplicationId,
+                applicant_id:
+                    applicantId
+            }
         });
 
-
     } catch (error) {
-
-        // ======================================================
-        // ROLLBACK
-        // ======================================================
-
         await client.query('ROLLBACK');
-
-
         console.error(
             'Transaction Failed. Rolling back changes...',
             error
@@ -418,64 +298,33 @@ export const submitFullApplication = async (req, res) => {
 
 
         return res.status(500).json({
-
             success: false,
-
             message:
                 'Failed to process job application transaction.',
-
             error: error.message
 
         });
 
 
     } finally {
-
-        // ======================================================
-        // RELEASE CLIENT
-        // ======================================================
-
         client.release();
-
     }
 
 };
 
 
-/**
- * ============================================================
- * 2. GET ALL FULL APPLICANTS
- * ============================================================
- *
- * Returns:
- *
- * - Job application
- * - Vacancy
- * - Applicant information
- * - Equal opportunity declarations
- * - Document checklist
- * - Uploaded document paths
- * - HR remarks
- * - Education
- * - Work experience
- * - Trainings
- * - Eligibility
- */
+
 export const getFullApplicants = async (req, res) => {
 
     try {
 
-        // ======================================================
-        // 1. MAIN QUERY
-        // ======================================================
+   
 
         const mainQuery = `
 
             SELECT
 
-                -- ==================================================
-                -- JOB APPLICATION
-                -- ==================================================
+
 
                 job_applications.job_applications_id,
 
@@ -859,11 +708,7 @@ export const getFullApplicants = async (req, res) => {
 };
 
 
-/**
- * ============================================================
- * HELPER: GROUP ROWS BY FOREIGN KEY
- * ============================================================
- */
+
 
 function groupBy(array, key) {
 
@@ -899,19 +744,7 @@ function groupBy(array, key) {
 }
 
 
-/**
- * ============================================================
- * 3. GET APPLICANT BY ID
- * ============================================================
- *
- * Accepts either:
- *
- * applicant_id
- *
- * OR
- *
- * job_applications_id
- */
+
 export const getApplicantById = async (req, res) => {
 
     // Extract ID from URL
@@ -1490,16 +1323,7 @@ export const updateApplicationStatus = async (req, res) => {
 
 
 
-/**
- * ============================================================
- * 5. UPDATE FULL APPLICANT
- * ============================================================
- *
- * PUT /api/applications/updateApplicant/:id
- *
- * Accepts applicant_id or job_applications_id.
- * Does not generate new applicant or application IDs.
- */
+
 
 export const updateFullApplicant = async (req, res) => {
     const { id } = req.params;

@@ -220,12 +220,13 @@ const PositionsManagement = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 p-6">
+        <div className="min-h-screen p-6">
 
             {/* =========================================
                 HEADER
             ========================================= */}
-            <div className="mb-6 flex items-center justify-between">
+            <div className="relative mb-6 flex min-h-[88px] items-center justify-between gap-4 overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm">
+                <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1E3E74]" />
 
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">
@@ -251,7 +252,7 @@ const PositionsManagement = () => {
             {/* =========================================
                 SEARCH
             ========================================= */}
-            <div className="mb-5 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="mb-6">
 
                 <div className="relative max-w-md">
 

@@ -52,11 +52,11 @@ export default function ScreeningStats() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         {[1, 2, 3, 4].map((item) => (
           <div
             key={item}
-            className="h-28 rounded-2xl bg-white shadow-sm animate-pulse"
+            className="h-36 rounded-xl border border-gray-200 bg-white shadow-sm animate-pulse"
           />
         ))}
       </div>
@@ -64,11 +64,11 @@ export default function ScreeningStats() {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
       {/* Total */}
-      <div className="bg-white rounded-2xl shadow-sm border-t-4 border-blue-700 p-6 hover:shadow-md transition">
+      <div className="min-h-36 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition">
         <div className="flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-blue-50">
+          <div className="p-3 text-blue-700">
             <FileText className="w-7 h-7 text-blue-700" />
           </div>
 
@@ -82,9 +82,9 @@ export default function ScreeningStats() {
       </div>
 
       {/* Pending */}
-      <div className="bg-white rounded-2xl shadow-sm border-t-4 border-amber-500 p-6 hover:shadow-md transition">
+      <div className="min-h-36 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition">
         <div className="flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-amber-50">
+          <div className="p-3 text-amber-600">
             <Hourglass className="w-7 h-7 text-amber-500" />
           </div>
 
@@ -98,9 +98,9 @@ export default function ScreeningStats() {
       </div>
 
       {/* Qualified */}
-      <div className="bg-white rounded-2xl shadow-sm border-t-4 border-green-500 p-6 hover:shadow-md transition">
+      <div className="min-h-36 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition">
         <div className="flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-green-50">
+          <div className="p-3 text-green-600">
             <UserCheck className="w-7 h-7 text-green-600" />
           </div>
 
@@ -114,9 +114,9 @@ export default function ScreeningStats() {
       </div>
 
       {/* Disqualified */}
-      <div className="bg-white rounded-2xl shadow-sm border-t-4 border-red-500 p-6 hover:shadow-md transition">
+      <div className="min-h-36 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition">
         <div className="flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-red-50">
+          <div className="p-3 text-red-600">
             <UserX className="w-7 h-7 text-red-600" />
           </div>
 

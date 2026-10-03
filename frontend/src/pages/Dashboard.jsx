@@ -5,11 +5,11 @@ import RecruitmentProcessOverview from "../components/dashboard/RecruitmentProce
 
 export default function DashBoard () {
     return(
-       <div className="min-h-screen bg-[#f4f7fc] flex flex-col pb-16 p-6">
+      <div className="min-h-screen flex flex-col gap-6 p-6 pb-16">
     
       <DashboardCards />
       <DashboardCharts />
-            <div className="-mt-25">
+            <div>
         <RecruitmentProcessOverview />
       </div>
       

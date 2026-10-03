@@ -178,10 +178,11 @@ export default function DashboardCards() {
   ];
 
   return (
-    <div className="w-full bg-[#f4f7fc] px-6 pb-6 flex flex-col gap-5 font-sans min-h-fit">
+    <div className="w-full flex flex-col gap-6 font-sans min-h-fit">
       
       {/* Upper Navigation / Title Row */}
-      <div className="relative w-full bg-white rounded-2xl border-l-[6px] border-[#1e3a6d] shadow-sm px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="relative w-full min-h-[88px] overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1E3E74]" />
         <div>
           <div className="flex items-center gap-2 text-[#113a70]">
             <svg className="w-5 h-5 text-[#1e3a6d]" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
@@ -212,7 +213,8 @@ export default function DashboardCards() {
       </div>
 
       {/* Welcome Banner Row */}
-      <div className="relative w-full bg-[#e8f1fd] rounded-2xl border-l-[6px] border-[#113a70] px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="relative w-full min-h-[88px] overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1E3E74]" />
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 bg-[#113a70] rounded-full flex items-center justify-center border-[2.5px] border-amber-500 shadow-sm shrink-0">
             <span className="text-amber-500 font-black text-lg tracking-wider">S</span>
@@ -266,14 +268,14 @@ export default function DashboardCards() {
       </div>
 
       {/* Stat Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5 mt-0.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
         {statCards.map((card, idx) => (
           <div
             key={idx}
-            className={`bg-white rounded-xl border-t-[4px] ${card.color} shadow-[0_2px_12px_-1px_rgba(0,0,0,0.04)] p-4 flex flex-col gap-3.5 transform transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm`}
+            className="flex min-h-36 flex-col gap-3.5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
           >
             <div className="flex items-start justify-between w-full">
-              <div className={`w-11 h-11 ${card.iconBg} rounded-xl flex items-center justify-center shrink-0`}>
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center text-[#1E3E74]">
                 {card.icon}
               </div>
               <button className="text-[12.5px] font-bold text-[#113a70] hover:text-blue-600 no-underline flex items-center gap-0.5 transition-colors mt-1.5">

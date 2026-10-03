@@ -322,7 +322,7 @@ export default function InitialEvaluationResults() {
   };
 
   return (
-    <div className="min-h-screen bg-[#edf2f8] p-6">
+    <div className="min-h-screen p-6">
 
       {/* ======================================================
           SCREEN HEADER
@@ -353,7 +353,7 @@ export default function InitialEvaluationResults() {
       <div className="print:hidden">
 
         {/* FILTERS */}
-        <div className="mt-6 flex flex-wrap items-end gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+        <div className="mt-6 flex flex-wrap items-end gap-4">
 
           {/* VACANCY */}
           <div className="w-full sm:max-w-sm">
@@ -468,19 +468,13 @@ export default function InitialEvaluationResults() {
             TABLE
         ==================================================== */}
 
-        <div className="mt-4 overflow-hidden rounded-3xl bg-white shadow">
+        <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
 
           <div className="overflow-x-auto">
 
             <table className="min-w-full">
 
-              <thead
-                className={
-                  showUnqualified
-                    ? "bg-red-950 text-white"
-                    : "bg-[#1E3E74] text-white"
-                }
-              >
+              <thead className="bg-gray-50 text-gray-700">
 
                 <tr>
 

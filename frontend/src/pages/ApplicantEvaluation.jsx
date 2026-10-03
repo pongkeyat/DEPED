@@ -54,7 +54,7 @@ export default function ApplicantEvaluation() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#edf2f8] flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1E3E74] mx-auto mb-4"></div>
           <p className="text-slate-600 font-medium">Loading applicant profile...</p>
@@ -65,7 +65,7 @@ export default function ApplicantEvaluation() {
 
   if (error || !applicant) {
     return (
-      <div className="min-h-screen bg-[#edf2f8] p-6 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center p-6">
         <div className="bg-white rounded-3xl p-8 shadow-md text-center max-w-md w-full">
           <AlertCircle className="text-red-500 w-12 h-12 mx-auto mb-3" />
           <h2 className="text-xl font-bold text-slate-800 mb-2">Profile Not Found</h2>
@@ -139,7 +139,7 @@ export default function ApplicantEvaluation() {
   };
 
   return (
-    <div className="min-h-screen bg-[#edf2f8] p-6 relative">
+    <div className="min-h-screen p-6 relative">
       <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <button
           onClick={() => navigate(`/applicants/${encodeURIComponent(id)}`)}

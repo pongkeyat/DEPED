@@ -46,9 +46,9 @@ export default function InterviewSession() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen w-full bg-[#f4f6f9]">
+    <div className="flex min-h-screen w-full flex-col">
       {/* Main Container */}
-      <main className="flex-1 overflow-y-auto p-4 md:p-8">
+      <main className="flex-1 overflow-y-auto p-6">
         <div className="max-w-7xl mx-auto space-y-6">
           
           {/* 1. Header Section */}
@@ -72,14 +72,12 @@ export default function InterviewSession() {
           </section>
 
           {/* 3. Main Dashboard Table Section */}
-          <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="p-1">
-              <InterviewTable 
-                data={sessions} 
-                loading={loading} 
-                error={error} 
-              />
-            </div>
+          <section>
+            <InterviewTable
+              data={sessions}
+              loading={loading}
+              error={error}
+            />
           </section>
 
         </div>

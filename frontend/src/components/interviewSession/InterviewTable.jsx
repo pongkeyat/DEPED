@@ -4,7 +4,7 @@ import { MapPin, Calendar, UserCheck, Tag } from 'lucide-react';
 export default function AssessmentTable({ data }) {
   if (!data || data.length === 0) {
     return (
-      <div className="text-center py-12 text-slate-400 font-medium text-xs bg-slate-50/50 border border-dashed border-slate-200 rounded-lg">
+      <div className="rounded-xl border border-dashed border-gray-200 py-12 text-center text-xs font-medium text-slate-400">
         No active scheduled assessment records found.
       </div>
     );
@@ -39,7 +39,7 @@ export default function AssessmentTable({ data }) {
   };
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200">
+    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
       <table className="w-full text-left text-xs border-collapse">
         <thead>
           <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold tracking-wider uppercase text-[11px]">

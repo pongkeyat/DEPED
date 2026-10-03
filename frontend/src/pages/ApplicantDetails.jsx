@@ -521,6 +521,15 @@ export default function ApplicantDetails() {
     normalizedStatus === "under_review" ||
     normalizedStatus === "under review";
 
+  const isFinalStatus = [
+    "complete",
+    "completed",
+    "incomplete",
+  ].includes(normalizedStatus);
+
+  const canUpdateStatus =
+    isUnderReview && !isFinalStatus;
+
 
   /*
    * While under review:
@@ -644,7 +653,7 @@ export default function ApplicantDetails() {
 
     return (
 
-      <div className="min-h-screen bg-[#edf2f8] flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
 
         <div className="text-center">
 
@@ -671,7 +680,7 @@ export default function ApplicantDetails() {
 
     return (
 
-      <div className="min-h-screen bg-[#edf2f8] p-6 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center p-6">
 
         <div className="bg-white rounded-3xl p-8 shadow-md text-center max-w-md w-full">
 
@@ -710,7 +719,7 @@ export default function ApplicantDetails() {
 
   return (
 
-    <div className="min-h-screen bg-[#edf2f8] p-6 relative">
+    <div className="min-h-screen p-6 relative">
 
 
       {/* ======================================================
@@ -772,7 +781,7 @@ export default function ApplicantDetails() {
               ACTION BUTTON
               ================================================== */}
 
-          {isUnderReview && (
+          {canUpdateStatus && (
 
             <button
               onClick={() =>
@@ -838,7 +847,8 @@ export default function ApplicantDetails() {
           APPLICANT HEADER
           ====================================================== */}
 
-      <div className="rounded-3xl bg-white shadow p-8 mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+      <div className="relative mb-8 flex min-h-[88px] flex-col items-start justify-between gap-6 overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm md:flex-row md:items-center">
+        <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1E3E74]" />
 
 
         {/* APPLICANT NAME */}
@@ -1634,7 +1644,7 @@ export default function ApplicantDetails() {
           CONFIRMATION MODAL
           ====================================================== */}
 
-      {isUnderReview && (
+      {canUpdateStatus && (
 
         <ActionModal
 

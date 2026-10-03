@@ -9,7 +9,7 @@ export default function LandingPage() {
   const [searchTerm, setSearchTerm] = useState("");
 
   const userToken = localStorage.getItem("token");
-  const isLoggedIn = !userToken;
+  const isLoggedIn = !!userToken;
 
   return (
     <div className="min-h-screen flex flex-col justify-between font-sans">

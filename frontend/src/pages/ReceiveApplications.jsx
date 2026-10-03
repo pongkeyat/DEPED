@@ -784,172 +784,178 @@ export default function ReceiveApplications() {
 
   return (
 
-    <div className="p-5 min-h-screen space-y-6 relative">
+    <div className="min-h-screen p-6 text-slate-800">
+      
+      {/* Centered container matching All Applications width */}
+      <div className="max-w-7xl mx-auto space-y-6">
 
+        {/* ======================================================
+            HEADER (Enlarged heading container context)
+            ====================================================== */}
 
-      {/* ======================================================
-          HEADER
-          ====================================================== */}
-
-      <ApplicationHeader />
-
-
-      {/* ======================================================
-          PROGRESS
-          ====================================================== */}
-
-      <StepProgress />
-
-
-      {/* ======================================================
-          FORM
-          ====================================================== */}
-
-      <form
-        onSubmit={handleSubmit}
-        className="space-y-6 max-w-5xl mx-auto"
-      >
-
-
-        {/* ====================================================
-            APPLICATION
-            ==================================================== */}
-
-        <Applications
-          formData={formData.applicationData}
-          onChange={handleApplicationChange}
-        />
-
-
-        {/* ====================================================
-            APPLICANT
-            ==================================================== */}
-
-        <ApplicantForm
-          formData={formData.applicantData}
-          onChange={handleApplicantChange}
-        />
-
-
-        {/* ====================================================
-            EDUCATION
-            ==================================================== */}
-
-        <ApplicantEducationForm
-          data={formData.educationData}
-          onChange={handleEducationChange}
-        />
-
-
-        {/* ====================================================
-            TRAINING
-            ==================================================== */}
-
-        <ApplicantTrainingForm
-          trainings={formData.trainingData.trainings}
-          onChange={handleTrainingChange}
-        />
-
-
-        {/* ====================================================
-            CIVIL SERVICE ELIGIBILITY
-            ==================================================== */}
-
-        <CivilServiceEligibilityForm
-          data={formData.eligibilityData}
-          onChange={handleEligibilityChange}
-        />
-
-
-        {/* ====================================================
-            WORK EXPERIENCE
-            ==================================================== */}
-
-        <WorkExperienceForm
-          data={formData.workExperienceData}
-          onChange={handleWorkExperienceChange}
-        />
-
-
-        {/* ====================================================
-            EQUAL OPPORTUNITY
-            ==================================================== */}
-
-        <EqualOpportunityDeclaration
-          data={formData.equalOpportunityData}
-          onChange={handleEqualOpportunityChange}
-        />
-
-
-        {/* ====================================================
-            DOCUMENT CHECKLIST
-            ==================================================== */}
-
-        <DocumentChecklist
-          documents={formData.documentData}
-          onChange={handleDocumentChange}
-          onFileUpload={handleFileUpload}
-        />
-
-
-        {/* ====================================================
-            HR REMARKS
-            ==================================================== */}
-
-        <HRRemarksForm
-          data={formData.hrRemarksData}
-          onChange={handleHRRemarksChange}
-        />
-
-
-        {/* ====================================================
-            SUBMIT BUTTON
-            ==================================================== */}
-
-        <div className="flex justify-end pt-4">
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="px-6 py-3 rounded-xl font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors"
-          >
-
-            {loading
-              ? "Submitting..."
-              : "Submit Application"}
-
-          </button>
-
+        <div className="[&_h1]:text-xl [&_h1]:font-bold [&_h1]:text-[#1E3E74]">
+          <ApplicationHeader />
         </div>
 
-      </form>
+
+        {/* ======================================================
+            PROGRESS
+            ====================================================== */}
+
+        <StepProgress />
 
 
-      {/* ======================================================
-          SUCCESS MODAL
-          ====================================================== */}
+        {/* ======================================================
+            FORM
+            ====================================================== */}
 
-      <ActionModal
-        isOpen={successModal}
-        type="confirm"
-        title="Success!"
-        message="Application submitted successfully!"
-        onClose={() => setSuccessModal(false)}
-        onConfirm={() => setSuccessModal(false)}
-      />
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-6 max-w-5xl mx-auto"
+        >
 
 
-      {/* ======================================================
-          ERROR MODAL
-          ====================================================== */}
+          {/* ====================================================
+              APPLICATION
+              ==================================================== */}
 
-      <ActionModal
-        isOpen={Boolean(errorModalMessage)}
-        type="error"
-        title="Submission Failed"
-        message={errorModalMessage}
-        onClose={() => setErrorModalMessage(null)}
-      />
+          <Applications
+            formData={formData.applicationData}
+            onChange={handleApplicationChange}
+          />
+
+
+          {/* ====================================================
+              APPLICANT
+              ==================================================== */}
+
+          <ApplicantForm
+            formData={formData.applicantData}
+            onChange={handleApplicantChange}
+          />
+
+
+          {/* ====================================================
+              EDUCATION
+              ==================================================== */}
+
+          <ApplicantEducationForm
+            data={formData.educationData}
+            onChange={handleEducationChange}
+          />
+
+
+          {/* ====================================================
+              TRAINING
+              ==================================================== */}
+
+          <ApplicantTrainingForm
+            trainings={formData.trainingData.trainings}
+            onChange={handleTrainingChange}
+          />
+
+
+          {/* ====================================================
+              CIVIL SERVICE ELIGIBILITY
+              ==================================================== */}
+
+          <CivilServiceEligibilityForm
+            data={formData.eligibilityData}
+            onChange={handleEligibilityChange}
+          />
+
+
+          {/* ====================================================
+              WORK EXPERIENCE
+              ==================================================== */}
+
+          <WorkExperienceForm
+            data={formData.workExperienceData}
+            onChange={handleWorkExperienceChange}
+          />
+
+
+          {/* ====================================================
+              EQUAL OPPORTUNITY
+              ==================================================== */}
+
+          <EqualOpportunityDeclaration
+            data={formData.equalOpportunityData}
+            onChange={handleEqualOpportunityChange}
+          />
+
+
+          {/* ====================================================
+              DOCUMENT CHECKLIST
+              ==================================================== */}
+
+          <DocumentChecklist
+            documents={formData.documentData}
+            onChange={handleDocumentChange}
+            onFileUpload={handleFileUpload}
+          />
+
+
+          {/* ====================================================
+              HR REMARKS
+              ==================================================== */}
+
+          <HRRemarksForm
+            data={formData.hrRemarksData}
+            onChange={handleHRRemarksChange}
+          />
+
+
+          {/* ====================================================
+              SUBMIT BUTTON
+              ==================================================== */}
+
+          <div className="flex justify-end pt-4">
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-6 py-3 rounded-xl font-semibold text-white bg-[#1E3E74] hover:bg-[#17325e] disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors"
+            >
+
+              {loading
+                ? "Submitting..."
+                : "Submit Application"}
+
+            </button>
+
+          </div>
+
+        </form>
+
+
+        {/* ======================================================
+            SUCCESS MODAL
+            ====================================================== */}
+
+        <ActionModal
+          isOpen={successModal}
+          type="confirm"
+          title="Success!"
+          message="Application submitted successfully!"
+          onClose={() => setSuccessModal(false)}
+          onConfirm={() => setSuccessModal(false)}
+        />
+
+
+        {/* ======================================================
+            ERROR MODAL
+            ====================================================== */}
+
+        <ActionModal
+          isOpen={Boolean(errorModalMessage)}
+          type="error"
+          title="Submission Failed"
+          message={errorModalMessage}
+          onClose={() => setErrorModalMessage(null)}
+        />
+
+      </div>
 
     </div>
 

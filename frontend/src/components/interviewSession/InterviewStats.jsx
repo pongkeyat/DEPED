@@ -49,52 +49,55 @@ export default function InterviewStats({ sessions = [], count, loading = false }
       id: 'total', 
       value: stats.total, 
       label: 'Total Tracked Sessions', 
-      topBorderColor: 'border-[#0f2c59]', 
-      iconBg: 'bg-[#0f2c59]/10', 
-      iconColor: 'text-[#0f2c59]', 
+      topBorderColor: 'border-t-4 border-[#1E3E74]', 
+      iconBg: 'bg-blue-50', 
+      iconColor: 'text-[#1E3E74]', 
       icon: CalendarIcon 
     },
     { 
       id: 'upcoming', 
       value: stats.upcoming, 
       label: 'Upcoming / Active Schedules', 
-      topBorderColor: 'border-blue-500', 
-      iconBg: 'bg-blue-50', 
-      iconColor: 'text-blue-600', 
+      topBorderColor: 'border-t-4 border-emerald-500', 
+      iconBg: 'bg-emerald-50', 
+      iconColor: 'text-emerald-600', 
       icon: CalendarPlus 
     },
     { 
       id: 'thisMonth', 
       value: stats.thisMonth, 
       label: 'Scheduled This Month', 
-      topBorderColor: 'border-emerald-500', 
-      iconBg: 'bg-emerald-50', 
-      iconColor: 'text-emerald-600', 
+      topBorderColor: 'border-t-4 border-blue-500', 
+      iconBg: 'bg-blue-50', 
+      iconColor: 'text-blue-600', 
       icon: Clock 
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
       {statCards.map((card) => {
         const IconComp = card.icon;
         return (
           <div 
             key={card.id} 
-            className={`bg-white rounded-xl shadow-sm border border-slate-200 border-t-4 ${card.topBorderColor} px-5 py-4 flex items-center gap-4 transition-all`}
+            className={`flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm overflow-hidden ${card.topBorderColor}`}
           >
-            <div className={`p-3 rounded-xl ${card.iconBg} ${card.iconColor} shrink-0`}>
-              <IconComp className="w-5 h-5 stroke-[2.5]" />
+            {/* Soft Icon Container */}
+            <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${card.iconBg} ${card.iconColor}`}>
+              <IconComp className="w-6 h-6 stroke-[2.2]" />
             </div>
+
+            {/* Value and Label Stack */}
             <div className="flex-1 min-w-0">
               {loading ? (
-                <div className="h-7 w-12 bg-slate-200 animate-pulse rounded-md" />
+                <div className="h-8 w-16 bg-gray-200 animate-pulse rounded-md" />
               ) : (
-                <span className="text-2xl font-black text-slate-800 leading-none tracking-tight block">
+                <span className="text-2xl font-black text-gray-800 leading-none tracking-tight block">
                   {card.value}
                 </span>
               )}
-              <span className="text-[11px] font-semibold text-slate-500 block mt-1 truncate">
+              <span className="text-xs font-semibold text-gray-500 block mt-1 truncate">
                 {card.label}
               </span>
             </div>

@@ -3,6 +3,7 @@ import {
     Plus,
     Pencil,
     Trash2,
+    Users,
 } from "lucide-react";
 
 import { getPanelists } from "../api/panelistApi";
@@ -57,31 +58,40 @@ const PanelistManagement = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 p-6">
+        <div className="min-h-screen p-6 flex flex-col gap-6">
 
             {/* =========================================
                 HEADER
             ========================================= */}
-            <div className="mb-6 flex items-center justify-between">
+            <div className="relative flex min-h-[88px] flex-col justify-between gap-4 overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm sm:flex-row sm:items-center">
+                {/* Left Accent Bar */}
+                <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1E3E74]" />
 
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">
-                        Panelist Management
-                    </h1>
-
-                    <p className="mt-1 text-sm text-gray-500">
-                        Manage panelists for the evaluation process.
-                    </p>
+                {/* LEFT SIDE: Icon + Title & Description */}
+                <div className="flex items-center gap-4 pl-3">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[#1E3E74]">
+                        <Users size={24} />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight text-[#1E3E74]">
+                            Panelist Management
+                        </h1>
+                        <p className="mt-0.5 text-sm text-gray-500">
+                            Manage panelists for the evaluation process.
+                        </p>
+                    </div>
                 </div>
 
-                <button
-                    onClick={handleAdd}
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700"
-                >
-                    <Plus size={18} />
-                    Add Panelist
-                </button>
-
+                {/* RIGHT SIDE: Action Button */}
+                <div className="flex flex-wrap items-center gap-3 pl-3 sm:pl-0">
+                    <button
+                        type="button"
+                        onClick={handleAdd}
+                        className="inline-flex items-center gap-2 rounded-xl bg-[#1E3E74] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#17325e] cursor-pointer"
+                    >
+                        <Plus className="w-4 h-4 stroke-[3]" /> Add Panelist
+                    </button>
+                </div>
             </div>
 
             {/* =========================================
@@ -95,7 +105,7 @@ const PanelistManagement = () => {
 
                         {/* =================================
                             TABLE HEADER
-                        ================================= */}
+                        ================================. */}
                         <thead className="border-b border-gray-200 bg-gray-50">
 
                             <tr>

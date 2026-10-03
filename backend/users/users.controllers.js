@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto'; 
 import pool from "../config/db.js";
+import { createAuditLog } from "../auditLogs/auditLogs.service.js";
 import { AccountCreatedEmail } from "./users.email.services.js";
 
 const cookieOptions = {
@@ -16,6 +17,18 @@ const generateToken = (email) => {
         expiresIn: '7d'
     })
 }
+
+const getAuditContext = (req, userRecord = null) => {
+    const currentUser = userRecord || req.user || null;
+
+    return {
+        user_id: currentUser?.id ?? null,
+        username: currentUser?.email || currentUser?.username || req.body?.email || "SYSTEM",
+        user_role: currentUser?.role || null,
+        ip_address: req.ip || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || null,
+        user_agent: req.get('user-agent') || null
+    };
+};
 
 export const registerUsers = async (req, res) => {
     const { email, role } = req.body;
@@ -62,7 +75,7 @@ export const registerUsers = async (req, res) => {
         const hashedPassword = await bcrypt.hash(generatedPassword, 10);
 
         const newUser = await pool.query(
-            'INSERT INTO users (email, password, role) VALUES ($1, $2, $3::character varying) RETURNING email, role, is_password_changed',
+            'INSERT INTO users (email, password, role) VALUES ($1, $2, $3::character varying) RETURNING id, email, role, is_password_changed',
             [email, hashedPassword, role]
         );
 
@@ -77,6 +90,29 @@ export const registerUsers = async (req, res) => {
 
         const token = generateToken(newUser.rows[0].email);
         res.cookie('token', token, cookieOptions);
+
+        try {
+            await createAuditLog({
+                user_id: newUser.rows[0].id,
+                username: newUser.rows[0].email,
+                user_role: newUser.rows[0].role,
+                action: 'CREATE',
+                module: 'USER_MANAGEMENT',
+                description: 'User account created successfully.',
+                entity_type: 'users',
+                entity_id: newUser.rows[0].id,
+                ip_address: req.ip || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || null,
+                user_agent: req.get('user-agent') || null,
+                metadata: {
+                    email: newUser.rows[0].email,
+                    role: newUser.rows[0].role,
+                    welcome_email_status: emailStatus
+                },
+                status: 'SUCCESS'
+            });
+        } catch (auditError) {
+            console.error('Failed to save registration audit log:', auditError);
+        }
         
         return res.status(201).json({ 
             token,
@@ -119,6 +155,28 @@ export const loginUsers = async (req, res) => {
 
         const token = generateToken(userData.email);
         res.cookie('token', token, cookieOptions);
+
+        try {
+            await createAuditLog({
+                user_id: userData.id,
+                username: userData.email,
+                user_role: userData.role,
+                action: 'LOGIN',
+                module: 'AUTH',
+                description: 'User logged in successfully.',
+                entity_type: 'users',
+                entity_id: userData.id,
+                ip_address: req.ip || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || null,
+                user_agent: req.get('user-agent') || null,
+                metadata: {
+                    email: userData.email,
+                    role: userData.role
+                },
+                status: 'SUCCESS'
+            });
+        } catch (auditError) {
+            console.error('Failed to save login audit log:', auditError);
+        }
         
         return res.status(200).json({ 
             token,
@@ -173,9 +231,31 @@ export const updatePasswords = async (req, res) => {
         // 3. Process safe update
         const hashedNewPassword = await bcrypt.hash(newPassword, 10);
         const updateResult = await pool.query(
-            'UPDATE users SET password = $1, is_password_changed = true WHERE email = $2 RETURNING email, is_password_changed',
+            'UPDATE users SET password = $1, is_password_changed = true WHERE email = $2 RETURNING id, email, role, is_password_changed',
             [hashedNewPassword, userEmail]
         );
+
+        try {
+            await createAuditLog({
+                user_id: updateResult.rows[0].id,
+                username: updateResult.rows[0].email,
+                user_role: updateResult.rows[0].role,
+                action: 'UPDATE',
+                module: 'USER_MANAGEMENT',
+                description: 'Password updated successfully.',
+                entity_type: 'users',
+                entity_id: updateResult.rows[0].id,
+                ip_address: req.ip || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || null,
+                user_agent: req.get('user-agent') || null,
+                metadata: {
+                    password_change: true,
+                    email: updateResult.rows[0].email
+                },
+                status: 'SUCCESS'
+            });
+        } catch (auditError) {
+            console.error('Failed to save password-change audit log:', auditError);
+        }
 
         return res.status(200).json({ 
             message: "Password changed successfully.",
@@ -193,6 +273,48 @@ export const getUserProfiles = async (req,res) => {
 }
 
 export const logoutUsers = async (req, res) => {
+    const currentUser = req.user || null;
+    const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
+
+    let loggedUser = currentUser;
+
+    if (!loggedUser && token) {
+        try {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const user = await pool.query('SELECT * FROM users WHERE email = $1', [decoded.email]);
+
+            if (user.rows[0]) {
+                loggedUser = user.rows[0];
+            }
+        } catch (error) {
+            console.error('Failed to resolve logout user:', error);
+        }
+    }
+
+    if (loggedUser) {
+        try {
+            await createAuditLog({
+                user_id: loggedUser.id,
+                username: loggedUser.email,
+                user_role: loggedUser.role,
+                action: 'LOGOUT',
+                module: 'AUTH',
+                description: 'User logged out successfully.',
+                entity_type: 'users',
+                entity_id: loggedUser.id,
+                ip_address: req.ip || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || null,
+                user_agent: req.get('user-agent') || null,
+                metadata: {
+                    email: loggedUser.email,
+                    role: loggedUser.role
+                },
+                status: 'SUCCESS'
+            });
+        } catch (auditError) {
+            console.error('Failed to save logout audit log:', auditError);
+        }
+    }
+
     res.cookie('token', '', { ...cookieOptions, maxAge: 0 });
     res.json({message: 'Logged out successfully'});
 }

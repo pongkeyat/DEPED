@@ -9,7 +9,8 @@ export default function RankingHeader({
   onPrint,
 }) {
   return (
-    <div className="print:hidden mb-6 flex flex-col gap-4 rounded-2xl border border-gray-100 bg-white px-6 py-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+    <div className="print:hidden relative mb-6 flex min-h-[88px] flex-col gap-4 overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1E3E74]" />
 
       {/* =====================================================
           LEFT SIDE

@@ -12,39 +12,45 @@ export default function UserManagementHeader() {
 
   return (
     <>
-      <div className="w-full bg-white rounded-xl border border-gray-200 shadow-sm">
-        <div className="flex items-center justify-between px-5 py-3">
+      <div className="relative w-full min-h-[88px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+        {/* Left Accent Bar */}
+        <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1E3E74]" />
+        
+        <div className="flex min-h-[88px] flex-col justify-between gap-4 px-6 py-4 pl-7 sm:flex-row sm:items-center">
           {/* Left Section */}
           <div className="flex items-center gap-4">
-            {/* Blue Accent */}
-            <div className="w-1 h-10 bg-blue-900 rounded-full"></div>
-
-            <Users className="w-5 h-5 text-blue-900" />
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[#1E3E74]">
+              <Users size={24} className="stroke-[2.2]" />
+            </div>
 
             <div>
-              <h1 className="text-lg font-bold text-blue-900">
+              <h1 className="text-2xl font-bold tracking-tight text-[#1E3E74]">
                 User Management
               </h1>
 
-              <p className="text-xs text-gray-500">
+              <p className="mt-0.5 text-sm text-gray-500">
                 Manage system users, assign roles, update account statuses, and configure access permissions.
               </p>
             </div>
           </div>
 
           {/* Right Section */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             {/* Add User Button connected to State */}
             <button 
+              type="button"
               onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 rounded-md bg-blue-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-800 transition"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#1E3E74] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#17325e] cursor-pointer"
             >
               <UserPlus size={16} />
               Add User
             </button>
 
-            <button className="flex items-center gap-2 rounded-md bg-gray-100 border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition">
-              <ShieldAlert size={16} />
+            <button 
+              type="button"
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 hover:text-[#1E3E74] cursor-pointer"
+            >
+              <ShieldAlert size={16} className="text-gray-500" />
               Permissions
             </button>
           </div>

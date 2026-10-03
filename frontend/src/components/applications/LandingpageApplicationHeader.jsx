@@ -10,7 +10,8 @@ export default function LandingpageApplicationHeader({ isApplying, onBack, onNav
   };
 
     return (
-        <div className="mb-5 rounded-xl bg-white p-6 shadow-sm flex items-center justify-between">
+        <div className="relative mb-5 flex min-h-[88px] items-center justify-between overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm">
+            <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1E3E74]" />
             
             {isApplying ? (
                 <div>

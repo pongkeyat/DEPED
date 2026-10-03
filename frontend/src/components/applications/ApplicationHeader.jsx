@@ -33,8 +33,8 @@ export default function ApplicationHeader() {
     const app = applications[0];
 
     return (
-        <div className="bg-slate-100 p-3">
-            <div className="bg-white rounded-2xl border-l-[6px] border-blue-900 shadow-sm px-6 py-4 flex items-center justify-between">
+        <div className="relative flex min-h-[88px] items-center justify-between overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm">
+                <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1E3E74]" />
 
                 {/* Left */}
                 <div className="flex items-center gap-3">
@@ -85,7 +85,6 @@ export default function ApplicationHeader() {
 
                 </div>
 
-            </div>
         </div>
     );
 }

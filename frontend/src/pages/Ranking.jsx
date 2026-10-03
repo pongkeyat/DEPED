@@ -208,15 +208,12 @@ const Ranking = () => {
             .toLowerCase()
             .replace(/\s+/g, " ");
 
-        // --------------------------------------------------------
-        // Direct property mappings
-        // --------------------------------------------------------
-
         const directMappings = {
             performance: [
                 "performance",
                 "performance_points",
                 "performance_score",
+                "performance_rating",
             ],
 
             "outstanding accomplishments": [
@@ -224,12 +221,14 @@ const Ranking = () => {
                 "outstanding_accomplishments_points",
                 "outstanding_accomplishments_score",
                 "outstanding_points",
+                "outstanding_accomplishment_points",
             ],
 
             "application of education": [
                 "application_of_education",
                 "application_of_education_points",
                 "application_of_education_score",
+                "application_of_education_rating",
             ],
 
             "application of l&d": [
@@ -240,30 +239,65 @@ const Ranking = () => {
                 "application_of_lnd",
                 "application_of_learning_development_points",
                 "application_of_learning_development_score",
+                "application_of_learning_and_development_points",
+                "application_of_learning_and_development_score",
             ],
 
             potential: [
                 "potential",
                 "potential_points",
                 "potential_score",
+                "potential_rating",
             ],
         };
+
+        const genericScoreKeys = [
+            "points",
+            "score",
+            "value",
+            "total",
+            "rating",
+            "result",
+        ];
 
         const possibleKeys =
             directMappings[normalizedName] || [];
 
-        for (const key of possibleKeys) {
-            if (
-                applicant?.[key] !== undefined &&
-                applicant?.[key] !== null
-            ) {
-                return applicant[key];
-            }
-        }
+        const getNumericValue = (value) => {
+            const numericValue = Number(value);
+            return Number.isFinite(numericValue)
+                ? numericValue
+                : null;
+        };
 
-        // --------------------------------------------------------
-        // Look inside assessment object
-        // --------------------------------------------------------
+        const findNestedScore = (source, keys) => {
+            for (const key of keys) {
+                const value = source?.[key];
+
+                if (
+                    value !== undefined &&
+                    value !== null &&
+                    value !== ""
+                ) {
+                    const numericValue = getNumericValue(value);
+
+                    if (numericValue !== null) {
+                        return numericValue;
+                    }
+                }
+            }
+
+            return null;
+        };
+
+        const directScore = findNestedScore(
+            applicant,
+            possibleKeys
+        );
+
+        if (directScore !== null) {
+            return directScore;
+        }
 
         const assessment =
             applicant?.assessment ||
@@ -272,18 +306,14 @@ const Ranking = () => {
             applicant?.scores ||
             {};
 
-        for (const key of possibleKeys) {
-            if (
-                assessment?.[key] !== undefined &&
-                assessment?.[key] !== null
-            ) {
-                return assessment[key];
-            }
-        }
+        const assessmentScore = findNestedScore(
+            assessment,
+            possibleKeys
+        );
 
-        // --------------------------------------------------------
-        // Look inside assessment criteria array
-        // --------------------------------------------------------
+        if (assessmentScore !== null) {
+            return assessmentScore;
+        }
 
         const assessmentList =
             applicant?.assessment_criteria ||
@@ -297,22 +327,56 @@ const Ranking = () => {
                     item?.criterion_name ||
                     item?.name ||
                     item?.criterion ||
+                    item?.label ||
                     ""
                 )
                     .trim()
                     .toLowerCase()
                     .replace(/\s+/g, " ");
 
-                return itemName === normalizedName;
+                return (
+                    itemName === normalizedName ||
+                    itemName.includes(normalizedName) ||
+                    normalizedName.includes(itemName)
+                );
             });
 
             if (found) {
+                const criterionScore = findNestedScore(found, genericScoreKeys);
+
+                if (criterionScore !== null) {
+                    return criterionScore;
+                }
+            }
+
+            const fallbackMatched = assessmentList.find((item) => {
+                const itemName = String(
+                    item?.criterion_name ||
+                    item?.name ||
+                    item?.criterion ||
+                    item?.label ||
+                    ""
+                )
+                    .trim()
+                    .toLowerCase();
+
                 return (
-                    found?.points ??
-                    found?.score ??
-                    found?.value ??
-                    0
+                    itemName.includes("let") ||
+                    itemName.includes("coi") ||
+                    itemName.includes("ncoi") ||
+                    itemName.includes("pbet")
                 );
+            });
+
+            if (fallbackMatched) {
+                const criterionScore = findNestedScore(
+                    fallbackMatched,
+                    genericScoreKeys
+                );
+
+                if (criterionScore !== null) {
+                    return criterionScore;
+                }
             }
         }
 
@@ -363,12 +427,78 @@ const Ranking = () => {
     // ============================================================
 
     const getTotalScore = (applicant) => {
+        const explicitTotal = [
+            applicant?.combined_total,
+            applicant?.grand_total,
+            applicant?.total_score,
+            applicant?.total,
+            applicant?.overall_score,
+            applicant?.final_total,
+            applicant?.overall_total,
+            applicant?.screening_total,
+            applicant?.assessment_total &&
+                applicant?.initial_screening_points
+                ? applicant.assessment_total +
+                    applicant.initial_screening_points
+                : null,
+        ].find(
+            (value) =>
+                value !== undefined &&
+                value !== null &&
+                value !== ""
+        );
+
+        if (explicitTotal !== undefined) {
+            const numericValue = Number(explicitTotal);
+
+            if (Number.isFinite(numericValue)) {
+                return numericValue;
+            }
+        }
+
+        const education = Number(
+            getEducationScore(applicant) || 0
+        );
+        const training = Number(
+            getTrainingScore(applicant) || 0
+        );
+        const experience = Number(
+            getExperienceScore(applicant) || 0
+        );
+        const performance = Number(
+            getAssessmentScore(applicant, "Performance") || 0
+        );
+        const outstanding = Number(
+            getAssessmentScore(
+                applicant,
+                "Outstanding Accomplishments"
+            ) || 0
+        );
+        const applicationEducation = Number(
+            getAssessmentScore(
+                applicant,
+                "Application of Education"
+            ) || 0
+        );
+        const applicationLD = Number(
+            getAssessmentScore(
+                applicant,
+                "Application of L&D"
+            ) || 0
+        );
+        const potential = Number(
+            getAssessmentScore(applicant, "Potential") || 0
+        );
+
         return (
-            applicant?.combined_total ??
-            applicant?.grand_total ??
-            applicant?.total_score ??
-            applicant?.total ??
-            0
+            education +
+            training +
+            experience +
+            performance +
+            outstanding +
+            applicationEducation +
+            applicationLD +
+            potential
         );
     };
 
@@ -399,7 +529,7 @@ const Ranking = () => {
     // ============================================================
 
     return (
-        <div className="min-h-screen bg-gray-50 p-6">
+        <div className="min-h-screen p-6">
 
             {/* =====================================================
                 EVERYTHING ON SCREEN
