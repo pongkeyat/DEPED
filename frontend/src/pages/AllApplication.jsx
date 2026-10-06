@@ -98,18 +98,9 @@ export default function AllApplication() {
       iconColor: "text-[#1E3E74]" 
     },
     { 
-      id: "Initial Screening",
-      title: "Initial Screening", 
-      value: baseFilteredApplications.filter(a => a.application_status === 'Initial Screening').length, 
-      icon: Hourglass, 
-      topBarColor: "bg-orange-400", 
-      iconBg: "bg-orange-50", 
-      iconColor: "text-orange-500" 
-    },
-    { 
       id: "Complete",
       title: "Complete", 
-      value: baseFilteredApplications.filter(a => a.application_status === 'Complete').length, 
+      value: baseFilteredApplications.filter(a => a.application_status === 'complete').length, 
       icon: Trophy, 
       topBarColor: "bg-teal-500", 
       iconBg: "bg-teal-50", 
@@ -118,7 +109,7 @@ export default function AllApplication() {
     { 
       id: "Incomplete",
       title: "Incomplete", 
-      value: baseFilteredApplications.filter(a => a.application_status === 'Incomplete').length, 
+      value: baseFilteredApplications.filter(a => a.application_status === 'incomplete').length, 
       icon: UserPlus, 
       topBarColor: "bg-emerald-500", 
       iconBg: "bg-emerald-50", 
@@ -159,7 +150,46 @@ export default function AllApplication() {
           </button>
         </div>
 
-        {/* Modern Filter Card */}
+        {/* Clickable Interactive Stats Cards */}
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {stats.map((card) => {
+            const IconComp = card.icon;
+            const isSelected = selectedStatusFilter === card.id;
+            return (
+              <div 
+                key={card.id} 
+                onClick={() => setSelectedStatusFilter(card.id)}
+                className={`relative flex items-center gap-4 rounded-2xl border bg-white p-5 pt-6 shadow-sm overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 ${
+                  isSelected ? "border-[#1E3E74] ring-2 ring-[#1E3E74]/20 bg-blue-50/20" : "border-gray-200"
+                }`}
+              >
+                {/* Slim / Subtle Absolute Top Accent Bar */}
+                <div className={`absolute top-0 inset-x-0 h-1 ${card.topBarColor}`} />
+
+                {/* Soft Icon Container */}
+                <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${card.iconBg} ${card.iconColor}`}>
+                  <IconComp className="w-6 h-6 stroke-[2.2]" />
+                </div>
+
+                {/* Value and Label Stack */}
+                <div className="flex-1 min-w-0">
+                  {loading ? (
+                    <div className="h-8 w-16 bg-gray-200 animate-pulse rounded-md" />
+                  ) : (
+                    <span className="text-2xl font-black text-gray-800 leading-none tracking-tight block">
+                      {card.value}
+                    </span>
+                  )}
+                  <span className="text-xs font-semibold text-gray-500 block mt-1 truncate">
+                    {card.title}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+                {/* Modern Filter Card */}
         <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1E3E74]" />
 
@@ -215,54 +245,15 @@ export default function AllApplication() {
           </div>
         </div>
 
-        {/* Clickable Interactive Stats Cards */}
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-          {stats.map((card) => {
-            const IconComp = card.icon;
-            const isSelected = selectedStatusFilter === card.id;
-            return (
-              <div 
-                key={card.id} 
-                onClick={() => setSelectedStatusFilter(card.id)}
-                className={`relative flex items-center gap-4 rounded-2xl border bg-white p-5 pt-6 shadow-sm overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 ${
-                  isSelected ? "border-[#1E3E74] ring-2 ring-[#1E3E74]/20 bg-blue-50/20" : "border-gray-200"
-                }`}
-              >
-                {/* Slim / Subtle Absolute Top Accent Bar */}
-                <div className={`absolute top-0 inset-x-0 h-1 ${card.topBarColor}`} />
-
-                {/* Soft Icon Container */}
-                <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${card.iconBg} ${card.iconColor}`}>
-                  <IconComp className="w-6 h-6 stroke-[2.2]" />
-                </div>
-
-                {/* Value and Label Stack */}
-                <div className="flex-1 min-w-0">
-                  {loading ? (
-                    <div className="h-8 w-16 bg-gray-200 animate-pulse rounded-md" />
-                  ) : (
-                    <span className="text-2xl font-black text-gray-800 leading-none tracking-tight block">
-                      {card.value}
-                    </span>
-                  )}
-                  <span className="text-xs font-semibold text-gray-500 block mt-1 truncate">
-                    {card.title}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
         {/* Table Section */}
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
           <table className="min-w-full">
-            <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
+            <thead className="bg-[#1b4584] px-6 py-4">
               <tr>
-                <th className="px-6 py-4 text-left">Applicant Name</th>
-                <th className="px-6 py-4 text-left">Position</th>
-                <th className="px-6 py-4 text-center">Status</th>
-                <th className="px-6 py-4 text-center">Actions</th>
+                <th className="px-6 py-4 text-left font-semibold text-white">Applicant Name</th>
+                <th className="px-6 py-4 text-left font-semibold text-white">Position</th>
+                <th className="px-6 py-4 text-center font-semibold text-white">Status</th>
+                <th className="px-6 py-4 text-center font-semibold text-white">Actions</th>
               </tr>
             </thead>
             <tbody>

@@ -3,13 +3,12 @@ import { Briefcase, Clock3 } from "lucide-react";
 import { getVacancies } from "../../api/VacancyApi";
 import { getPositions } from "../../api/PositionsApi";
 
-function Applications({ formData, onChange, isLoggedIn }) {
+function Applications({ formData, onChange, submissionType }) {
   const [vacancies, setVacancies] = useState([]);
   const [positions, setPositions] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Determine submission type based on whether the user is logged in
-  const determinedSubmissionType = isLoggedIn ? "Walk-In" : "Online";
+  const determinedSubmissionType = submissionType;
 
   const fallbackForm = {
     vacancy_id: "",
@@ -19,18 +18,23 @@ function Applications({ formData, onChange, isLoggedIn }) {
       hour: "2-digit",
       minute: "2-digit",
     }),
-    receivedBy: "System Administrator",
+    receivedBy: "Human Resources Officer",
     submissionType: determinedSubmissionType,
   };
 
   const form = formData ?? fallbackForm;
 
-  // Ensure submissionType updates automatically if isLoggedIn changes or isn't set in formData yet
+  // ============================================================
+  // Automatically update submission type
+  // ============================================================
   useEffect(() => {
-    if (onChange && form.submissionType !== determinedSubmissionType) {
+    if (
+      onChange &&
+      form.submissionType !== determinedSubmissionType
+    ) {
       onChange("submissionType", determinedSubmissionType);
     }
-  }, [isLoggedIn]);
+  }, [determinedSubmissionType, form.submissionType, onChange]);
 
   const handleLocalChange = (name, value) => {
     if (onChange) {
@@ -38,7 +42,9 @@ function Applications({ formData, onChange, isLoggedIn }) {
     }
   };
 
-  // Fetch vacancies and positions on load
+  // ============================================================
+  // Fetch Vacancies and Positions
+  // ============================================================
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -47,16 +53,21 @@ function Applications({ formData, onChange, isLoggedIn }) {
           getPositions(),
         ]);
 
-        // Safely extract list from various API response formats
+        // Safely extract vacancies
         const rawVacancies = Array.isArray(vacancyResponse)
           ? vacancyResponse
-          : vacancyResponse?.data?.results || vacancyResponse?.data || [];
+          : vacancyResponse?.data?.results ||
+            vacancyResponse?.data ||
+            [];
 
+        // Safely extract positions
         const positionList = Array.isArray(positionResponse)
           ? positionResponse
-          : positionResponse?.data?.results || positionResponse?.data || [];
+          : positionResponse?.data?.results ||
+            positionResponse?.data ||
+            [];
 
-        // Filter strictly for "Open" vacancies
+        // Only show Open vacancies
         const openVacancies = rawVacancies.filter(
           (v) => String(v.status).toLowerCase() === "open"
         );
@@ -64,11 +75,15 @@ function Applications({ formData, onChange, isLoggedIn }) {
         setVacancies(openVacancies);
         setPositions(positionList);
       } catch (err) {
-        console.error("Failed to load vacancies/positions:", err);
+        console.error(
+          "Failed to load vacancies/positions:",
+          err
+        );
       } finally {
         setLoading(false);
       }
     };
+
     loadData();
   }, []);
 
@@ -80,7 +95,9 @@ function Applications({ formData, onChange, isLoggedIn }) {
           <div className="flex items-center justify-center w-7 h-7 rounded-full bg-white/20 text-white font-bold text-sm">
             1
           </div>
+
           <Briefcase size={20} />
+
           <h2 className="text-lg font-semibold">
             Vacancy / Position Applied For
           </h2>
@@ -89,15 +106,26 @@ function Applications({ formData, onChange, isLoggedIn }) {
 
       {/* Body */}
       <div className="p-6">
+
         {/* First Row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          {/* Vacancy */}
           <div className="lg:col-span-2">
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-              Select Vacancy Posting <span className="text-red-500">*</span>
+              Select Vacancy Posting{" "}
+              <span className="text-red-500">*</span>
             </label>
+
             <select
               value={form.vacancy_id}
-              onChange={(e) => handleLocalChange("vacancy_id", e.target.value)}
+              required
+              onChange={(e) =>
+                handleLocalChange(
+                  "vacancy_id",
+                  e.target.value
+                )
+              }
               className="w-full h-11 rounded-lg border border-gray-300 bg-gray-50 px-4 text-gray-700 text-sm outline-none focus:ring-2 focus:ring-blue-100"
               disabled={loading}
             >
@@ -108,17 +136,26 @@ function Applications({ formData, onChange, isLoggedIn }) {
                   ? "No open vacancies available"
                   : "-- Select Position / Vacancy --"}
               </option>
+
               {!loading &&
                 vacancies.map((v, index) => {
-                  const vacancyId = v.vacancy_id || v.id || index;
+                  const vacancyId =
+                    v.vacancy_id ||
+                    v.id ||
+                    index;
 
-                  // Match position across various possible key names
-                  const vPositionKey = v.position_id || v.positionId || v.position;
+                  const vPositionKey =
+                    v.position_id ||
+                    v.positionId ||
+                    v.position;
+
                   const position = positions.find(
-                    (p) => String(p.position_id || p.id) === String(vPositionKey)
+                    (p) =>
+                      String(
+                        p.position_id || p.id
+                      ) === String(vPositionKey)
                   );
 
-                  // Extract title using multiple fallbacks so it never says "Position unavailable" unnecessarily
                   const title =
                     position?.position_title ||
                     position?.title ||
@@ -128,7 +165,10 @@ function Applications({ formData, onChange, isLoggedIn }) {
                     `Vacancy #${vacancyId}`;
 
                   return (
-                    <option key={vacancyId} value={vacancyId}>
+                    <option
+                      key={vacancyId}
+                      value={vacancyId}
+                    >
                       {title}
                     </option>
                   );
@@ -136,15 +176,21 @@ function Applications({ formData, onChange, isLoggedIn }) {
             </select>
           </div>
 
+          {/* Date Received */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-              Date Received <span className="text-red-500">*</span>
+              Date Received{" "}
+              <span className="text-red-500">*</span>
             </label>
+
             <input
               type="date"
               value={form.dateReceived}
               onChange={(e) =>
-                handleLocalChange("dateReceived", e.target.value)
+                handleLocalChange(
+                  "dateReceived",
+                  e.target.value
+                )
               }
               className="w-full h-11 rounded-lg border border-gray-300 bg-gray-50 px-4 text-sm outline-none focus:ring-2 focus:ring-blue-100"
             />
@@ -153,10 +199,14 @@ function Applications({ formData, onChange, isLoggedIn }) {
 
         {/* Second Row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+
+          {/* Time Received */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-              Time Received <span className="text-red-500">*</span>
+              Time Received{" "}
+              <span className="text-red-500">*</span>
             </label>
+
             <div className="relative">
               <input
                 type="text"
@@ -164,6 +214,7 @@ function Applications({ formData, onChange, isLoggedIn }) {
                 value={form.timeReceived}
                 className="w-full h-11 rounded-lg border border-gray-300 bg-gray-50 px-4 text-sm"
               />
+
               <Clock3
                 size={16}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -171,10 +222,12 @@ function Applications({ formData, onChange, isLoggedIn }) {
             </div>
           </div>
 
+          {/* Received By */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">
               Received By
             </label>
+
             <input
               type="text"
               readOnly
@@ -183,14 +236,16 @@ function Applications({ formData, onChange, isLoggedIn }) {
             />
           </div>
 
+          {/* Submission Type */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">
               Submission Type
             </label>
+
             <input
               type="text"
               readOnly
-              value={form.submissionType || determinedSubmissionType}
+              value={determinedSubmissionType}
               className="w-full h-11 rounded-lg border border-gray-200 bg-gray-100 px-4 text-sm text-gray-500"
             />
           </div>

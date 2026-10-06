@@ -587,6 +587,24 @@ export default function ReceiveApplications() {
 
     };
 
+    const workExperienceList = Array.isArray(formData.workExperienceData)
+      ? formData.workExperienceData
+      : formData.workExperienceData?.position_title ||
+        formData.workExperienceData?.company_office
+      ? [formData.workExperienceData]
+      : [];
+
+    const submittedWorkExperience = workExperienceList.filter((experience) =>
+      [
+        experience.position_title,
+        experience.company_office,
+        experience.date_from,
+        experience.date_to,
+        experience.monthly_salary,
+        experience.appointment_status,
+      ].some((value) => String(value ?? "").trim() !== "") ||
+      typeof experience.is_govt_service === "boolean"
+    );
 
     // ==========================================================
     // BUILD PAYLOAD
@@ -702,20 +720,17 @@ export default function ReceiveApplications() {
       // ========================================================
 
       work_experience_list:
-
-        formData.workExperienceData.position_title
-
-          ? [formData.workExperienceData]
-
-          : [],
-
+        submittedWorkExperience,
 
       // ========================================================
       // HR REMARKS
       // ========================================================
 
-      hr_remarks:
-        formData.hrRemarksData
+      hr_remarks: {
+        ...formData.hrRemarksData,
+        application_status:
+          formData.hrRemarksData.application_status || "Complete",
+      }
 
     };
 
@@ -822,6 +837,7 @@ export default function ReceiveApplications() {
           <Applications
             formData={formData.applicationData}
             onChange={handleApplicationChange}
+            submissionType="Onsite"
           />
 
 
@@ -891,6 +907,7 @@ export default function ReceiveApplications() {
 
           <DocumentChecklist
             documents={formData.documentData}
+            uploadedFiles={formData.uploadedFiles}
             onChange={handleDocumentChange}
             onFileUpload={handleFileUpload}
           />

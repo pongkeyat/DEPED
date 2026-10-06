@@ -10,6 +10,7 @@ import {
     updateVacancyService,
     archiveVacancyService
 } from "./vacancies.services.js";
+import { sendInitialScreeningEmail } from "./email.service.js";
 
 
 // ============================================================
@@ -642,64 +643,234 @@ export const updateVacancyStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body || {};
 
-    // Validate status
+    // ========================================================
+    // 1. VALIDATE STATUS
+    // ========================================================
+
     if (
         !status ||
         !["Open", "Closed"].includes(status)
     ) {
         return res.status(400).json({
             success: false,
-            error: "Status must be provided and set to either 'Open' or 'Closed'."
+            error:
+                "Status must be provided and set to either 'Open' or 'Closed'."
         });
     }
 
+    const client = await pool.connect();
+
     try {
-        const existingVacancy =
-            await getVacancyByIdService(id);
+        await client.query("BEGIN");
 
-        if (!existingVacancy) {
-            return res.status(404).json({
-                success: false,
-                error: `Vacancy with ID '${id}' not found.`
-            });
-        }
+        // ====================================================
+        // 2. CHECK VACANCY
+        // ====================================================
 
-        if (
-            String(existingVacancy.status).toLowerCase() === "archived"
-        ) {
-            return res.status(400).json({
-                success: false,
-                error: "Archived vacancies cannot have their status changed. Restore the vacancy first."
-            });
-        }
-
-        const result = await updateVacancyStatusService(
-            id,
-            status
+        const vacancyResult = await client.query(
+            `
+            SELECT
+                vacancy_id,
+                status
+            FROM vacancies
+            WHERE vacancy_id = $1
+            `,
+            [id]
         );
 
+        if (vacancyResult.rows.length === 0) {
+
+            await client.query("ROLLBACK");
+
+            return res.status(404).json({
+                success: false,
+                error:
+                    `Vacancy with ID '${id}' not found.`
+            });
+        }
+
+        const previousStatus =
+            vacancyResult.rows[0].status;
+
+        // ====================================================
+        // 3. UPDATE VACANCY STATUS
+        // ====================================================
+
+        const vacancyUpdateResult =
+            await client.query(
+                `
+                UPDATE vacancies
+                SET status = $1
+                WHERE vacancy_id = $2
+                RETURNING *
+                `,
+                [
+                    status,
+                    id
+                ]
+            );
+
+        // ====================================================
+        // 4. UPDATE APPLICANTS WHEN VACANCY IS CLOSED
+        // ====================================================
+
+        let updatedApplicants = 0;
+        let updatedApplicantIds = [];
+
+        if (status === "Closed") {
+
+            const applicationUpdateResult =
+                await client.query(
+                    `
+                    UPDATE hr_remarks_final_notes hr
+                    SET application_status =
+                        'initial screening',
+                        updated_at = CURRENT_TIMESTAMP
+
+                    FROM applicant_information ai
+                    JOIN job_applications ja
+                        ON ja.job_applications_id =
+                           ai.job_applications_id
+
+                    WHERE hr.applicant_id = ai.applicant_id
+                      AND ja.vacancy_id = $1
+                      AND LOWER(
+                          TRIM(hr.application_status)
+                      ) = 'complete'
+
+                    RETURNING hr.applicant_id
+                    `,
+                    [id]
+                );
+
+            updatedApplicants =
+                applicationUpdateResult.rowCount;
+            updatedApplicantIds =
+                applicationUpdateResult.rows.map(
+                    (applicant) => applicant.applicant_id
+                );
+        }
+
+        // ====================================================
+        // 5. COMMIT TRANSACTION
+        // ====================================================
+
+        await client.query("COMMIT");
+
+        // ====================================================
+        // 6. SEND INITIAL SCREENING EMAIL
+        // ====================================================
+
+        let emailsSent = 0;
+        let emailsFailed = 0;
+
+        if (
+            status === "Closed" &&
+            updatedApplicants > 0
+        ) {
+
+            const applicantsResult =
+                await client.query(
+                    `
+                    SELECT
+                        ai.applicant_id,
+                        ai.first_name,
+                        ai.last_name,
+                        ai.email_address,
+                        ai.ticket
+
+                    FROM applicant_information ai
+                    WHERE ai.applicant_id = ANY($1)
+                      AND ai.email_address IS NOT NULL
+                      AND TRIM(ai.email_address) <> ''
+                    `,
+                    [updatedApplicantIds]
+                );
+
+            // =================================================
+            // SEND EMAIL TO EACH APPLICANT
+            // =================================================
+
+            for (
+                const applicant
+                of applicantsResult.rows
+            ) {
+
+                const result =
+                    await sendInitialScreeningEmail(
+                        applicant.email_address,
+                        applicant.first_name,
+                        applicant.last_name,
+                        applicant.ticket
+                    );
+
+                if (result.success) {
+
+                    emailsSent++;
+
+                } else {
+
+                    emailsFailed++;
+
+                }
+            }
+        }
+
+        // ====================================================
+        // 7. RESPONSE
+        // ====================================================
+
         return res.status(200).json({
+
             success: true,
-            message: `Vacancy status manually set to ${status}.`,
-            data: result
+
+            message:
+                `Vacancy status manually set to ${status}.`,
+
+            previousStatus:
+                previousStatus,
+
+            data:
+                vacancyUpdateResult.rows[0],
+
+            applicantsUpdated:
+                updatedApplicants,
+
+            emailsSent:
+                emailsSent,
+
+            emailsFailed:
+                emailsFailed
         });
 
     } catch (error) {
+
+        // ====================================================
+        // ROLLBACK
+        // ====================================================
+
+        try {
+            await client.query("ROLLBACK");
+        } catch (rollbackError) {
+            console.error(
+                "Rollback error:",
+                rollbackError
+            );
+        }
+
         console.error(
             `Error updating status for vacancy ${id}:`,
             error
         );
 
-        if (error.message === "VACANCY_NOT_FOUND") {
-            return res.status(404).json({
-                success: false,
-                error: `Vacancy with ID '${id}' not found.`
-            });
-        }
-
         return res.status(500).json({
             success: false,
-            error: "Internal server error"
+            error:
+                "Internal server error"
         });
+
+    } finally {
+
+        client.release();
     }
 };

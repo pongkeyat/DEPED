@@ -6,8 +6,7 @@ export default function SessionSelector({
     onSelectSession,
 }) {
 
-    // The interview-sessions endpoint already contains only scheduled applicants.
-    const qualifiedSessions = Array.isArray(sessions) ? sessions : [];
+    const availableSessions = Array.isArray(sessions) ? sessions : [];
 
     return (
         <div className="mb-6 rounded-xl bg-white p-6 shadow-sm">
@@ -32,11 +31,11 @@ export default function SessionSelector({
                     Select an assessment session
                 </option>
 
-                {qualifiedSessions.map((session) => (
+                {availableSessions.map((session) => (
 
                     <option
-                        key={session.session_id}
-                        value={session.session_id}
+                        key={session.assessment_session_id}
+                        value={session.assessment_session_id}
                     >
 
                         {session.session_date ||
@@ -58,10 +57,9 @@ export default function SessionSelector({
 
             </select>
 
-            {qualifiedSessions.length === 0 && (
+            {availableSessions.length === 0 && (
                 <p className="mt-3 text-sm text-gray-500">
-                    No assessment sessions with qualified
-                    applicants are available.
+                    No scheduled assessment sessions are available.
                 </p>
             )}
 

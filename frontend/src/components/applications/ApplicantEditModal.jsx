@@ -1,9 +1,6 @@
 
 import React, { useEffect, useState } from "react";
 import { updateApplicant } from "../../api/ApplicationApi";
-
-
-import ApplicantForm from "./ApplicantForm";
 import ApplicantEducationForm from "./ApplicantEducationForm";
 import ApplicantTrainingForm from "./ApplicantTrainingForm";
 import CivilServiceEligibilityForm from "./CivilServiceEligibilityForm";
@@ -110,6 +107,82 @@ const toTimeInput = (value) => {
 
 const asArray = (value) =>
     Array.isArray(value) ? value : [];
+
+const normalizeUploadedFiles = (applicant) => {
+    const uploadedFiles = {
+        ...initialFormData.uploadedFiles
+    };
+
+    if (!applicant) {
+        return uploadedFiles;
+    }
+
+    const uploadedSource = {
+        ...(applicant.document_checklist ||
+            applicant.applicant_documents ||
+            applicant.documentData ||
+            {}),
+        ...(applicant.uploaded_files ||
+            applicant.applicant_uploaded_files ||
+            applicant.uploadedFiles ||
+            {})
+    };
+
+    const documentFields = [
+        "application_letter",
+        "personal_data_sheet",
+        "prc_license_id",
+        "civil_service_eligibility_cert",
+        "diploma",
+        "transcript_of_records",
+        "training_certificates",
+        "certificate_of_employment",
+        "service_record",
+        "latest_appointment",
+        "performance_rating",
+        "omnibus_sworn_statement"
+    ];
+
+    documentFields.forEach((field) => {
+        const fileKey = `${field}_file`;
+
+        const candidate = firstDefined(
+            uploadedSource[`${field}_path`],
+            uploadedSource[`${field}_file_path`],
+            uploadedSource[fileKey],
+            applicant[`${field}_path`],
+            applicant[`${field}_file_path`],
+            applicant[fileKey],
+            applicant[`${field}_url`],
+            applicant[`${field}_filename`]
+        );
+
+        if (
+            candidate === undefined ||
+            candidate === null ||
+            candidate === ""
+        ) {
+            return;
+        }
+
+        const normalizedValue =
+            Array.isArray(candidate)
+                ? candidate.filter((value) =>
+                    value !== undefined &&
+                    value !== null &&
+                    value !== ""
+                )
+                : candidate;
+
+        uploadedFiles[fileKey] =
+            field === "training_certificates" &&
+            !Array.isArray(normalizedValue)
+                ? [normalizedValue]
+                : normalizedValue;
+    });
+
+    return uploadedFiles;
+};
 
 const normalizeApplicant = (applicant) => {
     if (!applicant) return initialFormData;
@@ -265,20 +338,13 @@ const normalizeApplicant = (applicant) => {
         educationData: {
             educationList: education.map((item) => ({
                 ...item,
-                level: firstDefined(item.level, ""),
-                school_name: firstDefined(
-                    item.school_name,
-                    ""
-                ),
-                degree_course: firstDefined(
-                    item.degree_course,
-                    ""
-                ),
-                honors_awards: firstDefined(
-                    item.honors_awards,
-                    ""
-                ),
-                units: firstDefined(item.units, "")
+                level: firstDefined(item.level, item.education_level, ""),
+                school_name: firstDefined(item.school_name, ""),
+                degree_course: firstDefined(item.degree_course, ""),
+                honors_awards: firstDefined(item.honors_awards, ""),
+                units: firstDefined(item.units, ""),
+                date_from: toDateInput(firstDefined(item.date_from, item.education_date_from, item.start_date)),
+                date_to: toDateInput(firstDefined(item.date_to, item.education_date_to, item.end_date))
             }))
         },
 
@@ -295,12 +361,24 @@ const normalizeApplicant = (applicant) => {
                     item.training_title,
                     ""
                 ),
-                date_from: toDateInput(item.date_from),
-                date_to: toDateInput(item.date_to)
+                date_from: toDateInput(
+                    firstDefined(item.date_from, item.training_date_from, item.start_date)
+                ),
+                date_to: toDateInput(
+                    firstDefined(item.date_to, item.training_date_to, item.end_date)
+                )
             }))
         },
 
-        eligibilityData: eligibility,
+        eligibilityData: eligibility.map((item) => ({
+            ...item,
+            date_of_exam: toDateInput(
+                firstDefined(item.date_of_exam, item.exam_date, item.date_taken)
+            ),
+            validity_date: toDateInput(
+                firstDefined(item.validity_date, item.expiration_date, item.expiry_date)
+            )
+        })),
 
         workExperienceData: workExperience.map((item) => ({
             ...item,
@@ -343,9 +421,7 @@ const normalizeApplicant = (applicant) => {
             ...documents
         },
 
-        uploadedFiles: {
-            ...initialFormData.uploadedFiles
-        },
+        uploadedFiles: normalizeUploadedFiles(applicant),
 
         equalOpportunityData: {
             is_pwd: firstDefined(
@@ -422,12 +498,7 @@ export default function ApplicantEditModal({
             }
         }));
     };
-
-    const handleApplicantChange = (name, value) => {
-        updateSection("applicantData", name, value);
-    };
-
-    const handleApplicationChange = (name, value) => {
+const handleApplicationChange = (name, value) => {
         updateSection("applicationData", name, value);
     };
 
@@ -674,16 +745,7 @@ export default function ApplicantEditModal({
                         className="flex min-h-0 flex-1 flex-col"
                     >
                         <div className="flex-1 space-y-6 overflow-y-auto p-4 sm:p-7">
-
-     
-
-                            {/* APPLICANT INFORMATION */}
-                            <ApplicantForm
-                                formData={formData.applicantData}
-                                onChange={handleApplicantChange}
-                            />
-
-                            {/* EDUCATION */}
+{/* EDUCATION */}
                             <ApplicantEducationForm
                                 data={formData.educationData}
                                 onChange={handleEducationChange}
@@ -718,6 +780,7 @@ export default function ApplicantEditModal({
                             {/* DOCUMENT CHECKLIST */}
                             <DocumentChecklist
                                 documents={formData.documentData}
+                                uploadedFiles={formData.uploadedFiles}
                                 onChange={handleDocumentChange}
                                 onFileUpload={handleFileUpload}
                             />

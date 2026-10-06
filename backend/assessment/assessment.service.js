@@ -95,6 +95,23 @@ export const getQualifiedApplicantForAssessment = async (
     }
 
     const applicant = result.rows[0];
+    const isSchoolAdministration =
+        normalize(applicant.category).includes(
+            "SCHOOL ADMINISTRATION"
+        );
+    const experiencePoints = Number(
+        applicant.experience_points || 0
+    );
+    const educationPoints = Number(
+        applicant.education_points || 0
+    );
+    const trainingPoints = Number(
+        applicant.training_points || 0
+    );
+    const normalizedExperiencePoints =
+        isSchoolAdministration
+            ? Math.min(experiencePoints, 10)
+            : experiencePoints;
 
     return {
 
@@ -129,9 +146,13 @@ export const getQualifiedApplicantForAssessment = async (
                 applicant.overall_result,
 
             total:
-                Number(
-                    applicant.initial_screening_points || 0
-                ),
+                isSchoolAdministration
+                    ? educationPoints +
+                      trainingPoints +
+                      normalizedExperiencePoints
+                    : Number(
+                        applicant.initial_screening_points || 0
+                    ),
 
             education: {
 
@@ -144,9 +165,7 @@ export const getQualifiedApplicantForAssessment = async (
                     ),
 
                 points:
-                    Number(
-                        applicant.education_points || 0
-                    )
+                    educationPoints
             },
 
             training: {
@@ -162,9 +181,7 @@ export const getQualifiedApplicantForAssessment = async (
                     ),
 
                 points:
-                    Number(
-                        applicant.training_points || 0
-                    )
+                    trainingPoints
             },
 
             experience: {
@@ -180,9 +197,7 @@ export const getQualifiedApplicantForAssessment = async (
                     ),
 
                 points:
-                    Number(
-                        applicant.experience_points || 0
-                    )
+                    normalizedExperiencePoints
             }
         }
     };
@@ -1238,6 +1253,17 @@ export const submitAssessment = async (
                             applicant.experience_points ||
                             0
                         );
+
+                    if (
+                        assessmentType ===
+                        "SCHOOL_ADMINISTRATION"
+                    ) {
+                        finalScore =
+                            Math.min(
+                                finalScore,
+                                10
+                            );
+                    }
                 }
 
             }

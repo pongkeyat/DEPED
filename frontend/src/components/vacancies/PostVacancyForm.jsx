@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Info } from "lucide-react";
 import { getPositions } from "../../api/PositionsApi";
 
-// Four position categories
+// =========================================================
+// POSITION CATEGORIES
+// =========================================================
 const categories = [
     "Teaching Positions",
     "School Administration Positions",
@@ -10,6 +12,9 @@ const categories = [
     "Non-Teaching Positions",
 ];
 
+// =========================================================
+// CATEGORY NORMALIZATION
+// =========================================================
 const categoryAliases = {
     teaching: "teaching positions",
     "teaching positions": "teaching positions",
@@ -39,16 +44,20 @@ const categoryAliases = {
         "non-teaching positions",
 };
 
-const normalizeCategory = (category) =>
-    categoryAliases[
-        String(category || "")
-            .trim()
-            .toLowerCase()
-    ] ||
-    String(category || "")
+const normalizeCategory = (category) => {
+    const normalized = String(category || "")
         .trim()
         .toLowerCase();
 
+    return (
+        categoryAliases[normalized] ||
+        normalized
+    );
+};
+
+// =========================================================
+// COMPONENT
+// =========================================================
 export default function PostVacancyForm({
     formData,
     onChange,
@@ -57,18 +66,114 @@ export default function PostVacancyForm({
     const [loadingPositions, setLoadingPositions] =
         useState(true);
 
-    // Today's date
-    const todayStr =
-        new Date().toISOString().split("T")[0];
+    // =========================================================
+    // TODAY
+    // =========================================================
+    const todayStr = new Date()
+        .toISOString()
+        .split("T")[0];
 
     // =========================================================
     // FETCH POSITIONS
     // =========================================================
     useEffect(() => {
+        let mounted = true;
 
-        // Automatically set application posted date
-        if (!formData.application_posted) {
+        const fetchPositionsData = async () => {
+            try {
+                setLoadingPositions(true);
 
+                /*
+                 * Get ALL positions here.
+                 *
+                 * We filter them on the frontend based
+                 * on the category toggle.
+                 *
+                 * This also makes sure that the selected
+                 * position contains:
+                 *
+                 * education
+                 * training
+                 * experience
+                 * eligibility
+                 */
+                const response = await getPositions(
+                    "",
+                    1000
+                );
+
+                console.log(
+                    "POSITIONS API RESPONSE:",
+                    response
+                );
+
+                let positionsList = [];
+
+                if (Array.isArray(response)) {
+                    positionsList = response;
+                } else if (
+                    Array.isArray(response?.data)
+                ) {
+                    positionsList = response.data;
+                } else if (
+                    Array.isArray(
+                        response?.data?.data
+                    )
+                ) {
+                    positionsList =
+                        response.data.data;
+                } else if (
+                    Array.isArray(
+                        response?.data?.positions
+                    )
+                ) {
+                    positionsList =
+                        response.data.positions;
+                } else if (
+                    Array.isArray(
+                        response?.positions
+                    )
+                ) {
+                    positionsList =
+                        response.positions;
+                }
+
+                console.log(
+                    "PROCESSED POSITIONS:",
+                    positionsList
+                );
+
+                if (mounted) {
+                    setPositions(positionsList);
+                }
+            } catch (error) {
+                console.error(
+                    "Failed to load positions:",
+                    error
+                );
+
+                if (mounted) {
+                    setPositions([]);
+                }
+            } finally {
+                if (mounted) {
+                    setLoadingPositions(false);
+                }
+            }
+        };
+
+        fetchPositionsData();
+
+        return () => {
+            mounted = false;
+        };
+    }, []);
+
+    // =========================================================
+    // AUTO SET APPLICATION POSTED DATE
+    // =========================================================
+    useEffect(() => {
+        if (!formData?.application_posted) {
             onChange({
                 target: {
                     name: "application_posted",
@@ -76,231 +181,246 @@ export default function PostVacancyForm({
                 },
             });
         }
-
-        const fetchPositionsData = async () => {
-
-            try {
-
-                setLoadingPositions(true);
-
-                const response =
-                    await getPositions(
-                        formData.category,
-                        1000
-                    );
-
-                const positionsList =
-                    Array.isArray(response)
-                        ? response
-                        : response?.data || [];
-
-                setPositions(
-                    positionsList
-                );
-
-            } catch (error) {
-
-                console.error(
-                    "Failed to load positions:",
-                    error
-                );
-
-                setPositions([]);
-
-            } finally {
-
-                setLoadingPositions(false);
-            }
-        };
-
-        fetchPositionsData();
-
-    }, [formData.category]);
-
+    }, []);
 
     // =========================================================
     // FILTER POSITIONS BY CATEGORY
     // =========================================================
-    const filteredPositions =
-        useMemo(() => {
+    const filteredPositions = useMemo(() => {
+        if (!formData?.category) {
+            return [];
+        }
 
-            if (!formData.category) {
-                return [];
-            }
-
-            return positions.filter(
-                (position) => {
-
-                    const positionCategory =
-                        position.category ||
-                        position.job_category ||
-                        "";
-
-                    return (
-                        normalizeCategory(
-                            positionCategory
-                        ) ===
-                        normalizeCategory(
-                            formData.category
-                        )
-                    );
-                }
+        const selectedCategory =
+            normalizeCategory(
+                formData.category
             );
 
-        }, [
-            positions,
-            formData.category,
-        ]);
+        return positions.filter((position) => {
+            const positionCategory =
+                position.category ||
+                position.job_category ||
+                "";
 
+            return (
+                normalizeCategory(
+                    positionCategory
+                ) === selectedCategory
+            );
+        });
+    }, [
+        positions,
+        formData?.category,
+    ]);
 
     // =========================================================
     // HANDLE CATEGORY TOGGLE
     // =========================================================
-    const handleCategoryChange =
-        (category) => {
+ const handleCategoryChange = (category) => {
+    console.log("CATEGORY SELECTED:", category);
 
-            // Change category
-            onChange({
-                target: {
-                    name: "category",
-                    value: category,
-                },
-            });
+    // Update category
+    onChange({
+        target: {
+            name: "category",
+            value: category,
+        },
+    });
 
-            // Clear selected position
-            onChange({
-                target: {
-                    name: "position_id",
-                    value: "",
-                },
-            });
+    // Clear selected position
+    onChange({
+        target: {
+            name: "position_id",
+            value: "",
+        },
+    });
 
-            // Clear salary grade
-            onChange({
-                target: {
-                    name: "salary_grade",
-                    value: "",
-                },
-            });
-        };
-
+    // Clear salary grade
+    onChange({
+        target: {
+            name: "salary_grade",
+            value: "",
+        },
+    });
+};
 
     // =========================================================
     // HANDLE POSITION SELECTION
     // =========================================================
     const handlePositionSelect = (e) => {
+        const selectedId = e.target.value;
 
-        const selectedId =
-            e.target.value;
+        // No position selected
+        if (!selectedId) {
+            onChange({
+                target: {
+                    name: "position_id",
+                    value: "",
+                },
+            });
 
-        const selectedPos =
-            positions.find(
-                (p) =>
-                    String(
-                        p.position_id ||
-                        p.id
-                    ) ===
+            onChange({
+                target: {
+                    name: "salary_grade",
+                    value: "",
+                },
+            });
+
+            return;
+        }
+
+        // =====================================================
+        // FIND POSITION
+        // =====================================================
+        const selectedPos = positions.find(
+            (position) => {
+                const id =
+                    position.position_id ??
+                    position.id;
+
+                return (
+                    String(id) ===
                     String(selectedId)
+                );
+            }
+        );
+
+        console.log(
+            "SELECTED POSITION:",
+            selectedPos
+        );
+
+        if (!selectedPos) {
+            console.error(
+                "Selected position was not found:",
+                selectedId
             );
 
+            return;
+        }
 
-        if (selectedPos) {
+        // =====================================================
+        // POSITION ID
+        // =====================================================
+        const positionId =
+            selectedPos.position_id ??
+            selectedPos.id ??
+            selectedId;
 
-            // -------------------------------------------------
-            // POSITION ID
-            // -------------------------------------------------
-            onChange({
-                target: {
-                    name: "position_id",
-                    value:
-                        selectedPos.position_id ||
-                        selectedPos.id ||
-                        selectedId,
-                },
-            });
+        onChange({
+            target: {
+                name: "position_id",
+                value: positionId,
+            },
+        });
 
+        // =====================================================
+        // SALARY GRADE
+        // =====================================================
+        let salaryGrade =
+            selectedPos.salary_grade ??
+            selectedPos.sg ??
+            "";
 
-            // -------------------------------------------------
-            // SALARY GRADE
-            // -------------------------------------------------
-            //
-            // Salary grade is automatically retrieved
-            // from the selected position.
-            //
-            let formattedSalaryGrade =
-                selectedPos.salary_grade ??
-                selectedPos.sg ??
-                "";
+        if (
+            salaryGrade !== "" &&
+            !String(salaryGrade)
+                .toUpperCase()
+                .startsWith("SG-")
+        ) {
+            salaryGrade =
+                `SG-${salaryGrade}`;
+        }
 
-            if (
-                formattedSalaryGrade !== "" &&
-                !String(
-                    formattedSalaryGrade
-                )
-                    .toUpperCase()
-                    .startsWith("SG-")
-            ) {
+        onChange({
+            target: {
+                name: "salary_grade",
+                value: salaryGrade,
+            },
+        });
 
-                formattedSalaryGrade =
-                    `SG-${formattedSalaryGrade}`;
-            }
+        // =====================================================
+        // CATEGORY
+        // =====================================================
+        const positionCategory =
+            selectedPos.category ||
+            selectedPos.job_category ||
+            "";
 
-            onChange({
-                target: {
-                    name: "salary_grade",
-                    value:
-                        formattedSalaryGrade,
-                },
-            });
-
-
-            // -------------------------------------------------
-            // CATEGORY
-            // -------------------------------------------------
-            const positionCategory =
-                selectedPos.category ||
-                selectedPos.job_category ||
-                "";
-
-            if (
-                positionCategory &&
+        /*
+         * Normally this should already match the
+         * selected category toggle.
+         *
+         * Only update it if the API returned a
+         * different category.
+         */
+        if (
+            positionCategory &&
+            normalizeCategory(
+                positionCategory
+            ) !==
                 normalizeCategory(
-                    positionCategory
-                ) !==
-                    normalizeCategory(
-                        formData.category
-                    )
-            ) {
-
-                onChange({
-                    target: {
-                        name: "category",
-                        value:
-                            positionCategory,
-                    },
-                });
-            }
-
-        } else {
-
-            // Reset position
+                    formData.category
+                )
+        ) {
             onChange({
                 target: {
-                    name: "position_id",
-                    value: "",
-                },
-            });
-
-            // Reset salary grade
-            onChange({
-                target: {
-                    name: "salary_grade",
-                    value: "",
+                    name: "category",
+                    value: positionCategory,
                 },
             });
         }
-    };
 
+        // =====================================================
+        // QUALIFICATIONS
+        // =====================================================
+        /*
+         * IMPORTANT:
+         *
+         * These are copied from Position Management.
+         *
+         * They are NOT read-only.
+         *
+         * After they are populated, the user can
+         * edit them in PostQualificationsForm.
+         */
+
+        onChange({
+            target: {
+                name: "education_requirement",
+                value:
+                    selectedPos.education ||
+                    "",
+            },
+        });
+
+        onChange({
+            target: {
+                name: "training_requirement",
+                value:
+                    selectedPos.training ||
+                    "",
+            },
+        });
+
+        onChange({
+            target: {
+                name: "experience_requirement",
+                value:
+                    selectedPos.experience ||
+                    "",
+            },
+        });
+
+        onChange({
+            target: {
+                name: "eligibility_requirement",
+                value:
+                    selectedPos.eligibility ||
+                    "",
+            },
+        });
+    };
 
     // =========================================================
     // RENDER
@@ -312,15 +432,12 @@ export default function PostVacancyForm({
                 HEADER
             ===================================================== */}
             <div className="flex items-center gap-2 bg-[#1b4584] p-3 text-white">
-
                 <Info size={16} />
 
                 <span>
                     Vacancy Information
                 </span>
-
             </div>
-
 
             <div className="space-y-4 p-5">
 
@@ -328,19 +445,20 @@ export default function PostVacancyForm({
                     CATEGORY TOGGLE
                 ================================================= */}
                 <div>
-
                     <label className="mb-2 block text-sm font-medium text-gray-700">
                         Position Category
                     </label>
 
                     <div className="flex flex-wrap gap-2">
-
                         {categories.map(
                             (category) => {
-
                                 const isSelected =
-                                    formData.category ===
-                                    category;
+                                    normalizeCategory(
+                                        formData?.category
+                                    ) ===
+                                    normalizeCategory(
+                                        category
+                                    );
 
                                 return (
                                     <button
@@ -362,17 +480,13 @@ export default function PostVacancyForm({
                                 );
                             }
                         )}
-
                     </div>
-
                 </div>
-
 
                 {/* =================================================
                     POSITION TITLE
                 ================================================= */}
                 <div>
-
                     <label className="mb-1 block text-sm font-medium text-gray-700">
                         Select Position Title
                     </label>
@@ -380,7 +494,7 @@ export default function PostVacancyForm({
                     <select
                         name="position_id"
                         value={
-                            formData.position_id ||
+                            formData?.position_id ||
                             ""
                         }
                         onChange={
@@ -388,26 +502,25 @@ export default function PostVacancyForm({
                         }
                         disabled={
                             loadingPositions ||
-                            !formData.category
+                            !formData?.category
                         }
                         className="w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584] disabled:bg-gray-100"
                     >
-
                         <option value="">
                             {loadingPositions
                                 ? "Loading positions..."
-                                : !formData.category
+                                : !formData?.category
                                 ? "Select a category first"
-                                : filteredPositions.length === 0
+                                : filteredPositions.length ===
+                                  0
                                 ? "No positions available"
                                 : "Select Position"}
                         </option>
 
                         {filteredPositions.map(
                             (pos) => {
-
                                 const id =
-                                    pos.position_id ||
+                                    pos.position_id ??
                                     pos.id;
 
                                 const title =
@@ -425,17 +538,23 @@ export default function PostVacancyForm({
                                 );
                             }
                         )}
-
                     </select>
 
+                    {formData?.category &&
+                        !loadingPositions &&
+                        filteredPositions.length ===
+                            0 && (
+                            <p className="mt-1 text-xs text-red-500">
+                                No positions found for
+                                this category.
+                            </p>
+                        )}
                 </div>
-
 
                 {/* =================================================
                     PLANTILLA POSITION
                 ================================================= */}
                 <div>
-
                     <label className="mb-1 block text-sm font-medium text-gray-700">
                         Plantilla Position Item / Title
                     </label>
@@ -445,21 +564,18 @@ export default function PostVacancyForm({
                         name="plantilla_position"
                         placeholder="e.g. Administrative Assistant I"
                         value={
-                            formData.plantilla_position ||
+                            formData?.plantilla_position ||
                             ""
                         }
                         onChange={onChange}
                         className="w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584]"
                     />
-
                 </div>
-
 
                 {/* =================================================
                     PLACE OF ASSIGNMENT
                 ================================================= */}
                 <div>
-
                     <label className="mb-1 block text-sm font-medium text-gray-700">
                         Place of Assignment
                     </label>
@@ -469,27 +585,21 @@ export default function PostVacancyForm({
                         name="place_of_assignment"
                         placeholder="e.g. Administrative"
                         value={
-                            formData.place_of_assignment ||
+                            formData?.place_of_assignment ||
                             ""
                         }
                         onChange={onChange}
                         className="w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584]"
                     />
-
                 </div>
-
 
                 {/* =================================================
                     SALARY GRADE + NUMBER OF VACANCIES
                 ================================================= */}
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
-                    {/* =================================================
-                        SALARY GRADE
-                        Automatically populated from Position
-                    ================================================= */}
+                    {/* SALARY GRADE */}
                     <div>
-
                         <label className="mb-1 block text-sm font-medium text-gray-700">
                             Salary Grade
                         </label>
@@ -498,7 +608,7 @@ export default function PostVacancyForm({
                             type="text"
                             name="salary_grade"
                             value={
-                                formData.salary_grade ||
+                                formData?.salary_grade ||
                                 ""
                             }
                             readOnly
@@ -507,17 +617,13 @@ export default function PostVacancyForm({
                         />
 
                         <p className="mt-1 text-xs text-gray-500">
-                            Automatically populated from the selected position.
+                            Automatically populated
+                            from the selected position.
                         </p>
-
                     </div>
 
-
-                    {/* =================================================
-                        NUMBER OF VACANCY
-                    ================================================= */}
+                    {/* NUMBER OF VACANCIES */}
                     <div>
-
                         <label className="mb-1 block text-sm font-medium text-gray-700">
                             Number of Vacancy
                         </label>
@@ -527,24 +633,20 @@ export default function PostVacancyForm({
                             name="number_of_vacancies"
                             placeholder="e.g. 2"
                             value={
-                                formData.number_of_vacancies ||
+                                formData?.number_of_vacancies ||
                                 ""
                             }
                             onChange={onChange}
                             min="1"
                             className="w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584]"
                         />
-
                     </div>
-
                 </div>
-
 
                 {/* =================================================
                     OFFICE / UNIT
                 ================================================= */}
                 <div>
-
                     <label className="mb-1 block text-sm font-medium text-gray-700">
                         Office / Unit Assignment
                     </label>
@@ -554,26 +656,21 @@ export default function PostVacancyForm({
                         name="office_unit"
                         placeholder="e.g. Human Resource Management Office"
                         value={
-                            formData.office_unit ||
+                            formData?.office_unit ||
                             ""
                         }
                         onChange={onChange}
                         className="w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584]"
                     />
-
                 </div>
-
 
                 {/* =================================================
                     DATES
                 ================================================= */}
                 <div className="grid gap-4 md:grid-cols-2">
 
-                    {/* =================================================
-                        APPLICATION POSTED DATE
-                    ================================================= */}
+                    {/* APPLICATION POSTED DATE */}
                     <div>
-
                         <label className="mb-1 block text-sm font-medium text-gray-700">
                             Application Posted Date
                         </label>
@@ -582,22 +679,17 @@ export default function PostVacancyForm({
                             type="date"
                             name="application_posted"
                             value={
-                                formData.application_posted ||
+                                formData?.application_posted ||
                                 ""
                             }
                             onChange={onChange}
                             min={todayStr}
                             className="w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584]"
                         />
-
                     </div>
 
-
-                    {/* =================================================
-                        APPLICATION DEADLINE
-                    ================================================= */}
+                    {/* APPLICATION DEADLINE */}
                     <div>
-
                         <label className="mb-1 block text-sm font-medium text-gray-700">
                             Application Deadline
                         </label>
@@ -606,12 +698,12 @@ export default function PostVacancyForm({
                             type="date"
                             name="application_deadline"
                             value={
-                                formData.application_deadline ||
+                                formData?.application_deadline ||
                                 ""
                             }
                             onChange={onChange}
                             min={
-                                formData.application_posted
+                                formData?.application_posted
                                     ? new Date(
                                           new Date(
                                               formData.application_posted
@@ -628,13 +720,10 @@ export default function PostVacancyForm({
                             }
                             className="w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584]"
                         />
-
                     </div>
-
                 </div>
 
             </div>
-
         </div>
     );
 }

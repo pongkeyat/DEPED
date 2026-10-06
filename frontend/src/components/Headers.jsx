@@ -13,7 +13,12 @@ export default function Header({ isLoggedIn }) {
   const navigate = useNavigate();
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [showLogoutConfirmation, setShowLogoutConfirmation] = useState(false);
+  const [showLogoutConfirmation, setShowLogoutConfirmation] =
+    useState(false);
+
+  // ============================================================
+  // NAVIGATION
+  // ============================================================
 
   const handleNavigate = () => {
     navigate("/login");
@@ -23,43 +28,61 @@ export default function Header({ isLoggedIn }) {
     navigate("/apply");
   };
 
-  // Open logout confirmation
+  // ============================================================
+  // OPEN LOGOUT CONFIRMATION
+  // ============================================================
+
   const handleLogout = () => {
     setIsProfileOpen(false);
     setShowLogoutConfirmation(true);
   };
 
-  // Confirm logout
+  // ============================================================
+  // CONFIRM LOGOUT
+  // ============================================================
+
   const confirmLogout = () => {
     setShowLogoutConfirmation(false);
     setIsProfileOpen(false);
 
-    // If you have login data stored in localStorage,
-    // you can remove it here.
+    // Remove login data
     localStorage.removeItem("token");
     localStorage.removeItem("user");
 
     navigate("/");
   };
 
-  // Cancel logout
+  // ============================================================
+  // CANCEL LOGOUT
+  // ============================================================
+
   const cancelLogout = () => {
     setShowLogoutConfirmation(false);
   };
 
+  // ============================================================
+  // HELP CENTER
+  // ============================================================
+
   const handleHelp = () => {
     setIsProfileOpen(false);
-    navigate("/help");
+    navigate("/help-center");
   };
 
   return (
     <>
-      {/* ================= HEADER ================= */}
+      {/* =========================================================
+          HEADER
+      ========================================================= */}
+
       <div className="w-full bg-gradient-to-b from-[#1e3c72] via-[#112244] to-[#0d1b2a] text-white font-sans relative overflow-visible flex flex-col">
 
         <header className="w-full flex justify-between items-center px-8 py-4 border-b border-white/10 shrink-0">
 
-          {/* ================= LOGO AND BRAND ================= */}
+          {/* =====================================================
+              LOGO AND BRAND
+          ===================================================== */}
+
           <div className="flex items-center gap-3">
 
             <img
@@ -80,12 +103,19 @@ export default function Header({ isLoggedIn }) {
 
           </div>
 
-          {/* ================= NAVIGATION AND ACTIONS ================= */}
+
+          {/* =====================================================
+              NAVIGATION AND ACTIONS
+          ===================================================== */}
+
           <div className="flex items-center gap-8">
 
             {!isLoggedIn ? (
               <>
-                {/* APPLY NOW */}
+                {/* =================================================
+                    APPLY NOW
+                ================================================= */}
+
                 <button
                   type="button"
                   onClick={handleApplyNow}
@@ -95,7 +125,11 @@ export default function Header({ isLoggedIn }) {
                   Apply Now
                 </button>
 
-                {/* STAFF LOGIN */}
+
+                {/* =================================================
+                    STAFF LOGIN
+                ================================================= */}
+
                 <button
                   type="button"
                   onClick={handleNavigate}
@@ -107,10 +141,16 @@ export default function Header({ isLoggedIn }) {
               </>
             ) : (
 
-              /* ================= PROFILE MENU ================= */
+              /* ===================================================
+                 PROFILE MENU
+              =================================================== */
+
               <div className="relative z-[9999]">
 
-                {/* PERSON ICON */}
+                {/* =================================================
+                    PERSON ICON
+                ================================================= */}
+
                 <button
                   type="button"
                   onClick={() =>
@@ -126,7 +166,11 @@ export default function Header({ isLoggedIn }) {
                   />
                 </button>
 
-                {/* ================= DROPDOWN ================= */}
+
+                {/* =================================================
+                    PROFILE DROPDOWN
+                ================================================= */}
+
                 {isProfileOpen && (
                   <div
                     className="
@@ -145,7 +189,10 @@ export default function Header({ isLoggedIn }) {
                     "
                   >
 
-                    {/* HELP */}
+                    {/* =================================================
+                        HELP
+                    ================================================= */}
+
                     <button
                       type="button"
                       onClick={handleHelp}
@@ -167,10 +214,16 @@ export default function Header({ isLoggedIn }) {
                         className="text-gray-600"
                       />
 
-                      <span>Help</span>
+                      <span>
+                        Help
+                      </span>
                     </button>
 
-                    {/* LOGOUT */}
+
+                    {/* =================================================
+                        LOGOUT
+                    ================================================= */}
+
                     <button
                       type="button"
                       onClick={handleLogout}
@@ -192,7 +245,9 @@ export default function Header({ isLoggedIn }) {
                     >
                       <LogOut size={18} />
 
-                      <span>Logout</span>
+                      <span>
+                        Logout
+                      </span>
                     </button>
 
                   </div>
@@ -202,12 +257,15 @@ export default function Header({ isLoggedIn }) {
             )}
 
           </div>
+
         </header>
+
       </div>
 
-      {/* ========================================================= */}
-      {/*                    LOGOUT CONFIRMATION                    */}
-      {/* ========================================================= */}
+
+      {/* =========================================================
+          LOGOUT CONFIRMATION
+      ========================================================= */}
 
       {showLogoutConfirmation && (
         <div
@@ -224,7 +282,10 @@ export default function Header({ isLoggedIn }) {
           "
         >
 
-          {/* MODAL */}
+          {/* =====================================================
+              MODAL
+          ===================================================== */}
+
           <div
             className="
               w-full
@@ -236,7 +297,10 @@ export default function Header({ isLoggedIn }) {
             "
           >
 
-            {/* ================= MODAL HEADER ================= */}
+            {/* ===================================================
+                MODAL HEADER
+            =================================================== */}
+
             <div
               className="
                 flex
@@ -274,7 +338,11 @@ export default function Header({ isLoggedIn }) {
 
               </div>
 
-              {/* CLOSE BUTTON */}
+
+              {/* =================================================
+                  CLOSE BUTTON
+              ================================================= */}
+
               <button
                 type="button"
                 onClick={cancelLogout}
@@ -293,7 +361,11 @@ export default function Header({ isLoggedIn }) {
 
             </div>
 
-            {/* ================= MESSAGE ================= */}
+
+            {/* ===================================================
+                MESSAGE
+            =================================================== */}
+
             <div className="px-6 py-6">
 
               <p className="text-sm text-gray-600 leading-relaxed">
@@ -302,7 +374,11 @@ export default function Header({ isLoggedIn }) {
 
             </div>
 
-            {/* ================= ACTION BUTTONS ================= */}
+
+            {/* ===================================================
+                ACTION BUTTONS
+            =================================================== */}
+
             <div
               className="
                 flex
@@ -316,7 +392,10 @@ export default function Header({ isLoggedIn }) {
               "
             >
 
-              {/* CANCEL */}
+              {/* =================================================
+                  CANCEL
+              ================================================= */}
+
               <button
                 type="button"
                 onClick={cancelLogout}
@@ -337,7 +416,11 @@ export default function Header({ isLoggedIn }) {
                 Cancel
               </button>
 
-              {/* CONFIRM LOGOUT */}
+
+              {/* =================================================
+                  CONFIRM LOGOUT
+              ================================================= */}
+
               <button
                 type="button"
                 onClick={confirmLogout}
@@ -359,6 +442,7 @@ export default function Header({ isLoggedIn }) {
             </div>
 
           </div>
+
         </div>
       )}
     </>

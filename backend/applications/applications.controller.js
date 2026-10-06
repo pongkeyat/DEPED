@@ -115,6 +115,18 @@ export const submitFullApplication = async (req, res) => {
 
         }
 
+        if (
+            !job_application.vacancy_id ||
+            String(job_application.vacancy_id).trim() === ''
+        ) {
+            await client.query('ROLLBACK');
+
+            return res.status(400).json({
+                success: false,
+                message: 'A vacancy must be selected before submitting an application.'
+            });
+        }
+
         const jobApplicationId =
             await insertJobApplication(
                 client,
@@ -130,6 +142,13 @@ export const submitFullApplication = async (req, res) => {
 
         const applicantId =
             applicantInfoRecord.applicant_id;
+
+        const ticket =
+             applicantInfoRecord.ticket;
+
+        if (!ticket) {
+            throw new Error('Application ticket was not generated.');
+        }
 
         if (equal_opportunity) {
 
@@ -251,7 +270,8 @@ export const submitFullApplication = async (req, res) => {
                 await sendApplicationReceivedEmail(
                     applicant_info.email_address,
                     applicant_info.first_name,
-                    applicant_info.last_name
+                    applicant_info.last_name,
+                    ticket
                 );
 
                 console.log(
@@ -285,7 +305,8 @@ export const submitFullApplication = async (req, res) => {
                 job_applications_id:
                     jobApplicationId,
                 applicant_id:
-                    applicantId
+                    applicantId,
+                ticket
             }
         });
 

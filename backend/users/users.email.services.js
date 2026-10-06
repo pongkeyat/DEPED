@@ -1,31 +1,6 @@
-import dotenv from "dotenv";
-dotenv.config();
-import nodemailer from "nodemailer";
-import dns from "dns";
+import transporters from "../config/emailTransporters.js";
 
-// CRITICAL FIX: Forces Node.js to prioritize IPv4 over IPv6.
-// This prevents the "connect ETIMEDOUT" network error with Gmail.
-dns.setDefaultResultOrder('ipv4first');
-
-const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-        user: process.env.EMAIL,
-        pass: process.env.EMAIL_PASSWORD,
-    },
-    tls: {
-        rejectUnauthorized: false,
-    },
-});
-
-// Verify SMTP connection when the server starts
-transporter.verify((error, success) => {
-    if (error) {
-        console.error("❌ Nodemailer Error:", error);
-    } else {
-        console.log("✅ Mail server is ready.");
-    }
-});
+const transporter = transporters.userAccounts;
 
 // 1. Updated with your exact DEPED template structure
 export const AccountCreatedEmail = async (email, password) => {

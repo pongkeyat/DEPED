@@ -113,7 +113,7 @@ export default function ApplicantEvaluation() {
         training_remarks: isTrainingPass ? "Meets training requirement" : "Does not meet training requirement",
         experience_passed: isExperiencePass,
         experience_remarks: isExperiencePass ? "Meets experience requirement" : "Does not meet experience requirement",
-        overall_result: overallPass ? "qualified" : "unqualified",
+        overall_result: overallPass ? "qualified" : "Not Qualified",
         general_remarks: applicant?.hr_remarks_notes || (overallPass ? "Applicant passed initial screening." : "Applicant failed initial screening."),
         screened_by: currentEvaluatorId,
         submitted_documents_passed: overallPass,
@@ -125,7 +125,7 @@ export default function ApplicantEvaluation() {
       // Update local state and return to dashboard
       setApplicant((prev) => ({
         ...prev,
-        application_status: overallPass ? "qualified" : "unqualified"
+        application_status: overallPass ? "qualified" : "Not Qualified"
       }));
 
       navigate(-1);

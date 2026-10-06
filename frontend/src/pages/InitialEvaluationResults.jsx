@@ -11,9 +11,9 @@ import { Eye } from "lucide-react";
 import { getApplications } from "../api/ApplicationApi";
 import { getVacancies } from "../api/VacancyApi";
 
-import InitialEvaluationHeader from "../components/initialscreening/InitialEvaluationHeader";
+import InitialEvaluationHeader from "../components/initialEvaluation/InitialEvaluationHeader";
 
-import IERPrintForm from "../components/initialscreening/IERPrintForm";
+import IERPrintForm from "../components/initialEvaluation/IERPrintForm";
 
 const getStatusStyles = (status) => {
   switch (status?.toLowerCase()) {
@@ -352,11 +352,12 @@ export default function InitialEvaluationResults() {
 
       <div className="print:hidden">
 
-        {/* FILTERS */}
-        <div className="mt-6 flex flex-wrap items-end gap-4">
+        {/* FILTER CONTAINER */}
+        <div className="mt-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
 
           {/* VACANCY */}
-          <div className="w-full sm:max-w-sm">
+          <div className="w-full min-w-0 flex-1 lg:max-w-md">
 
             <label className="mb-1.5 block text-sm font-semibold text-gray-700">
               Filter by Closed Vacancy
@@ -409,13 +410,13 @@ export default function InitialEvaluationResults() {
 
           {/* SELECTED VACANCY */}
           {selectedVacancyData && (
-            <div className="flex h-11 items-center rounded-lg bg-blue-50 px-4 text-sm text-blue-800">
+            <div className="flex min-h-11 min-w-0 items-center rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-800 lg:max-w-sm">
 
               <span className="font-semibold">
                 Selected:
               </span>
 
-              <span className="ml-1">
+              <span className="ml-1 truncate">
                 {selectedVacancyData.position_title ||
                   selectedVacancyData.title ||
                   "Unknown Position"}
@@ -432,7 +433,7 @@ export default function InitialEvaluationResults() {
                 !showUnqualified
               )
             }
-            className={`h-11 rounded-lg border px-5 text-sm font-semibold transition ${
+            className={`h-11 w-full shrink-0 rounded-lg border px-5 text-sm font-semibold transition sm:w-auto lg:ml-auto ${
               showUnqualified
                 ? "border-red-600 bg-red-600 text-white hover:bg-red-700"
                 : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
@@ -442,27 +443,9 @@ export default function InitialEvaluationResults() {
               ? "Showing Unqualified"
               : "View Unqualified Pool"}
           </button>
-
+          </div>
         </div>
 
-        {/* RESULT COUNT */}
-        <div className="mt-4 text-sm text-gray-600">
-
-          Showing{" "}
-
-          <span className="font-bold text-[#1E3E74]">
-            {filteredApplications.length}
-          </span>{" "}
-
-          {targetStatus} applicant
-          {filteredApplications.length !== 1
-            ? "s"
-            : ""}
-
-          {selectedVacancy &&
-            " for the selected vacancy."}
-
-        </div>
 
         {/* ====================================================
             TABLE
@@ -474,35 +457,35 @@ export default function InitialEvaluationResults() {
 
             <table className="min-w-full">
 
-              <thead className="bg-gray-50 text-gray-700">
+              <thead className="bg-[#1b4584] px-6 py-4">
 
                 <tr>
 
-                  <th className="px-5 py-4 text-left">
+                  <th className="px-5 py-4 text-left font-semibold text-white">
                     Vacancy ID
                   </th>
 
-                  <th className="px-5 py-4 text-left">
+                  <th className="px-5 py-4 text-left font-semibold text-white">
                     Applicant ID
                   </th>
 
-                  <th className="px-5 py-4 text-left">
+                  <th className="px-5 py-4 text-left font-semibold text-white">
                     Applicant Name
                   </th>
 
-                  <th className="px-5 py-4 text-left">
+                  <th className="px-5 py-4 text-left font-semibold text-white">
                     Position
                   </th>
 
-                  <th className="px-5 py-4 text-left">
+                  <th className="px-5 py-4 text-left font-semibold text-white">
                     Date Applied
                   </th>
 
-                  <th className="px-5 py-4 text-center">
+                  <th className="px-5 py-4 text-center font-semibold text-white">
                     Status
                   </th>
 
-                  <th className="px-5 py-4 text-center">
+                  <th className="px-5 py-4 text-center font-semibold text-white">
                     Action
                   </th>
 

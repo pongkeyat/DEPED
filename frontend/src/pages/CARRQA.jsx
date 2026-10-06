@@ -138,17 +138,7 @@ const CARRQA = () => {
     // REFRESH
     // ============================================================
 
-    const handleRefresh = () => {
-        if (!selectedVacancy) {
-            return;
-        }
-
-        handleVacancyChange({
-            target: {
-                value: selectedVacancy,
-            },
-        });
-    };
+ 
 
     // ============================================================
     // SELECTED VACANCY
@@ -721,9 +711,6 @@ const CARRQA = () => {
                         navigate("/")
                     }
                     onPrint={handlePrint}
-                    onRefresh={
-                        handleRefresh
-                    }
                     loading={
                         loadingRanking
                     }

@@ -187,8 +187,6 @@ const Ranking = () => {
             applicant?.application_code ||
             applicant?.applicationCode ||
             applicant?.application_id ||
-            applicant?.job_application_code ||
-            applicant?.job_applications_id ||
             "—"
         );
     };
@@ -414,12 +412,18 @@ const Ranking = () => {
     // ============================================================
 
     const getExperienceScore = (applicant) => {
-        return (
+        const score = Number(
             applicant?.experience?.points ??
             applicant?.experience_points ??
             applicant?.experience_score ??
             0
         );
+
+        const category = String(applicant?.category || "").toLowerCase();
+
+        return category.includes("school admin")
+            ? Math.min(score, 10)
+            : score;
     };
 
     // ============================================================

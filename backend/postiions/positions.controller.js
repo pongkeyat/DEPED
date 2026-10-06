@@ -18,7 +18,7 @@ export const getAllPositions = async (req, res) => {
         const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
         const parsedLimit = Math.min(
             Math.max(parseInt(limit, 10) || 20, 1),
-            100
+            1000
         );
 
         const offset = (parsedPage - 1) * parsedLimit;
@@ -26,64 +26,103 @@ export const getAllPositions = async (req, res) => {
         const conditions = [];
         const params = [];
 
+        // ======================================================
+        // POSITION TITLE FILTER
+        // ======================================================
+
         if (position_title) {
             params.push(`%${position_title}%`);
+
             conditions.push(
                 `position_title ILIKE $${params.length}`
             );
         }
 
+        // ======================================================
+        // SALARY GRADE FILTER
+        // ======================================================
+
         if (salary_grade) {
             params.push(salary_grade);
+
             conditions.push(
                 `salary_grade::text = $${params.length}`
             );
         }
 
+        // ======================================================
+        // CATEGORY FILTER
+        // ======================================================
+
         if (category) {
             const categoryAliases = {
-                'Teaching Positions': [
-                    'Teaching Positions',
-                    'Teaching'
+                'teaching positions': [
+                    'teaching positions',
+                    'teaching'
                 ],
-                'School Administration Positions': [
-                    'School Administration Positions',
-                    'School Administration'
+
+                'school administration positions': [
+                    'school administration positions',
+                    'school administration'
                 ],
-                'Related Teaching Positions': [
-                    'Related Teaching Positions',
-                    'Related Teaching'
+
+                'related teaching positions': [
+                    'related teaching positions',
+                    'related teaching'
                 ],
-                'Non-Teaching Positions': [
-                    'Non-Teaching Positions',
-                    'Non-Teaching'
+
+                'non-teaching positions': [
+                    'non-teaching positions',
+                    'non-teaching',
+                    'non teaching positions',
+                    'non teaching'
                 ]
             };
+            const normalizedCategory = String(category)
+                .trim()
+                .toLowerCase()
+                .replace(/\s+/g, ' ');
 
-            if (!categoryAliases[category]) {
+            if (!categoryAliases[normalizedCategory]) {
                 return res.status(400).json({
                     success: false,
                     message: 'Invalid category',
-                    allowedCategories: Object.keys(categoryAliases)
+                    allowedCategories:
+                        Object.keys(categoryAliases).map(
+                            (value) =>
+                                value.replace(/\b\w/g, (letter) =>
+                                    letter.toUpperCase()
+                                )
+                        )
                 });
             }
 
-            params.push(categoryAliases[category]);
+            params.push(categoryAliases[normalizedCategory]);
 
             conditions.push(
-                `category = ANY($${params.length}::text[])`
+                `LOWER(TRIM(category)) = ANY($${params.length}::text[])`
             );
         }
 
+        // ======================================================
+        // STATUS FILTER
+        // ======================================================
+
         if (status) {
             params.push(status);
+
             conditions.push(
                 `status ILIKE $${params.length}`
             );
         }
 
+        // ======================================================
+        // SEARCH
+        // ======================================================
+
         if (search) {
             params.push(`%${search}%`);
+
             const searchParam = `$${params.length}`;
 
             conditions.push(`
@@ -96,9 +135,17 @@ export const getAllPositions = async (req, res) => {
             `);
         }
 
+        // ======================================================
+        // WHERE CLAUSE
+        // ======================================================
+
         const whereClause = conditions.length
             ? `WHERE ${conditions.join(' AND ')}`
             : '';
+
+        // ======================================================
+        // GET POSITIONS
+        // ======================================================
 
         const dataQuery = `
             SELECT
@@ -106,48 +153,92 @@ export const getAllPositions = async (req, res) => {
                 position_title,
                 salary_grade,
                 category,
+
+                -- QUALIFICATIONS
+                education,
+                training,
+                experience,
+                eligibility,
+
                 status
+
             FROM positions
+
             ${whereClause}
+
             ORDER BY position_id DESC
+
             LIMIT $${params.length + 1}
             OFFSET $${params.length + 2}
         `;
 
+        // ======================================================
+        // COUNT
+        // ======================================================
+
         const countQuery = `
             SELECT COUNT(*) AS count
+
             FROM positions
+
             ${whereClause}
         `;
 
-        const [positionsResult, countResult] = await Promise.all([
-            pool.query(dataQuery, [
-                ...params,
-                parsedLimit,
-                offset
-            ]),
-            pool.query(countQuery, params)
-        ]);
+        // ======================================================
+        // EXECUTE QUERIES
+        // ======================================================
+
+        const [positionsResult, countResult] =
+            await Promise.all([
+                pool.query(dataQuery, [
+                    ...params,
+                    parsedLimit,
+                    offset
+                ]),
+
+                pool.query(
+                    countQuery,
+                    params
+                )
+            ]);
+
+        // ======================================================
+        // TOTAL ITEMS
+        // ======================================================
 
         const totalItems = parseInt(
             countResult.rows[0].count,
             10
         );
 
+        // ======================================================
+        // RESPONSE
+        // ======================================================
+
         return res.status(200).json({
             success: true,
+
             pagination: {
                 totalItems,
+
                 totalPages: Math.ceil(
                     totalItems / parsedLimit
                 ),
+
                 currentPage: parsedPage,
+
                 limit: parsedLimit
             },
+
             data: positionsResult.rows
         });
+
     } catch (error) {
-        console.error('Error fetching positions:', error);
+
+        console.error(
+            'Error fetching positions:',
+            error
+        );
 
         return res.status(500).json({
             success: false,
@@ -155,7 +246,6 @@ export const getAllPositions = async (req, res) => {
         });
     }
 };
-
 
 // ======================================================
 // 2. POST POSITION
@@ -165,7 +255,11 @@ export const createPosition = async (req, res) => {
         const {
             position_title,
             salary_grade,
-            category
+            category,
+            education,
+            training,
+            experience,
+            eligibility
         } = req.body;
 
         if (
@@ -242,14 +336,22 @@ export const createPosition = async (req, res) => {
                 position_title,
                 salary_grade,
                 category,
+                education,
+                training,
+                experience,
+                eligibility,
                 status
             )
-            VALUES ($1, $2, $3, $4)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING
                 position_id,
                 position_title,
                 salary_grade,
                 category,
+                education,
+                training,
+                experience,
+                eligibility,
                 status
         `;
 
@@ -257,6 +359,10 @@ export const createPosition = async (req, res) => {
             title,
             parsedSalaryGrade,
             category,
+            education ?? null,
+            training ?? null,
+            experience ?? null,
+            eligibility ?? null,
             'Active'
         ]);
 
@@ -286,7 +392,11 @@ export const updatePosition = async (req, res) => {
         const {
             position_title,
             salary_grade,
-            category
+            category,
+            education,
+            training,
+            experience,
+            eligibility
         } = req.body;
 
         if (
@@ -400,19 +510,31 @@ export const updatePosition = async (req, res) => {
                 SET
                     position_title = $1,
                     salary_grade = $2,
-                    category = $3
-                WHERE position_id = $4
+                    category = $3,
+                    education = COALESCE($4, education),
+                    training = COALESCE($5, training),
+                    experience = COALESCE($6, experience),
+                    eligibility = COALESCE($7, eligibility)
+                WHERE position_id = $8
                 RETURNING
                     position_id,
                     position_title,
                     salary_grade,
                     category,
+                    education,
+                    training,
+                    experience,
+                    eligibility,
                     status
                 `,
                 [
                     title,
                     parsedSalaryGrade,
                     category,
+                    education ?? null,
+                    training ?? null,
+                    experience ?? null,
+                    eligibility ?? null,
                     position_id
                 ]
             );

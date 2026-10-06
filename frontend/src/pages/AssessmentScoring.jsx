@@ -251,34 +251,13 @@ export default function AssessmentScoring() {
           return;
         }
 
-        // ------------------------------------------------------
-        // Only keep sessions with qualified applicants
-        // ------------------------------------------------------
-
-        const qualifiedRows =
-          await Promise.all(
-            data.map(async (session) => {
-              const applicantId =
-                getApplicantId(session);
-
-              if (!applicantId) {
-                return null;
-              }
-
-              try {
-                await getQualifiedApplicantForAssessment(
-                  applicantId
-                );
-
-                return session;
-              } catch {
-                return null;
-              }
-            })
-          );
-
         setSessions(
-          qualifiedRows.filter(Boolean)
+          data.filter(
+            (session) =>
+              session.assessment_session_id &&
+              Array.isArray(session.applicants) &&
+              session.applicants.length > 0
+          )
         );
       } catch (err) {
         console.error(
@@ -310,7 +289,7 @@ export default function AssessmentScoring() {
     return (
       sessions.find(
         (session) =>
-          String(session.session_id) ===
+          String(session.assessment_session_id) ===
           String(selectedSession)
       ) || null
     );
@@ -618,12 +597,20 @@ export default function AssessmentScoring() {
       return;
     }
 
-    const selectedRows =
-      sessions.filter(
-        (session) =>
-          String(session.session_id) ===
-          String(selectedSession)
-      );
+    const selectedSessionRecord = sessions.find(
+      (session) =>
+        String(session.assessment_session_id) ===
+        String(selectedSession)
+    );
+
+    const selectedRows = (selectedSessionRecord?.applicants || []).map(
+      (applicant) => ({
+        ...selectedSessionRecord,
+        ...applicant,
+        assessment_session_id:
+          selectedSessionRecord.assessment_session_id,
+      })
+    );
 
     setSessionApplicants(
       selectedRows
@@ -1210,6 +1197,32 @@ export default function AssessmentScoring() {
             applicantId
           ] || null,
       });
+
+      setSessionApplicants((previous) =>
+        previous.filter(
+          (applicant) =>
+            getApplicantId(applicant) !== applicantId
+        )
+      );
+      setSessions((previous) =>
+        previous
+          .map((session) => ({
+            ...session,
+            applicants: (session.applicants || []).filter(
+              (applicant) =>
+                getApplicantId(applicant) !== applicantId
+            ),
+          }))
+          .filter((session) => session.applicants.length > 0)
+      );
+      if (
+        sessionApplicants.filter(
+          (applicant) =>
+            getApplicantId(applicant) !== applicantId
+        ).length === 0
+      ) {
+        setSelectedSession("");
+      }
 
       // --------------------------------------------------------
       // Mark as submitted

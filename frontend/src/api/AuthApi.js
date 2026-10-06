@@ -7,7 +7,8 @@ const PROFILE_API = import.meta.env.VITE_PROFILE_API
 const LOGOUT_API = import.meta.env.VITE_LOGOUT_API
 const REGISTER_API = import.meta.env.VITE_REGISTER_API
 const UPDATE_PASSWORD_API = import.meta.env.VITE_UPDATE_PASSWORD
-const GET_USERS_API = import.meta.env.VITE_GET_USERS_API
+const GET_USERS_API =
+    import.meta.env.VITE_GET_ALL_USERS || import.meta.env.VITE_GET_USERS_API
 
 
 // ============================================================

@@ -1,25 +1,11 @@
-/**
- * 2. APPLICANT_INFORMATION SERVICE
- */
+import crypto from "crypto";
 
-import crypto from 'crypto';
-
-export const insertApplicantInformation = async (client, jobApplicationId, data) => {
-    // 1. Generate a custom unique applicant_id
-    const applicantId = `APP-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
-
-    const {
-        last_name,
-        first_name,
-        middle_name,
-        suffix,
-        sex,
-        date_of_birth,
-        civil_status,
-        contact_number,
-        email_address,
-        residential_address
-    } = data;
+export const insertApplicantInformation = async (
+    client,
+    jobApplicationId,
+    applicantInfo
+) => {
+    const applicantId = `APP-${crypto.randomBytes(2).toString("hex").toUpperCase()}`;
 
     const query = `
         INSERT INTO applicant_information (
@@ -36,33 +22,42 @@ export const insertApplicantInformation = async (client, jobApplicationId, data)
             email_address,
             residential_address
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        RETURNING applicant_id;
+        VALUES (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            $10,
+            $11,
+            $12
+        )
+        RETURNING *;
     `;
 
     const values = [
         applicantId,
         jobApplicationId,
-        last_name,
-        first_name,
-        middle_name || null,
-        suffix || null,
-        sex,
-        date_of_birth,
-        civil_status,
-        contact_number,
-        email_address,
-        residential_address
+        applicantInfo.last_name ?? null,
+        applicantInfo.first_name ?? null,
+        applicantInfo.middle_name ?? null,
+        applicantInfo.suffix ?? null,
+        applicantInfo.sex ?? null,
+        applicantInfo.date_of_birth ?? null,
+        applicantInfo.civil_status ?? null,
+        applicantInfo.contact_number ?? null,
+        applicantInfo.email_address ?? null,
+        applicantInfo.residential_address ?? null
     ];
 
-    const result = await client.query(query, values);
-    return result.rows[0];
-};
-
-export const getApplicantInformationById = async (client, applicantId) => {
     const result = await client.query(
-        `SELECT * FROM applicant_information WHERE applicant_id = $1`,
-        [applicantId]
+        query,
+        values
     );
-    return result.rows[0] || null;
+
+    return result.rows[0];
 };

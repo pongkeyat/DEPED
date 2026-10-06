@@ -243,21 +243,24 @@ export default function CARPrintForm({
                   const education =
                     Number(
                       applicant.education_score ??
-                      applicant.education ??
+                      applicant.education?.points ??
+                      applicant.education_points ??
                       0
                     );
 
                   const training =
                     Number(
                       applicant.training_score ??
-                      applicant.training ??
+                      applicant.training?.points ??
+                      applicant.training_points ??
                       0
                     );
 
                   const experience =
                     Number(
                       applicant.experience_score ??
-                      applicant.experience ??
+                      applicant.experience?.points ??
+                      applicant.experience_points ??
                       0
                     );
 
@@ -338,7 +341,6 @@ export default function CARPrintForm({
                       <td className="border border-black px-1">
                         {applicant.application_code ||
                           applicant.application_id ||
-                          applicant.job_applications_id ||
                           ""}
                       </td>
 

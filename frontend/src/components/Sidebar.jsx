@@ -89,12 +89,20 @@ export default function SideBar() {
       ]
     },
         {
+      title: "Reports",
+      roles: [ROLES.HRO], 
+      items: [
+        { label: "Applicant Summary Report", to: "/applicant-summary-report", icon: FileText },
+       
+    
+      ]
+    },
+        {
       title: "ASSESSMENT",
       roles: [ROLES.HRMPSB], 
       items: [
         { label: "Assessment Session", to: "/interviewSession", icon: ClipboardCheck },
         { label: "Scoring", to: "/Scoring", icon: CirclePlus },
-        { label: "Panelist members Management", to: "/panelists", icon: ContactRound },
 
       ]
     },

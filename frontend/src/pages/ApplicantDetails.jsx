@@ -531,24 +531,7 @@ export default function ApplicantDetails() {
     isUnderReview && !isFinalStatus;
 
 
-  /*
-   * While under review:
-   *
-   * All checked = Complete
-   * Otherwise = Incomplete
-   *
-   * Outside review:
-   * Display actual database status.
-   */
-
-  const currentStatus =
-    isUnderReview
-      ? (
-          isAllChecked
-            ? "complete"
-            : "incomplete"
-        )
-      : rawStatus;
+  const currentStatus = rawStatus;
 
 
   // ============================================================
@@ -740,10 +723,12 @@ export default function ApplicantDetails() {
         </button>
 
 
-        <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3">
 
-          {/* STATUS */}
-
+        {/* STATUS
+            Only show status when it is NOT under_review
+        */}
+        {!isUnderReview && (
           <span
             className={`
               rounded-full
@@ -761,84 +746,64 @@ export default function ApplicantDetails() {
               ${getStatusStyles(currentStatus)}
             `}
           >
+            {currentStatus || "N/A"}
+          </span>
+        )}
 
-            {isUnderReview && (
-
-              isAllChecked
-
-                ? <CheckCircle2 size={16} />
-
-                : <XCircle size={16} />
-
+        {/* ACTION BUTTON
+            Only show when status is under_review
+        */}
+        {isUnderReview && (
+          <button
+            onClick={() => setShowConfirmModal(true)}
+            disabled={updating}
+            className={`
+              inline-flex
+              items-center
+              gap-2
+              text-white
+              font-semibold
+              px-5
+              py-2
+              rounded-xl
+              text-sm
+              shadow
+              transition-colors
+              disabled:opacity-50
+              ${
+                isAllChecked
+                  ? "bg-emerald-600 hover:bg-emerald-700"
+                  : "bg-amber-600 hover:bg-amber-700"
+              }
+            `}
+          >
+            {isAllChecked ? (
+              <CheckCircle2 size={16} />
+            ) : (
+              <AlertCircle size={16} />
             )}
 
-            Status: {currentStatus || "N/A"}
-
-          </span>
-
-
-          {/* ==================================================
-              ACTION BUTTON
-              ================================================== */}
-
-          {canUpdateStatus && (
-
-            <button
-              onClick={() =>
-                setShowConfirmModal(true)
-              }
-              disabled={updating}
-
-              className={`
-                inline-flex
-                items-center
-                gap-2
-                text-white
-                font-semibold
-                px-5
-                py-2
-                rounded-xl
-                text-sm
-                shadow
-                transition-colors
-                disabled:opacity-50
-                ${
+            {updating
+              ? "Processing..."
+              : `Mark as ${
                   isAllChecked
-                    ? "bg-emerald-600 hover:bg-emerald-700"
-                    : "bg-amber-600 hover:bg-amber-700"
-                }
-              `}
-            >
-
-              {isAllChecked
-                ? <CheckCircle2 size={16} />
-                : <AlertCircle size={16} />
-              }
-
-              {updating
-                ? "Processing..."
-                : `Mark as ${
-                    isAllChecked
-                      ? "Complete"
-                      : "Incomplete"
-                  }`
-              }
-
-            </button>
-
-          )}
-
-          {/* EDIT APPLICANT BUTTON - BESIDE ACTION BUTTON */}
-          <button
-            type="button"
-            onClick={() => setShowEditModal(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#1E3E74] px-5 py-2 text-sm font-semibold text-white shadow transition-colors hover:bg-[#17325e]"
-          >
-            <Pencil size={16} />
-            Edit Applicant
+                    ? "Complete"
+                    : "Incomplete"
+                }`}
           </button>
+        )}
 
-        </div>
+        {/* EDIT APPLICANT */}
+        <button
+          type="button"
+          onClick={() => setShowEditModal(true)}
+          className="inline-flex items-center gap-2 rounded-xl bg-[#1E3E74] px-5 py-2 text-sm font-semibold text-white shadow transition-colors hover:bg-[#17325e]"
+        >
+          <Pencil size={16} />
+          Edit Applicant
+        </button>
+
+      </div>
 
       </div>
 
