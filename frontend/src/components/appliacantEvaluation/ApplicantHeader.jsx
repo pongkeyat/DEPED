@@ -5,7 +5,11 @@ export default function ApplicantHeader({ applicant }) {
   if (!applicant) return null;
 
   const fullName = applicant.full_name || `${applicant.first_name || ""} ${applicant.last_name || ""}`.trim() || "N/A";
-  const appliedPosition = applicant.position_applied || applicant.applied_position || "Not Specified";
+  const appliedPosition =
+    applicant.position_applied ||
+    applicant.applied_position ||
+    applicant.position_title ||
+    "Not Specified";
   const mobileNumber = applicant.contact_number || applicant.mobile_number || "N/A";
   const emailAddress = applicant.email || "N/A";
   const residentialAddress = applicant.address || applicant.residential_address || "N/A";

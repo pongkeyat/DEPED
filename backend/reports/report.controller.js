@@ -7,6 +7,8 @@ import pool from "../config/db.js";
 // Returns:
 // - Total Applicants
 // - PWD
+// - Solo Parent
+// - Indigenous Person
 // - Married
 // - Single
 // - Qualified
@@ -29,6 +31,20 @@ export const getApplicantSummaryReport = async (req, res) => {
                         THEN ai.applicant_id
                     END
                 ) AS pwd,
+
+                COUNT(
+                    DISTINCT CASE
+                        WHEN COALESCE(eod.is_solo_parent, false) = true
+                        THEN ai.applicant_id
+                    END
+                ) AS solo_parent,
+
+                COUNT(
+                    DISTINCT CASE
+                        WHEN COALESCE(eod.is_indigenous_person, false) = true
+                        THEN ai.applicant_id
+                    END
+                ) AS indigenous_person,
 
                 COUNT(
                     DISTINCT CASE
@@ -87,6 +103,12 @@ export const getApplicantSummaryReport = async (req, res) => {
 
                 pwd:
                     Number(row.pwd || 0),
+
+                solo_parent:
+                    Number(row.solo_parent || 0),
+
+                indigenous_person:
+                    Number(row.indigenous_person || 0),
 
                 married:
                     Number(row.married || 0),

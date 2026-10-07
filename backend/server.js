@@ -12,6 +12,7 @@ import assessmentRoutes from './assessment/assessment.route.js';
 import rankingRoutes from "./ranking/ranking.routes.js";
 import databaseRoutes from "./backup/database.route.js";
 import auditLogsRoutes from "./auditLogs/auditLogs.routes.js";
+import { auditActivity } from "./auditLogs/auditActivity.middleware.js";
 import reportRoutes from "./reports/report.routes.js";
 import path from 'path';
 
@@ -26,6 +27,7 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
+app.use("/api", auditActivity);
 
 app.use('/api/usersAuth' , usersAuthRoutes)
 app.use('/api/vacancies', vacancyRoutes)

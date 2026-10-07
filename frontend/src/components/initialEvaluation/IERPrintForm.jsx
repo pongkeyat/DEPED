@@ -1,53 +1,136 @@
-const safe = (value) => {
+const safe = (value, fallback = "N/A") => {
   if (
     value === null ||
     value === undefined ||
-    value === ""
+    (typeof value === "string" && value.trim() === "")
   ) {
-    return "N/A";
+    return fallback;
   }
 
   return value;
 };
 
-const getFullName = (applicant) => {
-  const lastName = applicant?.last_name || "";
-  const firstName = applicant?.first_name || "";
-  const middleName = applicant?.middle_name || "";
+const getValue = (source, ...keys) => {
+  for (const key of keys) {
+    const value = source?.[key];
 
-  if (!lastName && !firstName && !middleName) {
+    if (
+      value !== null &&
+      value !== undefined &&
+      !(typeof value === "string" && value.trim() === "")
+    ) {
+      return value;
+    }
+  }
+
+  return null;
+};
+
+const getFullName = (applicant) => {
+  const lastName =
+    getValue(
+      applicant,
+      "last_name",
+      "surname",
+      "family_name",
+      "lastName"
+    ) || "";
+
+  const firstName =
+    getValue(
+      applicant,
+      "first_name",
+      "given_name",
+      "firstName"
+    ) || "";
+
+  const middleName =
+    getValue(
+      applicant,
+      "middle_name",
+      "middle_name_initial",
+      "middle_initial",
+      "middleName"
+    ) || "";
+
+  const fullName =
+    getValue(applicant, "full_name", "name") || "";
+
+  if (fullName) {
+    return fullName;
+  }
+
+  const parts = [
+    lastName,
+    `${firstName} ${middleName}`.trim(),
+  ].filter(Boolean);
+
+  if (parts.length === 0) {
     return "N/A";
   }
 
-  return `${lastName}, ${firstName} ${middleName}`.trim();
-};
-
-const getApplicationCode = (applicant) => {
-  return (
-    applicant?.application_code ||
-    applicant?.job_applications_id ||
-    applicant?.application_id ||
-    applicant?.applicant_id ||
-    "N/A"
+  return parts.join(", ").replace(
+    /,\s*,/g,
+    ","
   );
 };
 
+const getApplicationCode = (applicant) => {
+  const code = getValue(
+    applicant,
+    "application_code",
+    "applicationCode",
+    "job_applications_id",
+    "jobApplicationsId",
+    "application_id",
+    "applicationId",
+    "applicant_id",
+    "applicantId",
+    "id"
+  );
+
+  return code !== null && code !== undefined
+    ? String(code)
+    : "N/A";
+};
+
 const getStatus = (applicant) => {
-  const status = String(
-    applicant?.application_status || ""
-  )
+  const rawStatus =
+    getValue(
+      applicant,
+      "application_status",
+      "applicationStatus",
+      "status"
+    ) || "";
+
+  const status = String(rawStatus)
     .trim()
     .toLowerCase();
 
-  if (status === "qualified") {
+  if (
+    [
+      "qualified",
+      "passed",
+      "eligible",
+    ].includes(status)
+  ) {
     return "Qualified";
   }
 
-  if (status === "unqualified") {
+  if (
+    [
+      "unqualified",
+      "disqualified",
+      "rejected",
+      "not_qualified",
+      "not qualified",
+      "failed",
+    ].includes(status)
+  ) {
     return "Disqualified";
   }
 
-  return applicant?.application_status || "N/A";
+  return rawStatus || "N/A";
 };
 
 export default function IERPrintForm({
@@ -55,45 +138,77 @@ export default function IERPrintForm({
   applicants = [],
 }) {
   const position =
-    vacancy?.position_title ||
-    vacancy?.title ||
-    vacancy?.job_title ||
-    "N/A";
+    getValue(
+      vacancy,
+      "position_title",
+      "positionTitle",
+      "title",
+      "job_title",
+      "jobTitle"
+    ) || "N/A";
 
   const salaryGrade =
-    vacancy?.salary_grade ||
-    vacancy?.salaryGrade ||
-    "N/A";
+    getValue(
+      vacancy,
+      "salary_grade",
+      "salaryGrade",
+      "sg"
+    ) || "N/A";
 
   const monthlySalary =
-    vacancy?.monthly_salary ||
-    vacancy?.monthlySalary ||
-    vacancy?.salary ||
-    "";
+    getValue(
+      vacancy,
+      "monthly_salary",
+      "monthlySalary",
+      "salary"
+    );
 
   const educationRequirement =
-    vacancy?.education_requirement ||
-    vacancy?.education ||
-    vacancy?.education_qualification ||
-    "N/A";
+    getValue(
+      vacancy,
+      "education_requirement",
+      "educationRequirement",
+      "education",
+      "education_qualification",
+      "educationQualification"
+    ) || "N/A";
 
   const trainingRequirement =
-    vacancy?.training_requirement ||
-    vacancy?.training ||
-    vacancy?.training_qualification ||
-    "N/A";
+    getValue(
+      vacancy,
+      "training_requirement",
+      "trainingRequirement",
+      "training",
+      "training_qualification",
+      "trainingQualification"
+    ) || "N/A";
 
   const experienceRequirement =
-    vacancy?.experience_requirement ||
-    vacancy?.experience ||
-    vacancy?.experience_qualification ||
-    "N/A";
+    getValue(
+      vacancy,
+      "experience_requirement",
+      "experienceRequirement",
+      "experience",
+      "experience_qualification",
+      "experienceQualification"
+    ) || "N/A";
 
   const eligibilityRequirement =
-    vacancy?.eligibility_requirement ||
-    vacancy?.eligibility ||
-    vacancy?.eligibility_qualification ||
-    "N/A";
+    getValue(
+      vacancy,
+      "eligibility_requirement",
+      "eligibilityRequirement",
+      "eligibility",
+      "eligibility_qualification",
+      "eligibilityQualification"
+    ) || "N/A";
+
+  const numericMonthlySalary =
+    monthlySalary !== null &&
+    monthlySalary !== undefined &&
+    monthlySalary !== ""
+      ? Number(monthlySalary)
+      : null;
 
   return (
     <div className="hidden print:block print:w-full print:bg-white print:text-black">
@@ -138,10 +253,9 @@ export default function IERPrintForm({
           <span className="flex-1 border-b border-black">
             SG {safe(salaryGrade)}
 
-            {monthlySalary
-              ? ` - ₱${Number(
-                  monthlySalary
-                ).toLocaleString()}`
+            {numericMonthlySalary !== null &&
+            !Number.isNaN(numericMonthlySalary)
+              ? ` - ₱${numericMonthlySalary.toLocaleString()}`
               : ""}
           </span>
         </div>

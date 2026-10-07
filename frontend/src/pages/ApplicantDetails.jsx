@@ -234,6 +234,78 @@ const resolveFileUrl = (urlOrPath) => {
 // GET ALL FILES FOR A DOCUMENT
 // ============================================================
 
+const parsePostgresFileArray = (value) => {
+  const contents = value.slice(1, -1);
+  const values = [];
+  let current = "";
+  let quoted = false;
+  let escaped = false;
+
+  for (const character of contents) {
+    if (escaped) {
+      current += character;
+      escaped = false;
+    } else if (character === "\\") {
+      escaped = true;
+    } else if (character === '"') {
+      quoted = !quoted;
+    } else if (character === "," && !quoted) {
+      values.push(current);
+      current = "";
+    } else {
+      current += character;
+    }
+  }
+
+  if (escaped) {
+    current += "\\";
+  }
+  values.push(current);
+
+  return values.filter((filePath) => filePath && filePath !== "NULL");
+};
+
+const normalizeDocumentPaths = (value) => {
+  if (Array.isArray(value)) {
+    return value.flatMap(normalizeDocumentPaths);
+  }
+
+  if (value && typeof value === "object") {
+    return normalizeDocumentPaths(
+      value.url || value.path || value.file_path
+    );
+  }
+
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  const normalizedValue = value.trim();
+  if (!normalizedValue) {
+    return [];
+  }
+
+  if (normalizedValue.startsWith("[")) {
+    try {
+      const parsedValue = JSON.parse(normalizedValue);
+      if (Array.isArray(parsedValue)) {
+        return normalizeDocumentPaths(parsedValue);
+      }
+    } catch {
+      // Treat non-JSON strings as a single file path.
+    }
+  }
+
+  if (
+    normalizedValue.startsWith("{") &&
+    normalizedValue.endsWith("}")
+  ) {
+    return parsePostgresFileArray(normalizedValue);
+  }
+
+  return [normalizedValue];
+};
+
 const getDocumentFiles = (applicant, field) => {
 
   if (!applicant) {
@@ -262,39 +334,23 @@ const getDocumentFiles = (applicant, field) => {
   ];
 
 
-  const foundValue =
-    possibleValues.find(
-      (value) =>
-        Array.isArray(value)
-          ? value.length > 0
-          : typeof value === "string" &&
-            value.trim() !== ""
-    );
+  const values =
+    possibleValues
+      .map(normalizeDocumentPaths)
+      .find((paths) => paths.length > 0) || [];
 
-
-  if (!foundValue) {
+  if (values.length === 0) {
     return [];
   }
 
-
-  const values =
-    Array.isArray(foundValue)
-      ? foundValue
-      : [foundValue];
-
-
   return values
-    .filter(
-      (value) =>
-        typeof value === "string" &&
-        value.trim() !== ""
-    )
     .map(
-      (value) => ({
-        url: resolveFileUrl(value),
+      (filePath) => ({
+        url: resolveFileUrl(filePath),
 
         name:
-          value
+          filePath
+            .replace(/\\/g, "/")
             .split("/")
             .pop() || "Uploaded File"
       })
@@ -793,15 +849,16 @@ export default function ApplicantDetails() {
           </button>
         )}
 
-        {/* EDIT APPLICANT */}
-        <button
-          type="button"
-          onClick={() => setShowEditModal(true)}
-          className="inline-flex items-center gap-2 rounded-xl bg-[#1E3E74] px-5 py-2 text-sm font-semibold text-white shadow transition-colors hover:bg-[#17325e]"
-        >
-          <Pencil size={16} />
-          Edit Applicant
-        </button>
+        {isUnderReview && (
+            <button
+                type="button"
+                onClick={() => setShowEditModal(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#1E3E74] px-5 py-2 text-sm font-semibold text-white shadow transition-colors hover:bg-[#17325e]"
+            >
+                <Pencil size={16} />
+                Edit Applicant
+            </button>
+        )}
 
       </div>
 

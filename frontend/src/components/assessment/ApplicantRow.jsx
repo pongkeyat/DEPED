@@ -9,6 +9,8 @@ export default function ApplicantRow({
   onScoreChange,
   onAssess,
   isSubmitting,
+  isSubmitted,
+  submissionStatusReady,
 }) {
   const applicantId =
     item?.applicant_id ||
@@ -71,14 +73,14 @@ export default function ApplicantRow({
 
 
   const category = normalize(
-    details?.category ||
-      item?.category ||
-      details?.position_category ||
+    item?.category ||
       item?.position_category ||
-      details?.vacancy_category ||
       item?.vacancy_category ||
-      details?.vacancy?.category ||
-      item?.vacancy?.category
+      item?.vacancy?.category ||
+      details?.category ||
+      details?.position_category ||
+      details?.vacancy_category ||
+      details?.vacancy?.category
   );
 
 
@@ -87,12 +89,12 @@ export default function ApplicantRow({
   // ============================================================
 
   const explicitAssessmentType = normalize(
-    details?.assessment_type ||
-      item?.assessment_type ||
-      details?.assessmentType ||
+    item?.assessment_type ||
       item?.assessmentType ||
-      details?.vacancy?.assessment_type ||
-      item?.vacancy?.assessment_type
+      item?.vacancy?.assessment_type ||
+      details?.assessment_type ||
+      details?.assessmentType ||
+      details?.vacancy?.assessment_type
   );
 
 
@@ -513,10 +515,6 @@ export default function ApplicantRow({
         </div>
 
 
-        <div className="mt-1 text-xs font-medium text-blue-600">
-          {applicantCategory}
-        </div>
-
 
         <div className="text-xs text-gray-400">
           {positionTitle || "No Position"}
@@ -657,6 +655,21 @@ export default function ApplicantRow({
             criterion.type ===
             "text"
           ) {
+            const manualScore =
+              scores?.[criterion.id];
+            const manualScoreNumber =
+              manualScore === "" ||
+              manualScore === undefined ||
+              manualScore === null
+                ? null
+                : Number(manualScore);
+            const manualScoreOutOfRange =
+              manualScoreNumber !== null &&
+              (
+                !Number.isFinite(manualScoreNumber) ||
+                manualScoreNumber < 0 ||
+                manualScoreNumber > Number(criterion.max)
+              );
 
             return (
               <td
@@ -670,9 +683,9 @@ export default function ApplicantRow({
                   max={criterion.max}
                   step="0.01"
                   value={
-                    scores?.[criterion.id] ??
-                    ""
+                    manualScore ?? ""
                   }
+                  aria-invalid={manualScoreOutOfRange}
                   onChange={(e) =>
                     onScoreChange(
                       applicantId,
@@ -681,13 +694,23 @@ export default function ApplicantRow({
                     )
                   }
                   placeholder={`0 - ${criterion.max}`}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={`w-full rounded-md border bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:ring-1 ${
+                    manualScoreOutOfRange
+                      ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+                      : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                  }`}
                 />
 
 
                 {criterion.max !== undefined && (
                   <div className="mt-1 text-xs text-gray-400">
                     Maximum: {criterion.max}
+                  </div>
+                )}
+
+                {manualScoreOutOfRange && (
+                  <div className="mt-1 text-xs text-red-600">
+                    Enter a score from 0 to {criterion.max}. This value cannot be submitted.
                   </div>
                 )}
 
@@ -764,11 +787,22 @@ export default function ApplicantRow({
         <div className="text-xs font-normal text-gray-500">/ 100</div>
 
         <button
+          type="button"
           onClick={() => onAssess(item)}
-          disabled={isSubmitting}
+          disabled={
+            isSubmitting ||
+            isSubmitted ||
+            !submissionStatusReady
+          }
           className="mt-2 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isSubmitting ? "Submitting..." : "Submit Score"}
+          {isSubmitting
+            ? "Submitting..."
+            : isSubmitted
+            ? "Score Submitted"
+            : submissionStatusReady
+            ? "Submit Score"
+            : "Checking Status..."}
         </button>
       </td>
 

@@ -20,10 +20,15 @@ export const sendAssessmentInvitationEmail = async ({
 }) => {
     try {
         if (!email) {
-            console.warn(
-                "Assessment invitation email skipped: applicant email is missing."
+            throw new Error(
+                "Assessment invitation email cannot be sent: applicant email is missing."
             );
-            return;
+        }
+
+        if (!process.env.EMAIL) {
+            throw new Error(
+                "Assessment invitation email cannot be sent: EMAIL is not configured."
+            );
         }
 
         const applicantName =
@@ -41,7 +46,10 @@ export const sendAssessmentInvitationEmail = async ({
         const formattedTime = sessionTime || "To be announced";
 
         const mailOptions = {
-            from: `"DepEd La Union Schools Division Office" <${process.env.EMAIL_USER}>`,
+            from: {
+                name: "DepEd La Union Schools Division Office",
+                address: process.env.EMAIL,
+            },
             to: email,
             subject: "Assessment/Interview Schedule – DepEd Recruitment",
             html: `
@@ -284,8 +292,20 @@ export const sendAssessmentInvitationEmail = async ({
 
         const result = await transporter.sendMail(mailOptions);
 
+        const wasAccepted = result.accepted?.some(
+            (recipient) =>
+                String(recipient).trim().toLowerCase() ===
+                String(email).trim().toLowerCase()
+        );
+
+        if (!wasAccepted) {
+            throw new Error(
+                `SMTP did not accept the assessment invitation for ${email}.`
+            );
+        }
+
         console.log(
-            `Assessment invitation email sent to ${email}. Message ID: ${result.messageId}`
+            `Assessment invitation email accepted by SMTP for ${email}. Message ID: ${result.messageId}`
         );
 
         return result;

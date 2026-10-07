@@ -319,58 +319,89 @@ export const createPosition = async (req, res) => {
             LIMIT 1
         `;
 
-        const duplicate = await pool.query(
-            duplicateQuery,
-            [title, category]
-        );
+        const client = await pool.connect();
 
-        if (duplicate.rows.length > 0) {
-            return res.status(409).json({
-                success: false,
-                message: 'This position already exists in the selected category.'
+        try {
+            await client.query('BEGIN');
+            await client.query(
+                "SELECT pg_advisory_xact_lock(hashtext('positions'), hashtext('position_id'))"
+            );
+
+            const duplicate = await client.query(
+                duplicateQuery,
+                [title, category]
+            );
+
+            if (duplicate.rows.length > 0) {
+                await client.query('ROLLBACK');
+
+                return res.status(409).json({
+                    success: false,
+                    message: 'This position already exists in the selected category.'
+                });
+            }
+
+            const nextIdResult = await client.query(`
+                SELECT COALESCE(
+                    MAX(SUBSTRING(position_id FROM 5)::BIGINT),
+                    0
+                ) + 1 AS next_id
+                FROM positions
+                WHERE position_id ~ '^POS-[0-9]+$'
+            `);
+            const positionId =
+                `POS-${String(nextIdResult.rows[0].next_id).padStart(4, '0')}`;
+
+            const insertQuery = `
+                INSERT INTO positions (
+                    position_id,
+                    position_title,
+                    salary_grade,
+                    category,
+                    education,
+                    training,
+                    experience,
+                    eligibility,
+                    status
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                RETURNING
+                    position_id,
+                    position_title,
+                    salary_grade,
+                    category,
+                    education,
+                    training,
+                    experience,
+                    eligibility,
+                    status
+            `;
+
+            const result = await client.query(insertQuery, [
+                positionId,
+                title,
+                parsedSalaryGrade,
+                category,
+                education ?? null,
+                training ?? null,
+                experience ?? null,
+                eligibility ?? null,
+                'Active'
+            ]);
+
+            await client.query('COMMIT');
+
+            return res.status(201).json({
+                success: true,
+                message: 'Position created successfully.',
+                data: result.rows[0]
             });
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
         }
-
-        const insertQuery = `
-            INSERT INTO positions (
-                position_title,
-                salary_grade,
-                category,
-                education,
-                training,
-                experience,
-                eligibility,
-                status
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            RETURNING
-                position_id,
-                position_title,
-                salary_grade,
-                category,
-                education,
-                training,
-                experience,
-                eligibility,
-                status
-        `;
-
-        const result = await pool.query(insertQuery, [
-            title,
-            parsedSalaryGrade,
-            category,
-            education ?? null,
-            training ?? null,
-            experience ?? null,
-            eligibility ?? null,
-            'Active'
-        ]);
-
-        return res.status(201).json({
-            success: true,
-            message: 'Position created successfully.',
-            data: result.rows[0]
-        });
     } catch (error) {
         console.error('Error creating position:', error);
 
@@ -454,7 +485,7 @@ export const updatePosition = async (req, res) => {
 
             const existing = await client.query(
                 `
-                SELECT position_id, status
+                SELECT position_id, position_title, category, status
                 FROM positions
                 WHERE position_id = $1
                 FOR UPDATE
@@ -483,25 +514,35 @@ export const updatePosition = async (req, res) => {
                 });
             }
 
-            const duplicate = await client.query(
-                `
-                SELECT position_id
-                FROM positions
-                WHERE LOWER(TRIM(position_title)) = LOWER(TRIM($1))
-                  AND category = $2
-                  AND position_id <> $3
-                LIMIT 1
-                `,
-                [title, category, position_id]
-            );
+            const currentPosition = existing.rows[0];
+            const titleChanged =
+                String(currentPosition.position_title ?? "")
+                    .trim()
+                    .toLowerCase() !== title.toLowerCase();
+            const categoryChanged =
+                currentPosition.category !== category;
 
-            if (duplicate.rows.length > 0) {
-                await client.query('ROLLBACK');
+            if (titleChanged || categoryChanged) {
+                const duplicate = await client.query(
+                    `
+                    SELECT position_id
+                    FROM positions
+                    WHERE LOWER(TRIM(position_title)) = LOWER(TRIM($1))
+                      AND category = $2
+                      AND position_id <> $3
+                    LIMIT 1
+                    `,
+                    [title, category, position_id]
+                );
 
-                return res.status(409).json({
-                    success: false,
-                    message: 'Another position with this title and category already exists.'
-                });
+                if (duplicate.rows.length > 0) {
+                    await client.query('ROLLBACK');
+
+                    return res.status(409).json({
+                        success: false,
+                        message: 'Another position with this title and category already exists.'
+                    });
+                }
             }
 
             const result = await client.query(

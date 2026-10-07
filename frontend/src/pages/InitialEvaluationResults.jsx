@@ -11,7 +11,7 @@ import { Eye } from "lucide-react";
 import { getApplications } from "../api/ApplicationApi";
 import { getVacancies } from "../api/VacancyApi";
 
-import InitialEvaluationHeader from "../components/initialEvaluation/InitialEvaluationHeader";
+import InitialEvaluationResultsHeader from "../components/initialEvaluation/InitialEvaluationResultsHeader"
 
 import IERPrintForm from "../components/initialEvaluation/IERPrintForm";
 
@@ -272,16 +272,7 @@ export default function InitialEvaluationResults() {
   // VIEW APPLICANT
   // ============================================================
 
-  const handleViewApplication = (
-    id
-  ) => {
 
-    if (!id) return;
-
-    navigate(
-      `/applicants/${id}`
-    );
-  };
 
   // ============================================================
   // TARGET STATUS
@@ -330,7 +321,7 @@ export default function InitialEvaluationResults() {
 
       <div className="print:hidden">
 
-        <InitialEvaluationHeader
+        <InitialEvaluationResultsHeader
           onBack={() =>
             navigate(
               "/applications-screening"
@@ -485,10 +476,6 @@ export default function InitialEvaluationResults() {
                     Status
                   </th>
 
-                  <th className="px-5 py-4 text-center font-semibold text-white">
-                    Action
-                  </th>
-
                 </tr>
 
               </thead>
@@ -582,33 +569,7 @@ export default function InitialEvaluationResults() {
 
                           </td>
 
-                          <td className="px-5 py-4">
-
-                            <div className="flex justify-center">
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleViewApplication(
-                                    targetId
-                                  )
-                                }
-                                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-white transition-colors ${
-                                  showUnqualified
-                                    ? "bg-red-600 hover:bg-red-700"
-                                    : "bg-blue-600 hover:bg-blue-700"
-                                }`}
-                              >
-
-                                <Eye size={18} />
-
-                                View
-
-                              </button>
-
-                            </div>
-
-                          </td>
+  
 
                         </tr>
 

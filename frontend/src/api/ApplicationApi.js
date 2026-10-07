@@ -39,27 +39,27 @@ const appendApplicantFiles = (
     formData,
     uploadedFiles = {}
 ) => {
+    const appendFileValue = (field, value) => {
+        const files = Array.isArray(value) ? value : [value];
+
+        files.forEach((file) => {
+            if (field.endsWith('_file') && file instanceof File) {
+                multipartData.append(field, file);
+            }
+        });
+    };
+
     // Files from document checklist
     Object.entries(formData.document_checklist || {}).forEach(
         ([field, value]) => {
-            if (
-                field.endsWith('_file') &&
-                value instanceof File
-            ) {
-                multipartData.append(field, value);
-            }
+            appendFileValue(field, value);
         }
     );
 
     // Additional uploaded files
     Object.entries(uploadedFiles).forEach(
         ([field, value]) => {
-            if (
-                field.endsWith('_file') &&
-                value instanceof File
-            ) {
-                multipartData.append(field, value);
-            }
+            appendFileValue(field, value);
         }
     );
 };

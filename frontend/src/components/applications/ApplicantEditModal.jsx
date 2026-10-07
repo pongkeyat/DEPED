@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { updateApplicant } from "../../api/ApplicationApi";
 import ApplicantEducationForm from "./ApplicantEducationForm";
@@ -6,7 +5,7 @@ import ApplicantTrainingForm from "./ApplicantTrainingForm";
 import CivilServiceEligibilityForm from "./CivilServiceEligibilityForm";
 import WorkExperienceForm from "./WorkExperienceForm";
 import EqualOpportunityDeclaration from "./EqualOpportunityDeclaration";
-import DocumentChecklist from "./DocumentChecklist";
+import EditableDocumentChecklist from "./EditDocumentChecklist";
 import HRRemarksForm from "./HRRemarksForm";
 import ActionModal from "../ActionModal";
 
@@ -23,7 +22,6 @@ const initialFormData = {
         email: "",
         address: ""
     },
-
     applicationData: {
         vacancy_id: "",
         dateReceived: "",
@@ -31,19 +29,14 @@ const initialFormData = {
         receivedBy: "",
         submissionType: ""
     },
-
     educationData: {
         educationList: []
     },
-
     trainingData: {
         trainings: []
     },
-
     eligibilityData: [],
-
     workExperienceData: [],
-
     documentData: {
         has_application_letter: false,
         has_personal_data_sheet: false,
@@ -58,7 +51,6 @@ const initialFormData = {
         has_performance_rating: false,
         has_omnibus_sworn_statement: false
     },
-
     uploadedFiles: {
         application_letter_file: null,
         personal_data_sheet_file: null,
@@ -73,13 +65,11 @@ const initialFormData = {
         performance_rating_file: null,
         omnibus_sworn_statement_file: null
     },
-
     equalOpportunityData: {
         is_pwd: null,
         is_solo_parent: null,
         is_indigenous_person: null
     },
-
     hrRemarksData: {
         hr_remarks_notes: "",
         application_status: ""
@@ -95,13 +85,11 @@ const firstDefined = (...values) =>
 
 const toDateInput = (value) => {
     if (!value) return "";
-
     return String(value).slice(0, 10);
 };
 
 const toTimeInput = (value) => {
     if (!value) return "";
-
     return String(value).slice(0, 5);
 };
 
@@ -165,14 +153,14 @@ const normalizeUploadedFiles = (applicant) => {
             return;
         }
 
-        const normalizedValue =
-            Array.isArray(candidate)
-                ? candidate.filter((value) =>
+        const normalizedValue = Array.isArray(candidate)
+            ? candidate.filter(
+                (value) =>
                     value !== undefined &&
                     value !== null &&
                     value !== ""
-                )
-                : candidate;
+            )
+            : candidate;
 
         uploadedFiles[fileKey] =
             field === "training_certificates" &&
@@ -338,13 +326,41 @@ const normalizeApplicant = (applicant) => {
         educationData: {
             educationList: education.map((item) => ({
                 ...item,
-                level: firstDefined(item.level, item.education_level, ""),
-                school_name: firstDefined(item.school_name, ""),
-                degree_course: firstDefined(item.degree_course, ""),
-                honors_awards: firstDefined(item.honors_awards, ""),
-                units: firstDefined(item.units, ""),
-                date_from: toDateInput(firstDefined(item.date_from, item.education_date_from, item.start_date)),
-                date_to: toDateInput(firstDefined(item.date_to, item.education_date_to, item.end_date))
+                level: firstDefined(
+                    item.level,
+                    item.education_level,
+                    ""
+                ),
+                school_name: firstDefined(
+                    item.school_name,
+                    ""
+                ),
+                degree_course: firstDefined(
+                    item.degree_course,
+                    ""
+                ),
+                honors_awards: firstDefined(
+                    item.honors_awards,
+                    ""
+                ),
+                units: firstDefined(
+                    item.units,
+                    ""
+                ),
+                date_from: toDateInput(
+                    firstDefined(
+                        item.date_from,
+                        item.education_date_from,
+                        item.start_date
+                    )
+                ),
+                date_to: toDateInput(
+                    firstDefined(
+                        item.date_to,
+                        item.education_date_to,
+                        item.end_date
+                    )
+                )
             }))
         },
 
@@ -362,10 +378,18 @@ const normalizeApplicant = (applicant) => {
                     ""
                 ),
                 date_from: toDateInput(
-                    firstDefined(item.date_from, item.training_date_from, item.start_date)
+                    firstDefined(
+                        item.date_from,
+                        item.training_date_from,
+                        item.start_date
+                    )
                 ),
                 date_to: toDateInput(
-                    firstDefined(item.date_to, item.training_date_to, item.end_date)
+                    firstDefined(
+                        item.date_to,
+                        item.training_date_to,
+                        item.end_date
+                    )
                 )
             }))
         },
@@ -373,10 +397,18 @@ const normalizeApplicant = (applicant) => {
         eligibilityData: eligibility.map((item) => ({
             ...item,
             date_of_exam: toDateInput(
-                firstDefined(item.date_of_exam, item.exam_date, item.date_taken)
+                firstDefined(
+                    item.date_of_exam,
+                    item.exam_date,
+                    item.date_taken
+                )
             ),
             validity_date: toDateInput(
-                firstDefined(item.validity_date, item.expiration_date, item.expiry_date)
+                firstDefined(
+                    item.validity_date,
+                    item.expiration_date,
+                    item.expiry_date
+                )
             )
         })),
 
@@ -453,7 +485,6 @@ const normalizeApplicant = (applicant) => {
     };
 };
 
-
 // ======================================================
 // EDIT APPLICANT MODAL
 // ======================================================
@@ -467,9 +498,9 @@ export default function ApplicantEditModal({
 }) {
     const [formData, setFormData] = useState(initialFormData);
     const [loading, setLoading] = useState(false);
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [successModal, setSuccessModal] = useState(false);
-    const [errorModalMessage, setErrorModalMessage] =
-        useState(null);
+    const [errorModalMessage, setErrorModalMessage] = useState(null);
 
     // ======================================================
     // LOAD APPLICANT DATA
@@ -478,6 +509,7 @@ export default function ApplicantEditModal({
     useEffect(() => {
         if (isOpen && applicant) {
             setFormData(normalizeApplicant(applicant));
+            setShowConfirmModal(false);
             setSuccessModal(false);
             setErrorModalMessage(null);
         }
@@ -498,16 +530,29 @@ export default function ApplicantEditModal({
             }
         }));
     };
-const handleApplicationChange = (name, value) => {
-        updateSection("applicationData", name, value);
+
+    const handleApplicationChange = (name, value) => {
+        updateSection(
+            "applicationData",
+            name,
+            value
+        );
     };
 
     const handleEducationChange = (name, value) => {
-        updateSection("educationData", name, value);
+        updateSection(
+            "educationData",
+            name,
+            value
+        );
     };
 
     const handleTrainingChange = (name, value) => {
-        updateSection("trainingData", name, value);
+        updateSection(
+            "trainingData",
+            name,
+            value
+        );
     };
 
     const handleEligibilityChange = (updatedList) => {
@@ -529,15 +574,27 @@ const handleApplicationChange = (name, value) => {
     };
 
     const handleDocumentChange = (name, value) => {
-        updateSection("documentData", name, value);
+        updateSection(
+            "documentData",
+            name,
+            value
+        );
     };
 
     const handleEqualOpportunityChange = (name, value) => {
-        updateSection("equalOpportunityData", name, value);
+        updateSection(
+            "equalOpportunityData",
+            name,
+            value
+        );
     };
 
     const handleHRRemarksChange = (name, value) => {
-        updateSection("hrRemarksData", name, value);
+        updateSection(
+            "hrRemarksData",
+            name,
+            value
+        );
     };
 
     // ======================================================
@@ -545,23 +602,39 @@ const handleApplicationChange = (name, value) => {
     // ======================================================
 
     const handleFileUpload = (field, file) => {
-        setFormData((prev) => ({
-            ...prev,
+        const fileKey =
+            `${field.replace(/^has_/, "")}_file`;
 
-            uploadedFiles: {
-                ...prev.uploadedFiles,
-                [`${field}_file`]: file
-            },
+        setFormData((prev) => {
+            const nextFile = Array.isArray(file)
+                ? [
+                    ...(Array.isArray(prev.uploadedFiles[fileKey])
+                        ? prev.uploadedFiles[fileKey]
+                        : prev.uploadedFiles[fileKey]
+                            ? [prev.uploadedFiles[fileKey]]
+                            : []),
+                    ...file
+                ]
+                : file;
 
-            documentData: {
-                ...prev.documentData,
-                [field]: Boolean(
-                    Array.isArray(file)
-                        ? file.length
-                        : file
-                )
-            }
-        }));
+            return {
+                ...prev,
+
+                uploadedFiles: {
+                    ...prev.uploadedFiles,
+                    [fileKey]: nextFile
+                },
+
+                documentData: {
+                    ...prev.documentData,
+                    [field]: Boolean(
+                        Array.isArray(nextFile)
+                            ? nextFile.length
+                            : nextFile
+                    )
+                }
+            };
+        });
     };
 
     // ======================================================
@@ -569,7 +642,8 @@ const handleApplicationChange = (name, value) => {
     // ======================================================
 
     const buildPayload = () => {
-        const applicationData = formData?.applicationData || {};
+        const applicationData =
+            formData?.applicationData || {};
 
         return {
             job_applications: {
@@ -594,19 +668,22 @@ const handleApplicationChange = (name, value) => {
                     formData.applicantData.firstName,
 
                 middle_name:
-                    formData.applicantData.middleName || null,
+                    formData.applicantData.middleName ||
+                    null,
 
                 last_name:
                     formData.applicantData.lastName,
 
                 suffix:
-                    formData.applicantData.suffix || null,
+                    formData.applicantData.suffix ||
+                    null,
 
                 sex:
                     formData.applicantData.sex,
 
                 date_of_birth:
-                    formData.applicantData.dob || null,
+                    formData.applicantData.dob ||
+                    null,
 
                 civil_status:
                     formData.applicantData.civilStatus,
@@ -618,7 +695,8 @@ const handleApplicationChange = (name, value) => {
                     formData.applicantData.address,
 
                 contact_number:
-                    formData.applicantData.contactNumber || null
+                    formData.applicantData.contactNumber ||
+                    null
             },
 
             document_checklist: {
@@ -648,11 +726,23 @@ const handleApplicationChange = (name, value) => {
     };
 
     // ======================================================
-    // SAVE APPLICANT
+    // SUBMIT - SHOW CONFIRMATION FIRST
     // ======================================================
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
+
+        if (loading) return;
+
+        setShowConfirmModal(true);
+    };
+
+    // ======================================================
+    // CONFIRM SAVE
+    // ======================================================
+
+    const handleConfirmSave = async () => {
+        setShowConfirmModal(false);
 
         const id =
             applicantId ||
@@ -678,18 +768,14 @@ const handleApplicationChange = (name, value) => {
                 formData.uploadedFiles
             );
 
-            if (
-                response?.success === false
-            ) {
+            if (response?.success === false) {
                 throw new Error(
                     response.message ||
                     "The applicant could not be updated."
                 );
             }
 
-            onUpdated?.();
-            onClose?.();
-
+            setSuccessModal(true);
         } catch (error) {
             console.error(
                 "Update applicant error:",
@@ -699,7 +785,7 @@ const handleApplicationChange = (name, value) => {
             setErrorModalMessage(
                 error?.response?.data?.message ||
                 error?.response?.data?.error ||
-                error.message ||
+                error?.message ||
                 "Failed to update applicant."
             );
         } finally {
@@ -745,7 +831,8 @@ const handleApplicationChange = (name, value) => {
                         className="flex min-h-0 flex-1 flex-col"
                     >
                         <div className="flex-1 space-y-6 overflow-y-auto p-4 sm:p-7">
-{/* EDUCATION */}
+
+                            {/* EDUCATION */}
                             <ApplicantEducationForm
                                 data={formData.educationData}
                                 onChange={handleEducationChange}
@@ -778,7 +865,7 @@ const handleApplicationChange = (name, value) => {
                             />
 
                             {/* DOCUMENT CHECKLIST */}
-                            <DocumentChecklist
+                            <EditableDocumentChecklist
                                 documents={formData.documentData}
                                 uploadedFiles={formData.uploadedFiles}
                                 onChange={handleDocumentChange}
@@ -790,7 +877,6 @@ const handleApplicationChange = (name, value) => {
                                 data={formData.hrRemarksData}
                                 onChange={handleHRRemarksChange}
                             />
-
                         </div>
 
                         {/* FOOTER BUTTONS */}
@@ -814,16 +900,29 @@ const handleApplicationChange = (name, value) => {
                                     ? "Saving Changes..."
                                     : "Save Changes"}
                             </button>
-
                         </div>
                     </form>
                 </div>
             </div>
 
+            {/* CONFIRMATION MODAL */}
+            <ActionModal
+                isOpen={showConfirmModal}
+                type="confirm"
+                title="Confirm Changes"
+                message="Are you sure you want to save the changes made to this applicant?"
+                onClose={() => {
+                    if (!loading) {
+                        setShowConfirmModal(false);
+                    }
+                }}
+                onConfirm={handleConfirmSave}
+            />
+
             {/* SUCCESS MODAL */}
             <ActionModal
                 isOpen={successModal}
-                type="confirm"
+                type="success"
                 title="Applicant Updated"
                 message="The applicant information has been updated successfully."
                 onClose={() => {
@@ -844,7 +943,9 @@ const handleApplicationChange = (name, value) => {
                 type="error"
                 title="Update Failed"
                 message={errorModalMessage}
-                onClose={() => setErrorModalMessage(null)}
+                onClose={() => {
+                    setErrorModalMessage(null);
+                }}
             />
         </>
     );

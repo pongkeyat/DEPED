@@ -12,6 +12,9 @@ const ASSESSMENT_QUALIFIED_GET =
 const ASSESSMENT_SUBMIT_POST =
     import.meta.env.VITE_ASSESSMENT_SUBMIT_POST;
 
+const ASSESSMENT_PANELIST_SUBMIT_POST =
+    import.meta.env.VITE_ASSESSMENT_CRITERIA_POSTPANELIST;
+
 const ASSESSMENT_OPTION_GET_BY_CRITERION =
     import.meta.env.VITE_ASSESSMENT_OPTION_GET_BY_CRITERION;
 
@@ -31,17 +34,13 @@ const ASSESSMENT_CRITERIA_GET =
 export const getQualifiedApplicantForAssessment = async (
     applicantId
 ) => {
-
     try {
-
         const response = await axios.get(
             `${ASSESSMENT_QUALIFIED_GET}/${applicantId}`
         );
 
         return response.data;
-
     } catch (error) {
-
         console.error(
             "Error fetching qualified applicant:",
             error.response?.data || error.message
@@ -61,18 +60,23 @@ export const getQualifiedApplicantForAssessment = async (
 |
 */
 
-export const getAssessmentCriteria = async (position = "", category = "") => {
-
+export const getAssessmentCriteria = async (
+    position = "",
+    category = ""
+) => {
     try {
-
-        const response = await axios.get(ASSESSMENT_CRITERIA_GET, {
-            params: { position, category },
-        });
+        const response = await axios.get(
+            ASSESSMENT_CRITERIA_GET,
+            {
+                params: {
+                    position,
+                    category,
+                },
+            }
+        );
 
         return response.data;
-
     } catch (error) {
-
         console.error(
             "Error fetching assessment criteria:",
             error.response?.data || error.message
@@ -96,23 +100,19 @@ export const getAssessmentCriteria = async (position = "", category = "") => {
 export const getAssessmentOptionsByCriterion = async (
     assessmentCriteriaId
 ) => {
-
     try {
-
         const response = await axios.get(
             ASSESSMENT_OPTION_GET_BY_CRITERION,
             {
                 params: {
                     assessment_criteria_id:
-                        assessmentCriteriaId
-                }
+                        assessmentCriteriaId,
+                },
             }
         );
 
         return response.data;
-
     } catch (error) {
-
         console.error(
             "Error fetching assessment options:",
             error.response?.data || error.message
@@ -125,30 +125,94 @@ export const getAssessmentOptionsByCriterion = async (
 
 /*
 |--------------------------------------------------------------------------
-| Submit Assessment
+| Submit Normal Assessment
 |--------------------------------------------------------------------------
 |
-| POST /api/assessment/submit
+| KEEPING YOUR EXISTING FUNCTION
 |
 */
 
 export const submitAssessment = async (
     assessmentData
 ) => {
-
     try {
-
         const response = await axios.post(
             ASSESSMENT_SUBMIT_POST,
             assessmentData
         );
 
         return response.data;
-
     } catch (error) {
-
         console.error(
             "Error submitting assessment:",
+            error.response?.data || error.message
+        );
+
+        throw error;
+    }
+};
+
+
+/*
+|--------------------------------------------------------------------------
+| Submit Panelist Assessment
+|--------------------------------------------------------------------------
+|
+| POST /api/scores/submitPanelistAssessment
+|
+| This is the NEW endpoint used by AssessmentScoring.jsx.
+|
+| Each panelist submits independently.
+|
+*/
+
+export const submitPanelistAssessment = async ({
+    applicant_id,
+    assessment_session_id,
+    scores,
+}) => {
+    try {
+        const response = await axios.post(
+            ASSESSMENT_PANELIST_SUBMIT_POST,
+            {
+                applicant_id,
+                assessment_session_id,
+                scores,
+            },
+            {
+                withCredentials: true,
+            }
+        );
+
+        return response.data;
+    } catch (error) {
+        console.error(
+            "Error submitting panelist assessment:",
+            error.response?.data || error.message
+        );
+
+        throw error;
+    }
+};
+
+export const getPanelistSubmittedApplicantIds = async (
+    assessmentSessionId
+) => {
+    try {
+        const response = await axios.get(
+            ASSESSMENT_PANELIST_SUBMIT_POST,
+            {
+                params: {
+                    assessment_session_id: assessmentSessionId,
+                },
+                withCredentials: true,
+            }
+        );
+
+        return response.data;
+    } catch (error) {
+        console.error(
+            "Error fetching panelist submission status:",
             error.response?.data || error.message
         );
 

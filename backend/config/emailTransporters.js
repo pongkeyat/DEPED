@@ -52,6 +52,7 @@ const verifyTransporter = (name, transporter) => {
 const transporters = {
     applications: createTransporter(),
     initialEvaluation: createTransporter(),
+    assessmentTransporter: createTransporter(),
     interviewSession: createTransporter(),
     userAccounts: createTransporter(),
     vacancies: createTransporter(),

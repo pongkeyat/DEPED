@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useLocation } from "react-router-dom";
+
 import StepProgress from "../components/applications/StepProgress";
 import ApplicantForm from "../components/applications/ApplicantForm";
 import Applications from "../components/applications/Applications";
@@ -11,6 +12,7 @@ import CivilServiceEligibilityForm from "../components/applications/CivilService
 import WorkExperienceForm from "../components/applications/WorkExperienceForm";
 import LandingPageApplicationHeader from "../components/applications/LandingpageApplicationHeader";
 import ActionModal from "../components/ActionModal";
+
 import { postApplications } from "../api/ApplicationApi";
 
 export default function LandingPageApplication({
@@ -63,17 +65,13 @@ export default function LandingPageApplication({
         .toISOString()
         .split("T")[0],
 
-      timeReceived: new Date().toLocaleTimeString(
-        [],
-        {
-          hour12: false,
-          hour: "2-digit",
-          minute: "2-digit",
-        }
-      ),
+      timeReceived: new Date().toLocaleTimeString([], {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
 
       receivedBy: "System Administrator",
-
       submissionType: "Walk-In",
     },
 
@@ -93,7 +91,6 @@ export default function LandingPageApplication({
     },
 
     eligibilityData: [],
-
     workExperienceData: [],
 
     documentData: {
@@ -122,6 +119,93 @@ export default function LandingPageApplication({
       is_indigenous_person: null,
     },
   });
+
+  // ============================================================
+  // RESET FORM
+  // ============================================================
+
+  const resetFormData = () => {
+    setFormData({
+      applicantData: {
+        lastName: "",
+        firstName: "",
+        middleName: "",
+        suffix: "",
+        sex: "",
+        dob: "",
+        civilStatus: "",
+        contactNumber: "",
+        email: "",
+        address: "",
+      },
+
+      applicationData: {
+        vacancy_id:
+          selectedJob?.vacancy_id ||
+          selectedJob?.id ||
+          "",
+
+        dateReceived: new Date()
+          .toISOString()
+          .split("T")[0],
+
+        timeReceived: new Date().toLocaleTimeString([], {
+          hour12: false,
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+
+        receivedBy: "System Administrator",
+        submissionType: "Walk-In",
+      },
+
+      educationData: {
+        educationList: [
+          {
+            level: "",
+            school_name: "",
+            degree_course: "",
+            honors_awards: "",
+          },
+        ],
+      },
+
+      trainingData: {
+        trainings: [],
+      },
+
+      eligibilityData: [],
+      workExperienceData: [],
+
+      documentData: {
+        has_application_letter: false,
+        has_omnibus_sworn_statement: false,
+        has_certificate_of_employment: false,
+        has_civil_service_eligibility_cert: false,
+        has_diploma: false,
+        has_medical_certificate: false,
+        has_nbi_clearance: false,
+        has_performance_rating: false,
+        has_personal_data_sheet: false,
+        has_prc_license_id: false,
+        has_training_certificates: false,
+        has_transcript_of_records: false,
+        has_voter_id_or_comelec_cert: false,
+        has_cert_of_outstanding_accomplishments: false,
+        has_marriage_certificate_psa: false,
+        has_latest_appointment: false,
+        has_service_record: false,
+      },
+
+      equalOpportunityData: {
+        is_pwd: null,
+        is_solo_parent: null,
+        is_indigenous_person: null,
+      },
+    });
+
+    setIsCertified(false);
+  };
 
   // ============================================================
   // FORM HANDLERS
@@ -227,9 +311,7 @@ export default function LandingPageApplication({
     return mandatoryDocs.every(
       (field) =>
         formData.documentData[field] === true &&
-        Boolean(
-          formData.documentData[`${field}_file`]
-        )
+        Boolean(formData.documentData[`${field}_file`])
     );
   };
 
@@ -361,21 +443,24 @@ export default function LandingPageApplication({
     // ==========================================================
 
     try {
-      const response =
-        await postApplications(payload);
+      const response = await postApplications(payload);
 
+      // Get generated application ticket
       setApplicationTicket(
         response?.data?.ticket || ""
       );
 
-      setSuccessModal(true);
+      // IMPORTANT:
+      // Clear all inputs only after successful submission
+      resetFormData();
 
+      // Show success modal
+      setSuccessModal(true);
     } catch (err) {
       setErrorModalMessage(
         err.response?.data?.message ||
           "An error occurred during submission."
       );
-
     } finally {
       setLoading(false);
     }
@@ -406,21 +491,18 @@ export default function LandingPageApplication({
 
   return (
     <div className="p-5 min-h-screen space-y-6 bg-gray-50 relative">
-
       <LandingPageApplicationHeader />
 
       <form
         onSubmit={handleSubmit}
         className="space-y-6 max-w-5xl mx-auto"
       >
-
         {/* ======================================================
             SELECTED JOB
         ====================================================== */}
 
         {selectedJob && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-
             <div className="bg-[#1a4480] text-white px-6 py-4">
               <h2 className="text-2xl font-bold tracking-wide">
                 {selectedJob.title}
@@ -432,19 +514,15 @@ export default function LandingPageApplication({
             </div>
 
             <div className="p-6 bg-white">
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
                 {/* POSITION INFORMATION */}
 
                 <div className="bg-sky-50/50 border border-sky-100 rounded-xl p-5">
-
                   <h3 className="font-bold text-gray-500 text-xs tracking-wider uppercase border-b border-sky-100/70 pb-2 mb-3">
                     POSITION INFORMATION
                   </h3>
 
                   <div className="space-y-3.5 text-sm text-gray-700">
-
                     <div className="grid grid-cols-3">
                       <span className="text-gray-400">
                         Position Title:
@@ -501,7 +579,6 @@ export default function LandingPageApplication({
                       </span>
 
                       <span className="col-span-2 font-semibold">
-
                         {isJobOpen(selectedJob.deadline) ? (
                           <span className="text-green-600">
                             {selectedJob.deadline}{" "}
@@ -517,24 +594,19 @@ export default function LandingPageApplication({
                             </span>
                           </span>
                         )}
-
                       </span>
                     </div>
-
                   </div>
                 </div>
-
 
                 {/* QUALIFICATION STANDARDS */}
 
                 <div className="bg-emerald-50/30 border border-emerald-100 rounded-xl p-5">
-
                   <h3 className="font-bold text-gray-500 text-xs tracking-wider uppercase border-b border-emerald-100/70 pb-2 mb-3">
                     QUALIFICATION STANDARDS
                   </h3>
 
                   <div className="space-y-4 text-sm text-gray-700">
-
                     <div>
                       <p className="text-gray-400 text-xs mb-0.5">
                         Education:
@@ -574,17 +646,13 @@ export default function LandingPageApplication({
                         {selectedJob.eligibility}
                       </p>
                     </div>
-
                   </div>
                 </div>
-
               </div>
-
 
               {/* REMARKS */}
 
               <div className="mt-6 bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-2.5 text-sm text-amber-900">
-
                 <span className="bg-amber-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
                   i
                 </span>
@@ -597,13 +665,10 @@ export default function LandingPageApplication({
                   {selectedJob.remarksText ||
                     "No additional instructions provided."}
                 </p>
-
               </div>
-
             </div>
 
             <div className="bg-gray-50 px-6 py-3 border-t border-gray-100 flex items-center gap-2 text-xs text-gray-500">
-
               <span className="border border-gray-300 text-gray-400 rounded-full w-4 h-4 flex items-center justify-center text-[10px]">
                 i
               </span>
@@ -611,12 +676,9 @@ export default function LandingPageApplication({
               <span>
                 Submit application at the HR Office, La Union SDO
               </span>
-
             </div>
-
           </div>
         )}
-
 
         {/* ======================================================
             APPLICATION
@@ -628,7 +690,6 @@ export default function LandingPageApplication({
           submissionType="Online"
         />
 
-
         {/* ======================================================
             APPLICANT
         ====================================================== */}
@@ -637,7 +698,6 @@ export default function LandingPageApplication({
           formData={formData.applicantData}
           onChange={handleApplicantChange}
         />
-
 
         {/* ======================================================
             EDUCATION
@@ -648,7 +708,6 @@ export default function LandingPageApplication({
           onChange={handleEducationChange}
         />
 
-
         {/* ======================================================
             TRAINING
         ====================================================== */}
@@ -657,7 +716,6 @@ export default function LandingPageApplication({
           trainings={formData.trainingData.trainings}
           onChange={handleTrainingChange}
         />
-
 
         {/* ======================================================
             ELIGIBILITY
@@ -668,7 +726,6 @@ export default function LandingPageApplication({
           onChange={handleEligibilityChange}
         />
 
-
         {/* ======================================================
             WORK EXPERIENCE
         ====================================================== */}
@@ -678,7 +735,6 @@ export default function LandingPageApplication({
           onChange={handleWorkExperienceChange}
         />
 
-
         {/* ======================================================
             EQUAL OPPORTUNITY
         ====================================================== */}
@@ -687,7 +743,6 @@ export default function LandingPageApplication({
           data={formData.equalOpportunityData}
           onChange={handleEqualOpportunityChange}
         />
-
 
         {/* ======================================================
             DOCUMENTS
@@ -699,17 +754,12 @@ export default function LandingPageApplication({
           onFileUpload={handleFileUpload}
         />
 
-
         {/* ======================================================
             CERTIFICATION
         ====================================================== */}
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-
-          {/* Certification Header */}
-
           <div className="bg-[#1a4480] text-white px-6 py-4">
-
             <h2 className="text-lg font-bold tracking-wide">
               CERTIFICATION
             </h2>
@@ -717,23 +767,15 @@ export default function LandingPageApplication({
             <p className="text-slate-200 text-xs mt-1">
               Applicant Certification and Declaration
             </p>
-
           </div>
 
-
-          {/* Certification Content */}
-
           <div className="p-6">
-
             <label className="flex items-start gap-3 cursor-pointer select-none">
-
               <input
                 type="checkbox"
                 checked={isCertified}
                 onChange={(e) =>
-                  setIsCertified(
-                    e.target.checked
-                  )
+                  setIsCertified(e.target.checked)
                 }
                 className="
                   mt-1
@@ -756,45 +798,30 @@ export default function LandingPageApplication({
                 that any false or misleading information may result
                 in the disqualification of my application.
               </span>
-
             </label>
-
-
-            {/* Certification Warning */}
 
             {!isCertified && (
               <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-
                 <p className="text-xs font-medium text-amber-700">
                   ⚠️ Please read and check the certification box
                   before submitting your application.
                 </p>
-
               </div>
             )}
-
           </div>
-
         </div>
-
 
         {/* ======================================================
             SUBMIT SECTION
         ====================================================== */}
 
         <div className="flex flex-col items-end space-y-2 pt-2">
-
-          {/* Document Warning */}
-
           {!isDocumentChecklistValid() && (
             <p className="w-full text-right text-xs text-amber-600 font-medium">
               ⚠️ Please attach and check all required documents
               before submitting.
             </p>
           )}
-
-
-          {/* Submit Button */}
 
           <button
             type="submit"
@@ -809,11 +836,8 @@ export default function LandingPageApplication({
               ? "Submitting..."
               : "Submit Application"}
           </button>
-
         </div>
-
       </form>
-
 
       {/* ========================================================
           SUCCESS MODAL
@@ -828,14 +852,9 @@ export default function LandingPageApplication({
             ? `Application submitted successfully!\nApplication Ticket: ${applicationTicket}`
             : "Application submitted successfully, but the application ticket was not returned. Please contact the HR Office."
         }
-        onClose={() =>
-          setSuccessModal(false)
-        }
-        onConfirm={() =>
-          setSuccessModal(false)
-        }
+        onClose={() => setSuccessModal(false)}
+        onConfirm={() => setSuccessModal(false)}
       />
-
 
       {/* ========================================================
           ERROR MODAL
@@ -846,11 +865,8 @@ export default function LandingPageApplication({
         type="error"
         title="Submission Failed"
         message={errorModalMessage}
-        onClose={() =>
-          setErrorModalMessage(null)
-        }
+        onClose={() => setErrorModalMessage(null)}
       />
-
     </div>
   );
 }

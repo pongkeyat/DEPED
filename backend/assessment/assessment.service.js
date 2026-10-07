@@ -13,6 +13,34 @@ const normalize = (value) => {
         .toUpperCase();
 };
 
+const getAssessmentTypeFromCategory = (category) => {
+    switch (normalize(category)) {
+        case "TEACHING":
+        case "TEACHING POSITIONS":
+            return "TEACHING";
+
+        case "RELATED TEACHING":
+        case "RELATED-TEACHING":
+        case "RELATED TEACHING POSITIONS":
+        case "RELATED-TEACHING POSITIONS":
+            return "RELATED_TEACHING";
+
+        case "SCHOOL ADMINISTRATION":
+        case "SCHOOL ADMINISTRATION POSITION":
+        case "SCHOOL ADMINISTRATION POSITIONS":
+            return "SCHOOL_ADMINISTRATION";
+
+        case "NON-TEACHING":
+        case "NON TEACHING":
+        case "NON-TEACHING POSITIONS":
+        case "NON TEACHING POSITIONS":
+            return "NON_TEACHING";
+
+        default:
+            return "";
+    }
+};
+
 
 /*
 |--------------------------------------------------------------------------
@@ -1859,4 +1887,1159 @@ export const submitAssessment = async (
 
     }
 
+};
+
+
+
+
+
+export const submitPanelistAssessment = async ({
+    applicant_id,
+    assessment_session_id,
+    scored_by_user_id,
+    scores,
+}) => {
+    const client = await pool.connect();
+
+    try {
+        await client.query("BEGIN");
+
+        // ========================================================
+        // 1. BASIC VALIDATION
+        // ========================================================
+
+        if (!applicant_id) {
+            throw new Error("APPLICANT_ID_REQUIRED");
+        }
+
+        if (!assessment_session_id) {
+            throw new Error("ASSESSMENT_SESSION_REQUIRED");
+        }
+
+        if (
+            !scored_by_user_id ||
+            !Number.isInteger(
+                Number(scored_by_user_id)
+            )
+        ) {
+            throw new Error("PANELIST_ID_REQUIRED");
+        }
+
+        if (
+            !Array.isArray(scores) ||
+            scores.length === 0
+        ) {
+            throw new Error("INVALID_SCORES");
+        }
+
+        const userId =
+            Number(scored_by_user_id);
+
+        const sessionId =
+            String(
+                assessment_session_id
+            ).trim();
+
+        // ========================================================
+        // 2. VERIFY PANELIST IS ASSIGNED TO THIS SESSION
+        // ========================================================
+
+        const panelistResult =
+            await client.query(
+                `
+                SELECT
+                    asp.id,
+                    asp.assessment_session_id,
+                    asp.user_id,
+                    u.first_name,
+                    u.last_name,
+                    u.role,
+                    u.is_archived
+                FROM assessment_session_panel_members asp
+                INNER JOIN users u
+                    ON u.id = asp.user_id
+                WHERE asp.assessment_session_id = $1
+                  AND asp.user_id = $2
+                  AND LOWER(TRIM(u.role)) = 'hrmpsb'
+                  AND COALESCE(
+                        u.is_archived,
+                        false
+                      ) = false
+                LIMIT 1
+                `,
+                [
+                    sessionId,
+                    userId,
+                ]
+            );
+
+        if (
+            panelistResult.rows.length === 0
+        ) {
+            throw new Error(
+                "PANELIST_NOT_ASSIGNED"
+            );
+        }
+
+        const panelist =
+            panelistResult.rows[0];
+
+        console.log(
+            `Panelist verified: ${panelist.first_name} ${panelist.last_name} (${userId})`
+        );
+
+        // ========================================================
+        // 3. VERIFY ASSESSMENT SESSION EXISTS
+        // ========================================================
+
+        const sessionResult =
+            await client.query(
+                `
+                SELECT
+                    assessment_session_id
+                FROM assessment_sessions
+                WHERE assessment_session_id = $1
+                LIMIT 1
+                `,
+                [
+                    sessionId,
+                ]
+            );
+
+        if (
+            sessionResult.rows.length === 0
+        ) {
+            throw new Error(
+                "ASSESSMENT_SESSION_NOT_FOUND"
+            );
+        }
+
+        // ========================================================
+        // 4. VERIFY APPLICANT BELONGS TO THIS SESSION
+        // ========================================================
+
+        const applicantSessionResult =
+            await client.query(
+                `
+                SELECT
+                    interview_sessions.assessment_session_id,
+                    interview_sessions.job_applications_id,
+                    applicant_information.applicant_id
+                FROM interview_sessions
+                INNER JOIN applicant_information
+                    ON applicant_information.job_applications_id =
+                       interview_sessions.job_applications_id
+                WHERE interview_sessions.assessment_session_id = $1
+                  AND applicant_information.applicant_id = $2
+                LIMIT 1
+                `,
+                [
+                    sessionId,
+                    applicant_id,
+                ]
+            );
+
+        if (
+            applicantSessionResult.rows.length === 0
+        ) {
+            throw new Error(
+                "APPLICANT_NOT_IN_SESSION"
+            );
+        }
+
+        // ========================================================
+        // 5. GET APPLICANT CATEGORY
+        // ========================================================
+        //
+        // IMPORTANT:
+        // The category comes from the applicant's position.
+        //
+        // applicant
+        //    ↓
+        // job application
+        //    ↓
+        // vacancy
+        //    ↓
+        // position
+        //    ↓
+        // category
+        //
+        // ========================================================
+
+        const applicantCategoryResult =
+            await client.query(
+                `
+                SELECT
+                    ai.applicant_id,
+                    ai.job_applications_id,
+
+                    ja.vacancy_id,
+
+                    v.position_id,
+                    v.position_title AS vacancy_position_title,
+
+                    p.position_title AS actual_position_title,
+                    p.category,
+                    p.salary_grade,
+                    screening.screening_id,
+                    screening.education_points,
+                    screening.training_points,
+                    screening.experience_points
+
+                FROM applicant_information ai
+
+                INNER JOIN job_applications ja
+                    ON ja.job_applications_id =
+                       ai.job_applications_id
+
+                INNER JOIN vacancies v
+                    ON v.vacancy_id =
+                       ja.vacancy_id
+
+                INNER JOIN positions p
+                    ON p.position_id =
+                       v.position_id
+
+                LEFT JOIN LATERAL (
+                    SELECT
+                        ins.screening_id,
+                        ins.education_points,
+                        ins.training_points,
+                        ins.experience_points
+                    FROM initial_screening ins
+                    WHERE ins.job_applications_id =
+                          ai.job_applications_id
+                      AND UPPER(TRIM(ins.overall_result)) =
+                          'QUALIFIED'
+                    ORDER BY ins.screening_id DESC
+                    LIMIT 1
+                ) screening ON TRUE
+
+                WHERE ai.applicant_id = $1
+
+                LIMIT 1
+                `,
+                [
+                    applicant_id,
+                ]
+            );
+
+        if (
+            applicantCategoryResult.rows.length === 0
+        ) {
+            throw new Error(
+                "APPLICANT_CATEGORY_NOT_FOUND"
+            );
+        }
+
+        const applicant =
+            applicantCategoryResult.rows[0];
+
+        const rawCategory =
+            applicant.category || "";
+
+        // ========================================================
+        // 6. DETERMINE ASSESSMENT TYPE
+        // ========================================================
+
+        const assessmentType =
+            getAssessmentTypeFromCategory(
+                rawCategory
+            );
+
+        console.log(
+            "=============================================="
+        );
+
+        console.log(
+            "PANELIST ASSESSMENT CATEGORY"
+        );
+
+        console.log(
+            "Applicant:",
+            applicant_id
+        );
+
+        console.log(
+            "Position:",
+            applicant.actual_position_title ||
+                applicant.vacancy_position_title
+        );
+
+        console.log(
+            "Raw Category:",
+            rawCategory
+        );
+
+        console.log(
+            "Assessment Type:",
+            assessmentType
+        );
+
+        console.log(
+            "=============================================="
+        );
+
+        // ========================================================
+        // 7. DO NOT SILENTLY DEFAULT TO NON-TEACHING
+        // ========================================================
+
+        if (!assessmentType) {
+            console.error(
+                "UNKNOWN APPLICANT CATEGORY",
+                {
+                    applicant_id,
+                    position_id:
+                        applicant.position_id,
+                    position_title:
+                        applicant.actual_position_title ||
+                        applicant.vacancy_position_title,
+                    rawCategory,
+                }
+            );
+
+            throw new Error(
+                `UNKNOWN_APPLICANT_CATEGORY: ${rawCategory}`
+            );
+        }
+
+        // ========================================================
+        // 8. PREVENT DUPLICATE CRITERIA IN SUBMISSION
+        // ========================================================
+
+        const submittedCriteriaIds =
+            new Set();
+
+        for (const item of scores) {
+            const criterionId =
+                Number(
+                    item.assessment_criteria_id
+                );
+
+            if (
+                !Number.isInteger(
+                    criterionId
+                ) ||
+                criterionId <= 0
+            ) {
+                throw new Error(
+                    "INVALID_ASSESSMENT_CRITERIA_ID"
+                );
+            }
+
+            if (
+                submittedCriteriaIds.has(
+                    criterionId
+                )
+            ) {
+                throw new Error(
+                    "DUPLICATE_ASSESSMENT_CRITERIA"
+                );
+            }
+
+            submittedCriteriaIds.add(
+                criterionId
+            );
+        }
+
+        // ========================================================
+        // 9. GET CRITERIA FOR THE CORRECT CATEGORY
+        // ========================================================
+
+        const requiredCriteriaResult =
+            await client.query(
+                `
+                SELECT
+                    assessment_criteria_id,
+                    criterion_name,
+                    max_points,
+                    is_manual,
+                    assessment_type,
+                    is_active
+                FROM assessment_criteria
+                WHERE is_active = TRUE
+                  AND UPPER(
+                        TRIM(assessment_type)
+                      ) = $1
+                ORDER BY
+                    assessment_criteria_id ASC
+                `,
+                [
+                    assessmentType,
+                ]
+            );
+
+        const criteriaRows =
+            requiredCriteriaResult.rows;
+
+        const requiredCriteriaIds =
+            criteriaRows.map(
+                (row) =>
+                    Number(
+                        row.assessment_criteria_id
+                    )
+            );
+
+        if (
+            requiredCriteriaIds.length === 0
+        ) {
+            throw new Error(
+                `NO_ACTIVE_CRITERIA_FOR_${assessmentType}`
+            );
+        }
+
+        console.log(
+            `Required criteria for ${assessmentType}:`,
+            requiredCriteriaIds
+        );
+
+        console.log(
+            "Required criteria details:",
+            criteriaRows.map(
+                (row) => ({
+                    id: Number(
+                        row.assessment_criteria_id
+                    ),
+                    name: row.criterion_name,
+                    max: Number(
+                        row.max_points || 0
+                    ),
+                    type:
+                        row.assessment_type,
+                    manual:
+                        Boolean(
+                            row.is_manual
+                        ),
+                })
+            )
+        );
+
+        // ========================================================
+        // 10. MAKE SURE SUBMITTED CRITERIA BELONG TO THIS
+        //     APPLICANT'S ASSESSMENT CATEGORY
+        // ========================================================
+
+        const requiredCriteriaSet =
+            new Set(
+                requiredCriteriaIds
+            );
+
+        for (
+            const criterionId
+            of submittedCriteriaIds
+        ) {
+            if (
+                !requiredCriteriaSet.has(
+                    criterionId
+                )
+            ) {
+                console.error(
+                    "INVALID CATEGORY CRITERION",
+                    {
+                        applicant_id,
+                        assessmentType,
+                        submittedCriterionId:
+                            criterionId,
+                        requiredCriteria:
+                            requiredCriteriaIds,
+                    }
+                );
+
+                throw new Error(
+                    "ASSESSMENT_CRITERION_DOES_NOT_BELONG_TO_POSITION"
+                );
+            }
+        }
+
+        // ========================================================
+        // 11. SAVE / UPDATE EACH PANELIST SCORE
+        // ========================================================
+
+        for (const item of scores) {
+            const criterionId =
+                Number(
+                    item.assessment_criteria_id
+                );
+
+            const optionId =
+                item.assessment_option_id
+                    ? Number(
+                        item.assessment_option_id
+                    )
+                    : null;
+
+            let score =
+                Number(item.score);
+
+            const remarks =
+                item.remarks !== undefined &&
+                item.remarks !== null &&
+                String(
+                    item.remarks
+                ).trim() !== ""
+                    ? String(
+                        item.remarks
+                    ).trim()
+                    : null;
+
+            // ====================================================
+            // GET CRITERION
+            // ====================================================
+
+            const criterionResult =
+                await client.query(
+                    `
+                    SELECT
+                        assessment_criteria_id,
+                        criterion_name,
+                        max_points,
+                        is_manual,
+                        assessment_type
+                    FROM assessment_criteria
+                    WHERE assessment_criteria_id = $1
+                      AND is_active = TRUE
+                    LIMIT 1
+                    `,
+                    [
+                        criterionId,
+                    ]
+                );
+
+            if (
+                criterionResult.rows.length === 0
+            ) {
+                throw new Error(
+                    `ASSESSMENT_CRITERIA_NOT_FOUND_${criterionId}`
+                );
+            }
+
+            const criterion =
+                criterionResult.rows[0];
+
+            const criterionName =
+                normalize(criterion.criterion_name);
+            const isIntegratedScreeningCriterion =
+                (
+                    assessmentType === "RELATED_TEACHING" ||
+                    assessmentType === "SCHOOL_ADMINISTRATION"
+                ) &&
+                (
+                    criterionName === "EDUCATION" ||
+                    criterionName === "TRAINING" ||
+                    criterionName === "EXPERIENCE"
+                );
+
+            if (isIntegratedScreeningCriterion) {
+                if (!applicant.screening_id) {
+                    throw new Error(
+                        "APPLICANT_INITIAL_SCREENING_NOT_FOUND"
+                    );
+                }
+
+                const screeningScoreByCriterion = {
+                    EDUCATION: applicant.education_points,
+                    TRAINING: applicant.training_points,
+                    EXPERIENCE: applicant.experience_points,
+                };
+                const screeningScore = Number(
+                    screeningScoreByCriterion[criterionName] ?? 0
+                );
+                const expectedScore =
+                    assessmentType === "SCHOOL_ADMINISTRATION" &&
+                    criterionName === "EXPERIENCE"
+                        ? Math.min(screeningScore, 10)
+                        : screeningScore;
+
+                if (
+                    !Number.isFinite(expectedScore) ||
+                    Math.abs(score - expectedScore) > 1e-9
+                ) {
+                    throw new Error(
+                        `INVALID_INITIAL_SCREENING_SCORE_${criterionId}`
+                    );
+                }
+
+                score = expectedScore;
+            }
+
+            // ====================================================
+            // MAKE SURE CRITERION BELONGS TO ASSESSMENT TYPE
+            // ====================================================
+
+            const criterionAssessmentType =
+                String(
+                    criterion.assessment_type ||
+                        ""
+                )
+                    .trim()
+                    .toUpperCase();
+
+            if (
+                criterionAssessmentType !==
+                assessmentType
+            ) {
+                console.error(
+                    "CRITERION CATEGORY MISMATCH",
+                    {
+                        applicant_id,
+                        assessmentType,
+                        criterionId,
+                        criterionAssessmentType,
+                        criterionName:
+                            criterion.criterion_name,
+                    }
+                );
+
+                throw new Error(
+                    `CRITERION_CATEGORY_MISMATCH_${criterionId}`
+                );
+            }
+
+            // ====================================================
+            // VALIDATE SCORE
+            // ====================================================
+
+            if (
+                !Number.isFinite(score)
+            ) {
+                throw new Error(
+                    `INVALID_SCORE_FOR_CRITERION_${criterionId}`
+                );
+            }
+
+            const maxPoints =
+                Number(
+                    criterion.max_points
+                );
+
+            if (
+                score < 0 ||
+                score > maxPoints
+            ) {
+                throw new Error(
+                    `INVALID_SCORE_FOR_CRITERION_${criterionId}`
+                );
+            }
+
+            // ====================================================
+            // VALIDATE OPTION
+            // ====================================================
+
+            if (
+                !criterion.is_manual &&
+                !isIntegratedScreeningCriterion
+            ) {
+                if (!optionId) {
+                    throw new Error(
+                        `ASSESSMENT_OPTION_REQUIRED_${criterionId}`
+                    );
+                }
+
+                const optionResult =
+                    await client.query(
+                        `
+                        SELECT
+                            assessment_option_id,
+                            assessment_criteria_id,
+                            option_label,
+                            points,
+                            is_active
+                        FROM assessment_options
+                        WHERE assessment_option_id = $1
+                          AND assessment_criteria_id = $2
+                          AND is_active = TRUE
+                        LIMIT 1
+                        `,
+                        [
+                            optionId,
+                            criterionId,
+                        ]
+                    );
+
+                if (
+                    optionResult.rows.length === 0
+                ) {
+                    throw new Error(
+                        `INVALID_ASSESSMENT_OPTION_${criterionId}`
+                    );
+                }
+
+                const option =
+                    optionResult.rows[0];
+
+                const optionPoints =
+                    Number(
+                        option.points
+                    );
+
+                if (
+                    optionPoints !==
+                    score
+                ) {
+                    throw new Error(
+                        `OPTION_SCORE_MISMATCH_${criterionId}`
+                    );
+                }
+            }
+
+            // ====================================================
+            // INSERT / UPDATE
+            // ====================================================
+            //
+            // Existing scores are NOT duplicated.
+            //
+            // Same:
+            // applicant
+            // criterion
+            // session
+            // panelist
+            //
+            // = UPDATE
+            //
+            // ====================================================
+
+            await client.query(
+                `
+                INSERT INTO assessment_scores (
+                    applicant_id,
+                    assessment_criteria_id,
+                    assessment_option_id,
+                    score,
+                    remarks,
+                    scored_by,
+                    scored_by_user_id,
+                    assessment_session_id
+                )
+                VALUES (
+                    $1,
+                    $2,
+                    $3,
+                    $4,
+                    $5,
+                    $6,
+                    $7,
+                    $8
+                )
+                ON CONFLICT (
+                    applicant_id,
+                    assessment_criteria_id,
+                    assessment_session_id,
+                    scored_by_user_id
+                )
+                DO UPDATE SET
+                    assessment_option_id =
+                        EXCLUDED.assessment_option_id,
+
+                    score =
+                        EXCLUDED.score,
+
+                    remarks =
+                        EXCLUDED.remarks,
+
+                    scored_by =
+                        EXCLUDED.scored_by,
+
+                    updated_at =
+                        CURRENT_TIMESTAMP
+                `,
+                [
+                    applicant_id,
+
+                    criterionId,
+
+                    optionId,
+
+                    score,
+
+                    remarks,
+
+                    `${panelist.first_name || ""} ${
+                        panelist.last_name || ""
+                    }`.trim() ||
+                        `USER-${userId}`,
+
+                    userId,
+
+                    sessionId,
+                ]
+            );
+        }
+
+        // ========================================================
+        // 12. GET ALL ASSIGNED PANELISTS
+        // ========================================================
+
+        const panelistsResult =
+            await client.query(
+                `
+                SELECT
+                    asp.user_id,
+                    u.first_name,
+                    u.last_name
+                FROM assessment_session_panel_members asp
+                INNER JOIN users u
+                    ON u.id = asp.user_id
+                WHERE asp.assessment_session_id = $1
+                  AND COALESCE(
+                        u.is_archived,
+                        false
+                      ) = false
+                ORDER BY
+                    asp.user_id
+                `,
+                [
+                    sessionId,
+                ]
+            );
+
+        const panelists =
+            panelistsResult.rows.map(
+                (row) =>
+                    Number(
+                        row.user_id
+                    )
+            );
+
+        const totalPanelists =
+            panelists.length;
+
+        // ========================================================
+        // 13. REQUIRE AT LEAST TWO PANELISTS
+        // ========================================================
+
+        if (
+            totalPanelists < 2
+        ) {
+            throw new Error(
+                "MINIMUM_TWO_PANELISTS_REQUIRED"
+            );
+        }
+
+        console.log(
+            `Assessment session ${sessionId} has ${totalPanelists} panelists`
+        );
+
+        // ========================================================
+        // 14. CHECK CURRENT PANELIST COMPLETION
+        // ========================================================
+
+        const thisPanelistCompletionResult =
+            await client.query(
+                `
+                SELECT
+                    COUNT(
+                        DISTINCT assessment_criteria_id
+                    ) AS criteria_count
+
+                FROM assessment_scores
+
+                WHERE applicant_id = $1
+                  AND assessment_session_id = $2
+                  AND scored_by_user_id = $3
+                  AND assessment_criteria_id =
+                      ANY($4::integer[])
+                `,
+                [
+                    applicant_id,
+
+                    sessionId,
+
+                    userId,
+
+                    requiredCriteriaIds,
+                ]
+            );
+
+        const thisPanelistCriteriaCount =
+            Number(
+                thisPanelistCompletionResult
+                    .rows[0]
+                    ?.criteria_count || 0
+            );
+
+        const panelistCompleted =
+            thisPanelistCriteriaCount >=
+            requiredCriteriaIds.length;
+
+        console.log(
+            `Panelist ${userId}: ${thisPanelistCriteriaCount}/${requiredCriteriaIds.length} criteria`
+        );
+
+        // ========================================================
+        // 15. CHECK ALL PANELISTS
+        // ========================================================
+
+        const panelistCompletionResult =
+            await client.query(
+                `
+                SELECT
+                    scored_by_user_id,
+
+                    COUNT(
+                        DISTINCT assessment_criteria_id
+                    ) AS criteria_count
+
+                FROM assessment_scores
+
+                WHERE applicant_id = $1
+                  AND assessment_session_id = $2
+
+                  AND scored_by_user_id =
+                      ANY($3::integer[])
+
+                  AND assessment_criteria_id =
+                      ANY($4::integer[])
+
+                GROUP BY
+                    scored_by_user_id
+                `,
+                [
+                    applicant_id,
+
+                    sessionId,
+
+                    panelists,
+
+                    requiredCriteriaIds,
+                ]
+            );
+
+        const completedPanelists =
+            panelistCompletionResult.rows
+                .filter(
+                    (row) =>
+                        Number(
+                            row.criteria_count
+                        ) >=
+                        requiredCriteriaIds.length
+                )
+                .map(
+                    (row) =>
+                        Number(
+                            row.scored_by_user_id
+                        )
+                );
+
+        const submittedCount =
+            completedPanelists.length;
+
+        const allCompleted =
+            submittedCount ===
+            totalPanelists;
+
+        console.log(
+            `Panelist completion: ${submittedCount}/${totalPanelists}`
+        );
+
+        console.log(
+            "Completed panelists:",
+            completedPanelists
+        );
+
+        // ========================================================
+        // 16. FINAL AVERAGE
+        // ========================================================
+
+        let finalAverage = null;
+
+        if (allCompleted) {
+            // ====================================================
+            // IMPORTANT
+            // ====================================================
+            //
+            // Average each criterion across all panelists first.
+            //
+            // Example:
+            //
+            // Panelist 1:
+            // Education = 10
+            // Training = 35
+            // Experience = 25
+            //
+            // Panelist 2:
+            // Education = 10
+            // Training = 35
+            // Experience = 25
+            //
+            // Criterion averages:
+            //
+            // Education  = AVG(10,10) = 10
+            // Training   = AVG(35,35) = 35
+            // Experience = AVG(25,25) = 25
+            //
+            // Final:
+            //
+            // 10 + 35 + 25 = 70
+            //
+            // NOT:
+            //
+            // 70 + 70 = 140
+            //
+            // ====================================================
+
+            const averageResult =
+                await client.query(
+                    `
+                    SELECT
+                        SUM(
+                            criterion_average
+                        ) AS final_average
+
+                    FROM (
+                        SELECT
+                            assessment_criteria_id,
+
+                            AVG(score)
+                                AS criterion_average
+
+                        FROM assessment_scores
+
+                        WHERE applicant_id = $1
+                          AND assessment_session_id = $2
+
+                          AND scored_by_user_id =
+                              ANY($3::integer[])
+
+                          AND assessment_criteria_id =
+                              ANY($4::integer[])
+
+                        GROUP BY
+                            assessment_criteria_id
+
+                    ) averaged_criteria
+                    `,
+                    [
+                        applicant_id,
+
+                        sessionId,
+
+                        panelists,
+
+                        requiredCriteriaIds,
+                    ]
+                );
+
+            finalAverage =
+                Number(
+                    Number(
+                        averageResult
+                            .rows[0]
+                            ?.final_average || 0
+                    ).toFixed(2)
+                );
+
+            console.log(
+                "=============================================="
+            );
+
+            console.log(
+                `FINAL AVERAGE FOR APPLICANT ${applicant_id}:`,
+                finalAverage
+            );
+
+            console.log(
+                "=============================================="
+            );
+
+            // ====================================================
+            // 17. MARK APPLICANT AS READY FOR RANKING
+            // ====================================================
+            //
+            // Only after EVERY assigned panelist has completed.
+            //
+            // ====================================================
+
+            const rankUpdateResult =
+                await client.query(
+                    `
+                    UPDATE hr_remarks_final_notes
+
+                    SET
+                        application_status = 'rank',
+                        updated_at =
+                            CURRENT_TIMESTAMP
+
+                    WHERE applicant_id = $1
+
+                    RETURNING
+                        applicant_id,
+                        application_status
+                    `,
+                    [
+                        applicant_id,
+                    ]
+                );
+
+            console.log(
+                "Ranking status update:",
+                rankUpdateResult.rows
+            );
+        }
+
+        // ========================================================
+        // 18. COMMIT
+        // ========================================================
+
+        await client.query(
+            "COMMIT"
+        );
+
+        // ========================================================
+        // 19. RETURN
+        // ========================================================
+
+        return {
+            success: true,
+
+            applicant_id,
+
+            assessment_session_id:
+                sessionId,
+
+            panelist_user_id:
+                userId,
+
+            assessment_type:
+                assessmentType,
+
+            panelist_completed:
+                panelistCompleted,
+
+            total_panelists:
+                totalPanelists,
+
+            submitted_panelists:
+                submittedCount,
+
+            completed_panelists:
+                completedPanelists,
+
+            remaining_panelists:
+                totalPanelists -
+                submittedCount,
+
+            finalized:
+                allCompleted,
+
+            final_average:
+                finalAverage,
+        };
+    } catch (error) {
+        // ========================================================
+        // ROLLBACK
+        // ========================================================
+
+        await client.query(
+            "ROLLBACK"
+        );
+
+        console.error(
+            "submitPanelistAssessment ERROR:",
+            error
+        );
+
+        throw error;
+    } finally {
+        client.release();
+    }
 };

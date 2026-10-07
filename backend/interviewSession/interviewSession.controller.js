@@ -18,221 +18,216 @@ export const postInterviewSession = async (req, res) => {
         selectedApplicants,
         session_date,
         venue,
-        panelists,
+        panelUserIds,
         remarks
-    } = req.body;
+    } = req.body || {};
 
-    // ============================================================
-    // 1. VALIDATION
-    // ============================================================
-
-    if (
-        !vacancy_id ||
-        !session_date ||
-        !venue ||
-        !panelists
-    ) {
+    // 1. Validate required fields
+    if (!vacancy_id || !session_date || !venue) {
         return res.status(400).json({
-            error:
-                "Vacancy ID, Session Date, Venue, and Panelists are required."
+            error: "Vacancy ID, Session Date, and Venue are required."
         });
     }
 
+    if (!Array.isArray(selectedApplicants) || selectedApplicants.length === 0) {
+        return res.status(400).json({
+            error: "At least one job applicant must be selected."
+        });
+    }
+
+    if (new Set(selectedApplicants.map(String)).size !== selectedApplicants.length) {
+        return res.status(400).json({
+            error: "Duplicate applicants are not allowed."
+        });
+    }
+
+    // Panel size is dynamic: 3, 4, 5, or more members.
+    if (!Array.isArray(panelUserIds) || panelUserIds.length === 0) {
+        return res.status(400).json({
+            error: "Select at least one HRMPSB panel member."
+        });
+    }
+
+    const normalizedPanelUserIds = panelUserIds.map(Number);
+
     if (
-        !Array.isArray(selectedApplicants) ||
-        selectedApplicants.length === 0
+        normalizedPanelUserIds.some(
+            id => !Number.isSafeInteger(id) || id <= 0
+        ) ||
+        new Set(normalizedPanelUserIds).size !== normalizedPanelUserIds.length
     ) {
         return res.status(400).json({
-            error:
-                "At least one job applicant must be selected."
+            error: "Panel member IDs must be valid, positive, and unique."
         });
     }
 
     const client = await pool.connect();
-
-    // Store email information here.
-    // Emails will be sent ONLY after COMMIT.
+    let transactionStarted = false;
     const applicantsForEmail = [];
 
     try {
         await client.query("BEGIN");
+        transactionStarted = true;
 
-        // ========================================================
-        // 2. VERIFY VACANCY
-        // ========================================================
-
+        // 2. Verify the vacancy
         const vacancyResult = await client.query(
-            `
-            SELECT
-                v.vacancy_id,
-                v.position_id,
-                p.position_title
-            FROM vacancies v
-            INNER JOIN positions p
-                ON p.position_id = v.position_id
-            WHERE v.vacancy_id = $1
-            LIMIT 1
-            `,
+            `SELECT v.vacancy_id, v.position_id, p.position_title
+             FROM vacancies v
+             INNER JOIN positions p ON p.position_id = v.position_id
+             WHERE v.vacancy_id = $1
+             LIMIT 1`,
             [String(vacancy_id)]
         );
 
         if (vacancyResult.rowCount === 0) {
-            throw new Error(
-                "Vacancy not found."
-            );
+            const error = new Error("Vacancy not found.");
+            error.statusCode = 404;
+            throw error;
         }
 
         const vacancy = vacancyResult.rows[0];
 
-        // ========================================================
-        // 3. VERIFY SELECTED APPLICANTS
-        // ========================================================
+        // 3. Verify every selected user is an active HRMPSB member
+        const panelResult = await client.query(
+            `SELECT id, first_name, last_name
+             FROM users
+             WHERE id = ANY($1::integer[])
+               AND LOWER(TRIM(role)) = 'hrmpsb'
+               AND is_archived = FALSE
+             ORDER BY id`,
+            [normalizedPanelUserIds]
+        );
 
+        if (panelResult.rowCount !== normalizedPanelUserIds.length) {
+            const error = new Error(
+                "One or more selected users are invalid, archived, or are not HRMPSB members."
+            );
+            error.statusCode = 400;
+            throw error;
+        }
+
+        // Use names for the existing conducted_by display field.
+        // Actual assignments are saved separately using user IDs.
+        const panelistNames = panelResult.rows
+            .map(user => `${user.first_name || ""} ${user.last_name || ""}`.trim())
+            .filter(Boolean)
+            .join(", ");
+
+        // 4. Verify applicants and collect email information
         for (const applicationId of selectedApplicants) {
             const applicantResult = await client.query(
-                `
-                SELECT
+                `SELECT
                     ai.applicant_id,
                     ai.job_applications_id,
                     ai.first_name,
-                    ai.middle_name,
                     ai.last_name,
-                    ai.suffix,
                     ai.email_address,
                     ai.application_code,
                     h.application_status
-                FROM applicant_information ai
-                LEFT JOIN hr_remarks_final_notes h
+                 FROM applicant_information ai
+                 LEFT JOIN hr_remarks_final_notes h
                     ON h.applicant_id = ai.applicant_id
-                INNER JOIN job_applications ja
-                    ON ja.job_applications_id =
-                        ai.job_applications_id
-                WHERE ai.job_applications_id = $1
-                  AND ja.vacancy_id = $2
-                LIMIT 1
-                `,
-                [
-                    String(applicationId),
-                    String(vacancy_id)
-                ]
+                 INNER JOIN job_applications ja
+                    ON ja.job_applications_id = ai.job_applications_id
+                 WHERE ai.job_applications_id = $1
+                   AND ja.vacancy_id = $2
+                 LIMIT 1`,
+                [String(applicationId), String(vacancy_id)]
             );
 
             if (applicantResult.rowCount === 0) {
-                throw new Error(
+                const error = new Error(
                     `Applicant/application not found for: ${applicationId}`
                 );
+                error.statusCode = 404;
+                throw error;
             }
 
             const applicant = applicantResult.rows[0];
-
-            // ----------------------------------------------------
-            // ONLY QUALIFIED APPLICANTS CAN BE SCHEDULED
-            // ----------------------------------------------------
-
             const normalizedStatus = String(
                 applicant.application_status || ""
-            )
-                .trim()
-                .toLowerCase();
+            ).trim().toLowerCase();
 
             if (
                 normalizedStatus !== "qualified" &&
-                normalizedStatus !==
-                    "initial_screening_qualified"
+                normalizedStatus !== "initial_screening_qualified"
             ) {
-                throw new Error(
+                const error = new Error(
                     `Applicant ${applicationId} is not qualified for assessment.`
                 );
+                error.statusCode = 400;
+                throw error;
             }
-
-            // ----------------------------------------------------
-            // APPLICATION CODE MUST EXIST
-            // ----------------------------------------------------
 
             if (!applicant.application_code) {
-                throw new Error(
+                const error = new Error(
                     `Applicant ${applicationId} does not have an application code.`
                 );
+                error.statusCode = 400;
+                throw error;
             }
-
-            // ----------------------------------------------------
-            // SAVE INFORMATION FOR EMAIL
-            // ----------------------------------------------------
 
             applicantsForEmail.push({
                 applicant_id: applicant.applicant_id,
-                job_applications_id:
-                    applicant.job_applications_id,
                 firstName: applicant.first_name,
                 lastName: applicant.last_name,
                 email: applicant.email_address,
-                applicationCode:
-                    applicant.application_code,
-                positionTitle:
-                    vacancy.position_title
+                applicationCode: applicant.application_code,
+                positionTitle: vacancy.position_title
             });
         }
 
-        // ========================================================
-        // 4. CREATE PARENT ASSESSMENT SESSION
-        // ========================================================
+        // 5. Create the parent assessment session
+        const assessmentSessionResult = await client.query(
+            `INSERT INTO assessment_sessions (
+                vacancy_id,
+                session_date,
+                venue,
+                conducted_by,
+                remarks
+             )
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING
+                assessment_session_id,
+                vacancy_id,
+                TO_CHAR(session_date, 'YYYY-MM-DD') AS session_date,
+                venue,
+                conducted_by,
+                remarks,
+                status,
+                created_at,
+                updated_at`,
+            [
+                String(vacancy_id),
+                session_date,
+                venue,
+                panelistNames,
+                remarks || ""
+            ]
+        );
 
-        const assessmentSessionResult =
+        const assessmentSession = assessmentSessionResult.rows[0];
+        const assessmentSessionId = assessmentSession.assessment_session_id;
+
+        // 6. Save all panel assignments
+        // This is inside the same transaction as the session creation.
+        for (const userId of normalizedPanelUserIds) {
             await client.query(
-                `
-                INSERT INTO assessment_sessions (
-                    vacancy_id,
-                    session_date,
-                    venue,
-                    conducted_by,
-                    remarks
-                )
-                VALUES (
-                    $1,
-                    $2,
-                    $3,
-                    $4,
-                    $5
-                )
-                RETURNING
+                `INSERT INTO assessment_session_panel_members (
                     assessment_session_id,
-                    vacancy_id,
-                    TO_CHAR(
-                        session_date,
-                        'YYYY-MM-DD'
-                    ) AS session_date,
-                    venue,
-                    conducted_by,
-                    remarks,
-                    status,
-                    created_at,
-                    updated_at
-                `,
-                [
-                    String(vacancy_id),
-                    session_date,
-                    venue,
-                    panelists,
-                    remarks || ""
-                ]
+                    user_id
+                 )
+                 VALUES ($1, $2)`,
+                [assessmentSessionId, userId]
             );
+        }
 
-        const assessmentSession =
-            assessmentSessionResult.rows[0];
-
-        const assessmentSessionId =
-            assessmentSession.assessment_session_id;
-
-        // ========================================================
-        // 5. CREATE INDIVIDUAL INTERVIEW SESSION
-        // ========================================================
-
+        // 7. Create one interview session per applicant
         const insertedSessions = [];
 
         for (const applicationId of selectedApplicants) {
             const result = await client.query(
-                `
-                INSERT INTO interview_sessions (
+                `INSERT INTO interview_sessions (
                     assessment_session_id,
                     vacancy_id,
                     job_applications_id,
@@ -240,122 +235,78 @@ export const postInterviewSession = async (req, res) => {
                     venue,
                     conducted_by,
                     remarks
-                )
-                VALUES (
-                    $1,
-                    $2,
-                    $3,
-                    $4,
-                    $5,
-                    $6,
-                    $7
-                )
-                RETURNING
+                 )
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)
+                 RETURNING
                     session_id,
                     assessment_session_id,
                     vacancy_id,
                     job_applications_id,
-                    TO_CHAR(
-                        session_date,
-                        'YYYY-MM-DD'
-                    ) AS session_date,
+                    TO_CHAR(session_date, 'YYYY-MM-DD') AS session_date,
                     venue,
                     conducted_by,
                     remarks,
                     status,
                     created_at,
-                    updated_at
-                `,
+                    updated_at`,
                 [
                     assessmentSessionId,
                     String(vacancy_id),
                     String(applicationId),
                     session_date,
                     venue,
-                    panelists,
+                    panelistNames,
                     remarks || ""
                 ]
             );
 
-            insertedSessions.push(
-                result.rows[0]
+            insertedSessions.push(result.rows[0]);
+
+            // 8. Update applicant status
+            const updateStatus = await client.query(
+                `UPDATE hr_remarks_final_notes h
+                 SET application_status = 'for assessment'
+                 FROM applicant_information ai
+                 WHERE ai.applicant_id = h.applicant_id
+                   AND ai.job_applications_id = $1
+                 RETURNING h.applicant_id, h.application_status`,
+                [String(applicationId)]
             );
 
-            // ====================================================
-            // 6. UPDATE APPLICANT STATUS
-            // ====================================================
-
-            const updateStatus =
-                await client.query(
-                    `
-                    UPDATE hr_remarks_final_notes h
-                    SET application_status =
-                        'for assessment'
-                    FROM applicant_information ai
-                    WHERE ai.applicant_id =
-                        h.applicant_id
-                      AND ai.job_applications_id =
-                        $1
-                    RETURNING
-                        h.applicant_id,
-                        h.application_status
-                    `,
-                    [
-                        String(applicationId)
-                    ]
-                );
-
             if (updateStatus.rowCount === 0) {
-                throw new Error(
+                const error = new Error(
                     `HR remarks status record not found for application: ${applicationId}`
                 );
+                error.statusCode = 404;
+                throw error;
             }
         }
 
-        // ========================================================
-        // 7. COMMIT DATABASE CHANGES
-        // ========================================================
-
+        // 9. Commit all database changes before sending emails
         await client.query("COMMIT");
+        transactionStarted = false;
 
-        // ========================================================
-        // 8. SEND ASSESSMENT EMAILS
-        // ========================================================
-        //
-        // IMPORTANT:
-        // Emails are sent AFTER COMMIT.
-        //
-        // If an email fails, the assessment session remains
-        // successfully saved in the database.
-        // ========================================================
-
+        // 10. Send invitation emails after the transaction commits
         const emailResults = [];
 
         for (const applicant of applicantsForEmail) {
             try {
-                const emailResult =
-                    await sendAssessmentInvitationEmail({
-                        email: applicant.email,
-                        firstName: applicant.firstName,
-                        lastName: applicant.lastName,
-                        positionTitle:
-                            applicant.positionTitle,
-                        applicationCode:
-                            applicant.applicationCode,
-                        sessionDate:
-                            session_date,
-                        sessionTime: null,
-                        venue
-                    });
+                const emailResult = await sendAssessmentInvitationEmail({
+                    email: applicant.email,
+                    firstName: applicant.firstName,
+                    lastName: applicant.lastName,
+                    positionTitle: applicant.positionTitle,
+                    applicationCode: applicant.applicationCode,
+                    sessionDate: session_date,
+                    sessionTime: null,
+                    venue
+                });
 
                 emailResults.push({
-                    applicant_id:
-                        applicant.applicant_id,
-                    email:
-                        applicant.email,
+                    applicant_id: applicant.applicant_id,
+                    email: applicant.email,
                     sent: true,
-                    messageId:
-                        emailResult?.messageId || null
+                    messageId: emailResult?.messageId || null
                 });
             } catch (emailError) {
                 console.error(
@@ -364,144 +315,66 @@ export const postInterviewSession = async (req, res) => {
                 );
 
                 emailResults.push({
-                    applicant_id:
-                        applicant.applicant_id,
-                    email:
-                        applicant.email,
+                    applicant_id: applicant.applicant_id,
+                    email: applicant.email,
                     sent: false,
-                    error:
-                        emailError.message
+                    error: emailError.message
                 });
             }
         }
 
-        // ========================================================
-        // 9. RESPONSE
-        // ========================================================
-
+        // 11. Return the created session and assigned panel
         return res.status(201).json({
-            message:
-                "Assessment session created successfully. Applicants scheduled for assessment and email notifications processed.",
-
+            message: "Assessment session created successfully.",
             assessmentSession,
-
-            sessions:
-                insertedSessions,
-
-            applicantStatus:
-                "for assessment",
-
-            emailNotifications:
-                emailResults
+            panelMembers: panelResult.rows.map(user => ({
+                id: user.id,
+                first_name: user.first_name,
+                last_name: user.last_name
+            })),
+            panelMemberCount: normalizedPanelUserIds.length,
+            sessions: insertedSessions,
+            applicantStatus: "for assessment",
+            emailNotifications: emailResults
         });
-
     } catch (error) {
-        await client.query("ROLLBACK");
+        if (transactionStarted) {
+            try {
+                await client.query("ROLLBACK");
+            } catch (rollbackError) {
+                console.error("Transaction rollback failed:", rollbackError);
+            }
+        }
 
-        console.error(
-            "Error creating assessment session:",
-            error
-        );
+        console.error("Error creating assessment session:", error);
 
-        // ========================================================
-        // FOREIGN KEY ERROR
-        // ========================================================
+        if (error.statusCode) {
+            return res.status(error.statusCode).json({
+                error: error.message
+            });
+        }
 
         if (error.code === "23503") {
             return res.status(400).json({
-                error:
-                    "Invalid database reference. Verify your vacancy and applicant IDs."
+                error: "Invalid database reference. Verify the vacancy, applicant, and panel member IDs."
             });
         }
-
-        // ========================================================
-        // DUPLICATE APPLICANT / SESSION
-        // ========================================================
 
         if (error.code === "23505") {
             return res.status(409).json({
-                error:
-                    "One or more applicants are already scheduled for this vacancy."
+                error: "A duplicate record was detected. Check the selected applicants and panel assignments."
             });
         }
-
-        // ========================================================
-        // APPLICANT NOT QUALIFIED
-        // ========================================================
-
-        if (
-            error.message?.includes(
-                "is not qualified for assessment"
-            )
-        ) {
-            return res.status(400).json({
-                error: error.message
-            });
-        }
-
-        // ========================================================
-        // APPLICATION CODE MISSING
-        // ========================================================
-
-        if (
-            error.message?.includes(
-                "does not have an application code"
-            )
-        ) {
-            return res.status(400).json({
-                error: error.message
-            });
-        }
-
-        // ========================================================
-        // APPLICANT NOT FOUND
-        // ========================================================
-
-        if (
-            error.message?.includes(
-                "Applicant/application not found"
-            )
-        ) {
-            return res.status(404).json({
-                error: error.message
-            });
-        }
-
-        // ========================================================
-        // HR STATUS RECORD MISSING
-        // ========================================================
-
-        if (
-            error.message?.includes(
-                "HR remarks status record not found"
-            )
-        ) {
-            return res.status(404).json({
-                error: error.message
-            });
-        }
-
-        // ========================================================
-        // STATUS CONSTRAINT
-        // ========================================================
 
         if (error.code === "23514") {
             return res.status(400).json({
-                error:
-                    "The applicant status violates a database constraint. Ensure 'for assessment' is an allowed status."
+                error: "The applicant status violates a database constraint. Ensure 'for assessment' is an allowed status."
             });
         }
 
-        // ========================================================
-        // GENERIC ERROR
-        // ========================================================
-
         return res.status(500).json({
-            error:
-                error.message ||
-                "Internal server error."
+            error: error.message || "Internal server error."
         });
-
     } finally {
         client.release();
     }

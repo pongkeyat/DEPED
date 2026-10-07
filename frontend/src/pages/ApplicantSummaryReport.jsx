@@ -6,7 +6,9 @@ import {
     Heart,
     UserRound,
     Accessibility,
+    UsersRound,
     UserRoundX,
+    ClipboardList,
     FileSpreadsheet,
     RefreshCw,
     Loader2
@@ -22,6 +24,8 @@ export default function ApplicantSummaryReport() {
     const [report, setReport] = useState({
         total_applicants: 0,
         pwd: 0,
+        solo_parent: 0,
+        indigenous_person: 0,
         married: 0,
         single: 0,
         qualified: 0,
@@ -61,6 +65,16 @@ export default function ApplicantSummaryReport() {
                     pwd:
                         Number(
                             response.data.pwd || 0
+                        ),
+
+                    solo_parent:
+                        Number(
+                            response.data.solo_parent || 0
+                        ),
+
+                    indigenous_person:
+                        Number(
+                            response.data.indigenous_person || 0
                         ),
 
                     married:
@@ -179,6 +193,20 @@ export default function ApplicantSummaryReport() {
                     "PWD",
                     Number(
                         data.pwd || 0
+                    )
+                ],
+
+                [
+                    "Solo Parent",
+                    Number(
+                        data.solo_parent || 0
+                    )
+                ],
+
+                [
+                    "Indigenous Person (IP)",
+                    Number(
+                        data.indigenous_person || 0
                     )
                 ],
 
@@ -334,17 +362,17 @@ export default function ApplicantSummaryReport() {
 
         return (
 
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
 
                 <div className="flex items-center justify-between">
 
                     <div>
 
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
                             {title}
                         </p>
 
-                        <p className="mt-2 text-2xl font-bold text-slate-800">
+                        <p className="mt-2 text-3xl font-bold tracking-tight text-gray-900">
                             {loading
                                 ? "--"
                                 : value.toLocaleString()}
@@ -381,29 +409,39 @@ export default function ApplicantSummaryReport() {
 
     return (
 
-        <div className="space-y-5">
+        <div className="space-y-6">
 
             {/* ================================================== */}
             {/* PAGE HEADER */}
             {/* ================================================== */}
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative flex min-h-[88px] flex-col gap-4 overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
 
-                <div>
+                <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1E3E74]" />
 
-                    <h1 className="text-lg font-bold text-slate-800">
-                        Applicant Reports
-                    </h1>
+                <div className="flex items-center gap-4 pl-3">
 
-                    <p className="mt-1 text-xs text-slate-500">
-                        View applicant statistics and generate
-                        recruitment reports.
-                    </p>
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[#1E3E74]">
+                        <ClipboardList size={24} className="stroke-[2.2]" />
+                    </div>
+
+                    <div>
+
+                        <h1 className="text-2xl font-bold tracking-tight text-[#1E3E74]">
+                            Applicant Reports
+                        </h1>
+
+                        <p className="mt-0.5 text-sm text-gray-500">
+                            View applicant statistics and generate
+                            recruitment reports.
+                        </p>
+
+                    </div>
 
                 </div>
 
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 pl-3 sm:pl-0">
 
                     <button
                         type="button"
@@ -413,13 +451,13 @@ export default function ApplicantSummaryReport() {
                             inline-flex
                             items-center
                             gap-2
-                            rounded-lg
+                            rounded-xl
                             border
                             border-slate-200
                             bg-white
-                            px-3
-                            py-2
-                            text-xs
+                            px-4
+                            py-2.5
+                            text-sm
                             font-semibold
                             text-slate-600
                             shadow-sm
@@ -456,11 +494,11 @@ export default function ApplicantSummaryReport() {
                             inline-flex
                             items-center
                             gap-2
-                            rounded-lg
+                            rounded-xl
                             bg-emerald-600
-                            px-3.5
-                            py-2
-                            text-xs
+                            px-4
+                            py-2.5
+                            text-sm
                             font-semibold
                             text-white
                             shadow-sm
@@ -532,17 +570,17 @@ export default function ApplicantSummaryReport() {
             {/* SUMMARY CARD */}
             {/* ================================================== */}
 
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
 
-                <div className="border-b border-slate-100 px-5 py-4">
+                <div className="border-b border-gray-100 px-6 py-5">
 
                     <div>
 
-                        <h2 className="text-sm font-bold text-slate-800">
+                        <h2 className="text-lg font-bold text-gray-900">
                             Applicant Summary
                         </h2>
 
-                        <p className="mt-0.5 text-[11px] text-slate-400">
+                        <p className="mt-1 text-sm text-gray-500">
                             Overview of applicant demographics
                             and application results.
                         </p>
@@ -552,7 +590,7 @@ export default function ApplicantSummaryReport() {
                 </div>
 
 
-                <div className="p-5">
+                <div className="space-y-7 p-6">
 
                     {/* ================================================== */}
                     {/* DEMOGRAPHICS */}
@@ -562,16 +600,16 @@ export default function ApplicantSummaryReport() {
 
                         <div className="mb-3 flex items-center gap-2">
 
-                            <div className="h-1 w-5 rounded-full bg-slate-800" />
+                            <div className="h-1 w-5 rounded-full bg-[#1E3E74]" />
 
-                            <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">
                                 Applicant Demographics
                             </h3>
 
                         </div>
 
 
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
 
                             <ReportCard
                                 title="Total Applicants"
@@ -598,6 +636,19 @@ export default function ApplicantSummaryReport() {
                                 "
                             />
 
+                            <ReportCard
+                                title="Solo Parent"
+                                value={report.solo_parent}
+                                icon={Heart}
+                                iconWrapper="bg-rose-50 text-rose-600"
+                            />
+
+                            <ReportCard
+                                title="Indigenous Person (IP)"
+                                value={report.indigenous_person}
+                                icon={UsersRound}
+                                iconWrapper="bg-teal-50 text-teal-600"
+                            />
 
                             <ReportCard
                                 title="Married"
@@ -633,20 +684,20 @@ export default function ApplicantSummaryReport() {
                     {/* APPLICATION RESULTS */}
                     {/* ================================================== */}
 
-                    <div className="mt-6">
+                    <div>
 
                         <div className="mb-3 flex items-center gap-2">
 
-                            <div className="h-1 w-5 rounded-full bg-slate-800" />
+                            <div className="h-1 w-5 rounded-full bg-[#1E3E74]" />
 
-                            <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">
                                 Application Results
                             </h3>
 
                         </div>
 
 
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 
                             <ReportCard
                                 title="Qualified"

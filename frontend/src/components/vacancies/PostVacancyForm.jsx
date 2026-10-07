@@ -5,6 +5,7 @@ import { getPositions } from "../../api/PositionsApi";
 // =========================================================
 // POSITION CATEGORIES
 // =========================================================
+
 const categories = [
     "Teaching Positions",
     "School Administration Positions",
@@ -15,6 +16,7 @@ const categories = [
 // =========================================================
 // CATEGORY NORMALIZATION
 // =========================================================
+
 const categoryAliases = {
     teaching: "teaching positions",
     "teaching positions": "teaching positions",
@@ -49,15 +51,13 @@ const normalizeCategory = (category) => {
         .trim()
         .toLowerCase();
 
-    return (
-        categoryAliases[normalized] ||
-        normalized
-    );
+    return categoryAliases[normalized] || normalized;
 };
 
 // =========================================================
 // COMPONENT
 // =========================================================
+
 export default function PostVacancyForm({
     formData,
     onChange,
@@ -69,13 +69,41 @@ export default function PostVacancyForm({
     // =========================================================
     // TODAY
     // =========================================================
+
     const todayStr = new Date()
         .toISOString()
         .split("T")[0];
 
     // =========================================================
+    // ADD WORKING DAYS
+    // EXCLUDES SATURDAY AND SUNDAY
+    // =========================================================
+
+    const addWorkingDays = (dateString, days) => {
+        const date = new Date(`${dateString}T00:00:00`);
+
+        let addedDays = 0;
+
+        while (addedDays < days) {
+            date.setDate(date.getDate() + 1);
+
+            const day = date.getDay();
+
+            // Sunday = 0
+            // Saturday = 6
+            // Monday-Friday = working days
+            if (day !== 0 && day !== 6) {
+                addedDays++;
+            }
+        }
+
+        return date.toISOString().split("T")[0];
+    };
+
+    // =========================================================
     // FETCH POSITIONS
     // =========================================================
+
     useEffect(() => {
         let mounted = true;
 
@@ -97,6 +125,7 @@ export default function PostVacancyForm({
                  * experience
                  * eligibility
                  */
+
                 const response = await getPositions(
                     "",
                     1000
@@ -172,6 +201,7 @@ export default function PostVacancyForm({
     // =========================================================
     // AUTO SET APPLICATION POSTED DATE
     // =========================================================
+
     useEffect(() => {
         if (!formData?.application_posted) {
             onChange({
@@ -186,6 +216,7 @@ export default function PostVacancyForm({
     // =========================================================
     // FILTER POSITIONS BY CATEGORY
     // =========================================================
+
     const filteredPositions = useMemo(() => {
         if (!formData?.category) {
             return [];
@@ -216,37 +247,42 @@ export default function PostVacancyForm({
     // =========================================================
     // HANDLE CATEGORY TOGGLE
     // =========================================================
- const handleCategoryChange = (category) => {
-    console.log("CATEGORY SELECTED:", category);
 
-    // Update category
-    onChange({
-        target: {
-            name: "category",
-            value: category,
-        },
-    });
+    const handleCategoryChange = (category) => {
+        console.log(
+            "CATEGORY SELECTED:",
+            category
+        );
 
-    // Clear selected position
-    onChange({
-        target: {
-            name: "position_id",
-            value: "",
-        },
-    });
+        // Update category
+        onChange({
+            target: {
+                name: "category",
+                value: category,
+            },
+        });
 
-    // Clear salary grade
-    onChange({
-        target: {
-            name: "salary_grade",
-            value: "",
-        },
-    });
-};
+        // Clear selected position
+        onChange({
+            target: {
+                name: "position_id",
+                value: "",
+            },
+        });
+
+        // Clear salary grade
+        onChange({
+            target: {
+                name: "salary_grade",
+                value: "",
+            },
+        });
+    };
 
     // =========================================================
     // HANDLE POSITION SELECTION
     // =========================================================
+
     const handlePositionSelect = (e) => {
         const selectedId = e.target.value;
 
@@ -272,6 +308,7 @@ export default function PostVacancyForm({
         // =====================================================
         // FIND POSITION
         // =====================================================
+
         const selectedPos = positions.find(
             (position) => {
                 const id =
@@ -302,6 +339,7 @@ export default function PostVacancyForm({
         // =====================================================
         // POSITION ID
         // =====================================================
+
         const positionId =
             selectedPos.position_id ??
             selectedPos.id ??
@@ -317,6 +355,7 @@ export default function PostVacancyForm({
         // =====================================================
         // SALARY GRADE
         // =====================================================
+
         let salaryGrade =
             selectedPos.salary_grade ??
             selectedPos.sg ??
@@ -342,6 +381,7 @@ export default function PostVacancyForm({
         // =====================================================
         // CATEGORY
         // =====================================================
+
         const positionCategory =
             selectedPos.category ||
             selectedPos.job_category ||
@@ -354,6 +394,7 @@ export default function PostVacancyForm({
          * Only update it if the API returned a
          * different category.
          */
+
         if (
             positionCategory &&
             normalizeCategory(
@@ -374,6 +415,7 @@ export default function PostVacancyForm({
         // =====================================================
         // QUALIFICATIONS
         // =====================================================
+
         /*
          * IMPORTANT:
          *
@@ -425,12 +467,14 @@ export default function PostVacancyForm({
     // =========================================================
     // RENDER
     // =========================================================
+
     return (
         <div className="overflow-hidden rounded-xl bg-white shadow lg:col-span-2">
 
-            {/* =====================================================
+            {/* =================================================
                 HEADER
-            ===================================================== */}
+            ================================================= */}
+
             <div className="flex items-center gap-2 bg-[#1b4584] p-3 text-white">
                 <Info size={16} />
 
@@ -444,6 +488,7 @@ export default function PostVacancyForm({
                 {/* =================================================
                     CATEGORY TOGGLE
                 ================================================= */}
+
                 <div>
                     <label className="mb-2 block text-sm font-medium text-gray-700">
                         Position Category
@@ -486,6 +531,7 @@ export default function PostVacancyForm({
                 {/* =================================================
                     POSITION TITLE
                 ================================================= */}
+
                 <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">
                         Select Position Title
@@ -554,6 +600,7 @@ export default function PostVacancyForm({
                 {/* =================================================
                     PLANTILLA POSITION
                 ================================================= */}
+
                 <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">
                         Plantilla Position Item / Title
@@ -575,6 +622,7 @@ export default function PostVacancyForm({
                 {/* =================================================
                     PLACE OF ASSIGNMENT
                 ================================================= */}
+
                 <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">
                         Place of Assignment
@@ -596,9 +644,11 @@ export default function PostVacancyForm({
                 {/* =================================================
                     SALARY GRADE + NUMBER OF VACANCIES
                 ================================================= */}
+
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
                     {/* SALARY GRADE */}
+
                     <div>
                         <label className="mb-1 block text-sm font-medium text-gray-700">
                             Salary Grade
@@ -623,6 +673,7 @@ export default function PostVacancyForm({
                     </div>
 
                     {/* NUMBER OF VACANCIES */}
+
                     <div>
                         <label className="mb-1 block text-sm font-medium text-gray-700">
                             Number of Vacancy
@@ -646,6 +697,7 @@ export default function PostVacancyForm({
                 {/* =================================================
                     OFFICE / UNIT
                 ================================================= */}
+
                 <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">
                         Office / Unit Assignment
@@ -667,9 +719,11 @@ export default function PostVacancyForm({
                 {/* =================================================
                     DATES
                 ================================================= */}
+
                 <div className="grid gap-4 md:grid-cols-2">
 
                     {/* APPLICATION POSTED DATE */}
+
                     <div>
                         <label className="mb-1 block text-sm font-medium text-gray-700">
                             Application Posted Date
@@ -689,6 +743,7 @@ export default function PostVacancyForm({
                     </div>
 
                     {/* APPLICATION DEADLINE */}
+
                     <div>
                         <label className="mb-1 block text-sm font-medium text-gray-700">
                             Application Deadline
@@ -704,25 +759,16 @@ export default function PostVacancyForm({
                             onChange={onChange}
                             min={
                                 formData?.application_posted
-                                    ? new Date(
-                                          new Date(
-                                              formData.application_posted
-                                          ).getTime() +
-                                              10 *
-                                                  24 *
-                                                  60 *
-                                                  60 *
-                                                  1000
+                                    ? addWorkingDays(
+                                          formData.application_posted,
+                                          10
                                       )
-                                          .toISOString()
-                                          .split("T")[0]
                                     : todayStr
                             }
                             className="w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584]"
                         />
                     </div>
                 </div>
-
             </div>
         </div>
     );

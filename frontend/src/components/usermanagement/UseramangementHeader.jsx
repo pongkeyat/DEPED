@@ -46,13 +46,6 @@ export default function UserManagementHeader() {
               Add User
             </button>
 
-            <button 
-              type="button"
-              className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 hover:text-[#1E3E74] cursor-pointer"
-            >
-              <ShieldAlert size={16} className="text-gray-500" />
-              Permissions
-            </button>
           </div>
         </div>
       </div>

@@ -319,9 +319,6 @@ export default function OpenVacancies({
           </span>
         </div>
 
-        <p className="text-gray-500 text-sm mt-1">
-          Non-Teaching Positions • Region I RO1
-        </p>
       </div>
 
       {/* OFFICE FILTER BUTTONS */}

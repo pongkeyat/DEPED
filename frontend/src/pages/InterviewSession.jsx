@@ -9,6 +9,7 @@ export default function InterviewSession() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [emailWarning, setEmailWarning] = useState("");
 
   // Load sessions from API
   const loadSessions = useCallback(async () => {
@@ -34,9 +35,20 @@ export default function InterviewSession() {
   const handleSaveSession = async (formData) => {
     setSaving(true);
     setError("");
+    setEmailWarning("");
     try {
-      await postAssessmentSession(formData);
+      const result = await postAssessmentSession(formData);
       await loadSessions(); // Refresh table data
+      const failedNotifications =
+        result?.emailNotifications?.filter(
+          (notification) => !notification.sent
+        ) || [];
+
+      if (failedNotifications.length > 0) {
+        setEmailWarning(
+          `The assessment session was created, but ${failedNotifications.length} invitation email(s) could not be sent. Check the applicant email addresses and backend mail logs.`
+        );
+      }
     } catch (err) {
       console.error("Error creating assessment session:", err);
       throw err; // Re-throw to let the modal handle local error states
@@ -63,6 +75,12 @@ export default function InterviewSession() {
           {error && (
             <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl text-red-700 text-sm font-medium">
               {error}
+            </div>
+          )}
+
+          {emailWarning && (
+            <div className="rounded-r-xl border-l-4 border-amber-500 bg-amber-50 p-4 text-sm font-medium text-amber-800">
+              {emailWarning}
             </div>
           )}
 

@@ -29,25 +29,6 @@ export default function WalkInApplicationHeader() {
                 </div>
             </div>
 
-            {/* Right */}
-            <div className="flex items-center gap-2">
-                <button
-                    onClick={handleAllApplications}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 text-sm transition"
-                >
-                    <List size={16} />
-                    All Applications
-                </button>
-
-                <button
-                    onClick={handlePrint}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-500 text-blue-600 hover:bg-blue-50 text-sm transition"
-                >
-                    <Printer size={16} />
-                    Print Form
-                </button>
-            </div>
-
         </div>
     );
 }

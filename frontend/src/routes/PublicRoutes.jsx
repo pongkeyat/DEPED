@@ -13,8 +13,11 @@ import {
 
 import LandingPage from "../pages/LandingPage";
 import LandingPageApplication from "../pages/LandingPageApplication";
+import LandingPageRanking from "../pages/LandingPageRanking";
 import Login from "../pages/Login";
 import ChangePassword from "../pages/ChangePassword";
+import ForgotPassword from "../components/usermanagement/ForgotPassword";
+import ResetPassword from "../components/usermanagement/ResetPassword";
 import DashBoard from "../pages/Dashboard";
 import PostVacancy from "../pages/PostVacancy";
 import ReceiveApplications from "../pages/ReceiveApplications";
@@ -145,6 +148,11 @@ export default function PublicRoutes() {
         />
 
         <Route
+          path="/ranking"
+          element={<LandingPageRanking />}
+        />
+
+        <Route
           path="/login"
           element={<Login />}
         />
@@ -152,6 +160,16 @@ export default function PublicRoutes() {
         <Route
           path="/change-password"
           element={<ChangePassword />}
+        />
+
+        <Route
+          path="/forgot-password"
+          element={<ForgotPassword />}
+        />
+
+        <Route
+          path="/reset-password"
+          element={<ResetPassword />}
         />
 
 

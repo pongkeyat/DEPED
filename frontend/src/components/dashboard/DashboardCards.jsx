@@ -1,53 +1,23 @@
-import React, { useState, useEffect } from "react";
-import { getApplications } from "../../api/ApplicationApi";
 import { useNavigate } from "react-router-dom";
 
-export default function DashboardCards() {
-  const [applications, setApplications] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+export default function DashboardCards({
+  applications = [],
+  vacancies = [],
+  loading = false,
+  dateFrom,
+  dateTo,
+  onDateFromChange,
+  onDateToChange,
+  onApplyDateFilter,
+}) {
   const navigate = useNavigate();
-
-  const normalizeApplications = (response) => {
-    if (!response) return [];
-    if (Array.isArray(response)) return response;
-    if (Array.isArray(response.data)) return response.data;
-    if (Array.isArray(response.data?.data)) return response.data.data;
-    if (Array.isArray(response.rows)) return response.rows;
-    if (Array.isArray(response.applications)) return response.applications;
-    return [];
-  };
 
   const ReceiveApplication = () => {
     navigate("/receiveApplicant");
-  }
-  
+  };
+
   const PostVacancy = () => {
     navigate("/postVacancies");
-  }
-
-  // 1. Fetch data on component mount
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const response = await getApplications();
-        setApplications(normalizeApplications(response));
-      } catch (error) {
-        console.error("Error loading dashboard data:", error);
-        setApplications([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
-
-  const handleFilterSubmit = () => {
-    console.log("Filtering data from:", dateFrom, "to:", dateTo);
-    // Optional: Add local date filtering logic here if needed
   };
 
   // 2. Compute dynamic metrics from live database data
@@ -55,11 +25,24 @@ export default function DashboardCards() {
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
+    const todayKey = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0"),
+    ].join("-");
 
-    // Unique count of Open Vacancies (calculated by unique vacancy_ids)
-    const uniqueVacancies = new Set(
-      applications.map(app => app.vacancy_id).filter(Boolean)
-    );
+    const openVacancies = vacancies.filter((vacancy) => {
+      const status = String(vacancy.status || "").trim().toLowerCase();
+      const deadlineKey = vacancy.application_deadline
+        ? String(vacancy.application_deadline).slice(0, 10)
+        : "";
+
+      return (
+        (status === "active" || status === "open") &&
+        (!/^\d{4}-\d{2}-\d{2}$/.test(deadlineKey) ||
+          deadlineKey >= todayKey)
+      );
+    });
 
     // Filter applications received this month/year
     const applicationsThisMonth = applications.filter(app => {
@@ -70,31 +53,26 @@ export default function DashboardCards() {
 
     // Match your custom status mappings from your database strings
     const pendingScreening = applications.filter(
-      app => app.application_status === "Initial Screening" || app.application_status === "Pending Screening"
+      app => ["initial screening", "pending screening"].includes(
+        String(app.application_status || "").trim().toLowerCase()
+      )
     );
 
     const qualified = applications.filter(
-      app => app.application_status === "Qualified"
+      app => String(app.application_status || "").trim().toLowerCase() === "qualified"
     );
 
     const forAssessment = applications.filter(
-      app => app.application_status === "For Assessment"
+      app => String(app.application_status || "").trim().toLowerCase() === "for assessment"
     );
 
-    // Filter appointments/submissions for the current calendar year (2026)
-    const appointmentsThisYear = applications.filter(app => {
-      if (!app.date_received) return false;
-      const d = new Date(app.date_received);
-      return d.getFullYear() === currentYear; // dynamically checks 2026 based on runtime
-    });
-
     return {
-      vacanciesCount: uniqueVacancies.size,
+      vacanciesCount: openVacancies.length,
       monthCount: applicationsThisMonth.length,
       pendingCount: pendingScreening.length,
       qualifiedCount: qualified.length,
       assessmentCount: forAssessment.length,
-      yearCount: appointmentsThisYear.length,
+      totalCount: applications.length,
     };
   };
 
@@ -104,7 +82,6 @@ export default function DashboardCards() {
     { 
       title: "Open Vacancies", 
       count: loading ? "..." : metrics.vacanciesCount, 
-      label: "View", 
       color: "border-[#113a70]", 
       iconBg: "bg-[#e8edf5] text-[#113a70]",
       icon: (
@@ -118,7 +95,6 @@ export default function DashboardCards() {
     { 
       title: "Applications (This Month)", 
       count: loading ? "..." : metrics.monthCount, 
-      label: "View", 
       color: "border-[#3b82f6]", 
       iconBg: "bg-[#eff6ff] text-[#3b82f6]",
       icon: (
@@ -142,7 +118,6 @@ export default function DashboardCards() {
     { 
       title: "Qualified", 
       count: loading ? "..." : metrics.qualifiedCount, 
-      label: "View", 
       color: "border-[#10b981]", 
       iconBg: "bg-[#ecfdf5] text-[#10b981]",
       icon: (
@@ -154,7 +129,6 @@ export default function DashboardCards() {
     { 
       title: "For Assessment", 
       count: loading ? "..." : metrics.assessmentCount, 
-      label: "View", 
       color: "border-[#8b5cf6]", 
       iconBg: "bg-[#faf5ff] text-[#8b5cf6]",
       icon: (
@@ -164,9 +138,8 @@ export default function DashboardCards() {
       )
     },
     { 
-      title: "Appointments (2026)", 
-      count: loading ? "..." : metrics.yearCount, 
-      label: "View", 
+      title: "Total Applications", 
+      count: loading ? "..." : metrics.totalCount, 
       color: "border-[#059669]", 
       iconBg: "bg-[#f0fdf4] text-[#059669]",
       icon: (
@@ -192,7 +165,7 @@ export default function DashboardCards() {
             <h2 className="text-[19px] font-bold tracking-tight">Dashboard</h2>
           </div>
           <p className="text-[12.5px] text-gray-400 mt-0.5">
-            DepEd Regional Office 1 (Region 1) — Non-Teaching Personnel Module
+            DepEd Regional Office 1 (Region 1) 
           </p>
         </div>
 
@@ -212,60 +185,7 @@ export default function DashboardCards() {
         </div>
       </div>
 
-      {/* Welcome Banner Row */}
-      <div className="relative w-full min-h-[88px] overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1E3E74]" />
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 bg-[#113a70] rounded-full flex items-center justify-center border-[2.5px] border-amber-500 shadow-sm shrink-0">
-            <span className="text-amber-500 font-black text-lg tracking-wider">S</span>
-          </div>
-          <div>
-            <h3 className="text-[#113a70] text-[17px] font-bold">Welcome back, User!</h3>
-            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11.5px] text-gray-500 font-medium mt-0.5">
-              <span className="flex items-center gap-1">
-                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-                </svg>
-                Super Administrator
-              </span>
-            </div>
-          </div>
-        </div>
 
-        <div className="sm:text-right flex flex-col justify-center items-start sm:items-end">
-          <span className="text-[11px] text-gray-400 font-medium">DepEd Order No. 007, s. 2023</span>
-          <span className="text-[#113a70] text-[12.5px] font-extrabold tracking-wide mt-0.5 mb-2">Non-Teaching Ranking System</span>
-          
-          <div className="flex flex-row items-center gap-2">
-            <input 
-              type="text"
-              placeholder="Date From"
-              value={dateFrom}
-              onFocus={(e) => (e.target.type = "date")}
-              onBlur={(e) => !dateFrom && (e.target.type = "text")}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="w-[125px] bg-white border border-gray-300 rounded-md px-2.5 py-1 text-[12px] font-medium text-gray-700 outline-none focus:border-blue-500 shadow-xs placeholder-gray-400"
-            />
-
-            <input 
-              type="text"
-              placeholder="Date To"
-              value={dateTo}
-              onFocus={(e) => (e.target.type = "date")}
-              onBlur={(e) => !dateTo && (e.target.type = "text")}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="w-[125px] bg-white border border-gray-300 rounded-md px-2.5 py-1 text-[12px] font-medium text-gray-700 outline-none focus:border-blue-500 shadow-xs placeholder-gray-400"
-            />
-
-            <button 
-              onClick={handleFilterSubmit}
-              className="bg-white border border-blue-500 hover:bg-blue-50 text-[#1e3a6d] font-semibold text-[12px] px-3 py-1 rounded-md transition-colors shadow-xs"
-            >
-              Filter
-            </button>
-          </div>
-        </div>
-      </div>
 
       {/* Stat Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
@@ -278,9 +198,6 @@ export default function DashboardCards() {
               <div className="flex h-11 w-11 shrink-0 items-center justify-center text-[#1E3E74]">
                 {card.icon}
               </div>
-              <button className="text-[12.5px] font-bold text-[#113a70] hover:text-blue-600 no-underline flex items-center gap-0.5 transition-colors mt-1.5">
-                {card.label} <span className="text-[13px] font-normal text-gray-400">→</span>
-              </button>
             </div>
 
             <div className="flex flex-col mt-0.5">

@@ -77,6 +77,7 @@ export const getAuditLogs = async ({
     page = 1,
     limit = 20
 }) => {
+    const normalizedSearch = String(search ?? "").trim();
     const parsedPage = Math.max(
         parseInt(page, 10) || 1,
         1
@@ -100,37 +101,42 @@ export const getAuditLogs = async ({
         );
     };
 
-    if (search.trim()) {
-        values.push(`%${search.trim()}%`);
+    if (normalizedSearch) {
+        values.push(`%${normalizedSearch}%`);
 
         const param = `$${values.length}`;
 
         conditions.push(`
             (
-                username ILIKE ${param}
-                OR user_id ILIKE ${param}
-                OR description ILIKE ${param}
-                OR action ILIKE ${param}
-                OR module ILIKE ${param}
-                OR entity_id ILIKE ${param}
+                COALESCE(username, '') ILIKE ${param}
+                OR COALESCE(user_id::text, '') ILIKE ${param}
+                OR COALESCE(user_role, '') ILIKE ${param}
+                OR COALESCE(description, '') ILIKE ${param}
+                OR COALESCE(action, '') ILIKE ${param}
+                OR COALESCE(module, '') ILIKE ${param}
+                OR COALESCE(entity_type, '') ILIKE ${param}
+                OR COALESCE(entity_id::text, '') ILIKE ${param}
+                OR COALESCE(ip_address, '') ILIKE ${param}
+                OR COALESCE(user_agent, '') ILIKE ${param}
+                OR COALESCE(metadata::text, '') ILIKE ${param}
             )
         `);
     }
 
     if (action) {
-        addCondition("action = ?", action);
+        addCondition("LOWER(action) = LOWER(?)", action);
     }
 
     if (module) {
-        addCondition("module = ?", module);
+        addCondition("LOWER(module) = LOWER(?)", module);
     }
 
     if (user_role) {
-        addCondition("user_role = ?", user_role);
+        addCondition("LOWER(user_role) = LOWER(?)", user_role);
     }
 
     if (status) {
-        addCondition("status = ?", status);
+        addCondition("LOWER(status) = LOWER(?)", status);
     }
 
     if (date_from) {

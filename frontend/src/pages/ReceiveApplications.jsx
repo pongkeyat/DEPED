@@ -1,138 +1,93 @@
 import React, { useState } from "react";
-
 import ApplicationHeader from "../components/applications/ApplicationsHeader";
 import StepProgress from "../components/applications/StepProgress";
-
 import ApplicantForm from "../components/applications/ApplicantForm";
 import Applications from "../components/applications/Applications";
-
 import DocumentChecklist from "../components/applications/DocumentChecklist";
-
 import EqualOpportunityDeclaration from "../components/applications/EqualOpportunityDeclaration";
-
 import HRRemarksForm from "../components/applications/HRRemarksForm";
-
 import ApplicantEducationForm from "../components/applications/ApplicantEducationForm";
-
 import ApplicantTrainingForm from "../components/applications/ApplicantTrainingForm";
-
 import CivilServiceEligibilityForm from "../components/applications/CivilServiceEligibilityForm";
-
 import WorkExperienceForm from "../components/applications/WorkExperienceForm";
-
 import ActionModal from "../components/ActionModal";
-
 import { postApplications } from "../api/ApplicationApi";
 
-
 export default function ReceiveApplications() {
-
   // ============================================================
   // LOADING
   // ============================================================
 
   const [loading, setLoading] = useState(false);
 
-
   // ============================================================
   // MODALS
   // ============================================================
 
   const [successModal, setSuccessModal] = useState(false);
-
   const [errorModalMessage, setErrorModalMessage] = useState(null);
-
 
   // ============================================================
   // FORM DATA
   // ============================================================
 
   const [formData, setFormData] = useState({
-
     // ==========================================================
     // APPLICANT INFORMATION
     // ==========================================================
 
     applicantData: {
-
       lastName: "",
-
       firstName: "",
-
       middleName: "",
-
       suffix: "",
-
       sex: "",
-
       dob: "",
-
       civilStatus: "",
-
       contactNumber: "",
-
       email: "",
-
-      address: ""
-
+      address: "",
     },
-
 
     // ==========================================================
     // APPLICATION INFORMATION
     // ==========================================================
 
     applicationData: {
-
       vacancy_id: "",
-
-      dateReceived:
-        new Date().toISOString().split("T")[0],
-
-      timeReceived:
-        new Date().toLocaleTimeString(
-          [],
-          {
-            hour12: false,
-            hour: "2-digit",
-            minute: "2-digit"
-          }
-        ),
-
+      dateReceived: new Date().toISOString().split("T")[0],
+      timeReceived: new Date().toLocaleTimeString([], {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
       receivedBy: "System Administrator",
-
-      submissionType: "Walk-In"
-
+      submissionType: "Walk-In",
     },
-
 
     // ==========================================================
     // EDUCATION
     // ==========================================================
 
-      educationData: {
-          educationList: [
-              {
-                  level: "",
-                  school_name: "",
-                  degree_course: "",
-                  honors_awards: "",
-                  units: ""
-              }
-          ]
-      },
-
+    educationData: {
+      educationList: [
+        {
+          level: "",
+          school_name: "",
+          degree_course: "",
+          honors_awards: "",
+          units: "",
+        },
+      ],
+    },
 
     // ==========================================================
     // TRAINING
     // ==========================================================
 
     trainingData: {
-
-      trainings: []
-
+      trainings: [],
     },
-
 
     // ==========================================================
     // CIVIL SERVICE ELIGIBILITY
@@ -140,415 +95,373 @@ export default function ReceiveApplications() {
 
     eligibilityData: [],
 
-
     // ==========================================================
     // WORK EXPERIENCE
     // ==========================================================
 
     workExperienceData: {
-
       position_title: "",
-
       company_office: "",
-
       date_from: "",
-
       date_to: "",
-
       monthly_salary: "",
-
       appointment_status: "",
-
-      is_govt_service: null
-
+      is_govt_service: null,
     },
-
 
     // ==========================================================
     // DOCUMENT CHECKLIST
     // ==========================================================
-    //
-    // These fields MUST match applicant_documents.
-    //
-    // A. Letter of Intent
-    // B. Personal Data Sheet
-    // C. PRC License / ID
-    // D. Eligibility / Rating
-    // E. Diploma
-    // E. Transcript of Records
-    // F. Training Certificates
-    // G. Certificate of Employment
-    // G. Service Record
-    // H. Latest Appointment
-    // I. Performance Rating
-    // J. Omnibus Sworn Statement
-    //
-    // ==========================================================
 
     documentData: {
-
-      // A
       has_application_letter: false,
-
-      // B
       has_personal_data_sheet: false,
-
-      // C
       has_prc_license_id: false,
-
-      // D
       has_civil_service_eligibility_cert: false,
-
-      // E
       has_diploma: false,
-
       has_transcript_of_records: false,
-
-      // F
       has_training_certificates: false,
-
-      // G
       has_certificate_of_employment: false,
-
       has_service_record: false,
-
-      // H
       has_latest_appointment: false,
-
-      // I
       has_performance_rating: false,
-
-      // J
-      has_omnibus_sworn_statement: false
-
+      has_omnibus_sworn_statement: false,
     },
-
 
     // ==========================================================
     // UPLOADED DOCUMENT FILES
     // ==========================================================
-    //
-    // Kept separate from documentData so File objects don't
-    // accidentally become part of the JSON checklist.
-    //
-    // ==========================================================
 
     uploadedFiles: {
-
       application_letter_file: null,
-
       personal_data_sheet_file: null,
-
       prc_license_id_file: null,
-
       civil_service_eligibility_cert_file: null,
-
       diploma_file: null,
-
       transcript_of_records_file: null,
-
       training_certificates_file: [],
-
       certificate_of_employment_file: null,
-
       service_record_file: null,
-
       latest_appointment_file: null,
-
       performance_rating_file: null,
-
-      omnibus_sworn_statement_file: null
-
+      omnibus_sworn_statement_file: null,
     },
-
 
     // ==========================================================
     // EQUAL OPPORTUNITY
     // ==========================================================
 
     equalOpportunityData: {
-
       is_pwd: null,
-
       is_solo_parent: null,
-
-      is_indigenous_person: null
-
+      is_indigenous_person: null,
     },
-
 
     // ==========================================================
     // HR REMARKS
     // ==========================================================
 
     hrRemarksData: {
-
       hr_remarks_notes: "",
-
-      application_status: ""
-
-    }
-
+      application_status: "",
+    },
   });
 
+  // ============================================================
+  // RESET FORM
+  // ============================================================
+
+  const resetForm = () => {
+    setFormData({
+      // ========================================================
+      // APPLICANT INFORMATION
+      // ========================================================
+
+      applicantData: {
+        lastName: "",
+        firstName: "",
+        middleName: "",
+        suffix: "",
+        sex: "",
+        dob: "",
+        civilStatus: "",
+        contactNumber: "",
+        email: "",
+        address: "",
+      },
+
+      // ========================================================
+      // APPLICATION INFORMATION
+      // ========================================================
+
+      applicationData: {
+        vacancy_id: "",
+        dateReceived: new Date().toISOString().split("T")[0],
+        timeReceived: new Date().toLocaleTimeString([], {
+          hour12: false,
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        receivedBy: "System Administrator",
+        submissionType: "Walk-In",
+      },
+
+      // ========================================================
+      // EDUCATION
+      // ========================================================
+
+      educationData: {
+        educationList: [
+          {
+            level: "",
+            school_name: "",
+            degree_course: "",
+            honors_awards: "",
+            units: "",
+          },
+        ],
+      },
+
+      // ========================================================
+      // TRAINING
+      // ========================================================
+
+      trainingData: {
+        trainings: [],
+      },
+
+      // ========================================================
+      // CIVIL SERVICE ELIGIBILITY
+      // ========================================================
+
+      eligibilityData: [],
+
+      // ========================================================
+      // WORK EXPERIENCE
+      // ========================================================
+
+      workExperienceData: {
+        position_title: "",
+        company_office: "",
+        date_from: "",
+        date_to: "",
+        monthly_salary: "",
+        appointment_status: "",
+        is_govt_service: null,
+      },
+
+      // ========================================================
+      // DOCUMENT CHECKLIST
+      // ========================================================
+
+      documentData: {
+        has_application_letter: false,
+        has_personal_data_sheet: false,
+        has_prc_license_id: false,
+        has_civil_service_eligibility_cert: false,
+        has_diploma: false,
+        has_transcript_of_records: false,
+        has_training_certificates: false,
+        has_certificate_of_employment: false,
+        has_service_record: false,
+        has_latest_appointment: false,
+        has_performance_rating: false,
+        has_omnibus_sworn_statement: false,
+      },
+
+      // ========================================================
+      // UPLOADED FILES
+      // ========================================================
+
+      uploadedFiles: {
+        application_letter_file: null,
+        personal_data_sheet_file: null,
+        prc_license_id_file: null,
+        civil_service_eligibility_cert_file: null,
+        diploma_file: null,
+        transcript_of_records_file: null,
+        training_certificates_file: [],
+        certificate_of_employment_file: null,
+        service_record_file: null,
+        latest_appointment_file: null,
+        performance_rating_file: null,
+        omnibus_sworn_statement_file: null,
+      },
+
+      // ========================================================
+      // EQUAL OPPORTUNITY
+      // ========================================================
+
+      equalOpportunityData: {
+        is_pwd: null,
+        is_solo_parent: null,
+        is_indigenous_person: null,
+      },
+
+      // ========================================================
+      // HR REMARKS
+      // ========================================================
+
+      hrRemarksData: {
+        hr_remarks_notes: "",
+        application_status: "",
+      },
+    });
+  };
 
   // ============================================================
   // APPLICANT CHANGE
   // ============================================================
 
   const handleApplicantChange = (name, value) => {
-
     setFormData((prev) => ({
-
       ...prev,
-
       applicantData: {
-
         ...prev.applicantData,
-
-        [name]: value
-
-      }
-
+        [name]: value,
+      },
     }));
-
   };
-
 
   // ============================================================
   // APPLICATION CHANGE
   // ============================================================
 
   const handleApplicationChange = (name, value) => {
-
     setFormData((prev) => ({
-
       ...prev,
-
       applicationData: {
-
         ...prev.applicationData,
-
-        [name]: value
-
-      }
-
+        [name]: value,
+      },
     }));
-
   };
-
 
   // ============================================================
   // EDUCATION CHANGE
   // ============================================================
 
   const handleEducationChange = (name, value) => {
-
     setFormData((prev) => ({
-
       ...prev,
-
       educationData: {
-
         ...prev.educationData,
-
-        [name]: value
-
-      }
-
+        [name]: value,
+      },
     }));
-
   };
-
 
   // ============================================================
   // TRAINING CHANGE
   // ============================================================
 
   const handleTrainingChange = (name, value) => {
-
     setFormData((prev) => ({
-
       ...prev,
-
       trainingData: {
-
         ...prev.trainingData,
-
-        [name]: value
-
-      }
-
+        [name]: value,
+      },
     }));
-
   };
-
 
   // ============================================================
   // ELIGIBILITY CHANGE
   // ============================================================
 
   const handleEligibilityChange = (updatedList) => {
-
     setFormData((prev) => ({
-
       ...prev,
-
-      eligibilityData: updatedList
-
+      eligibilityData: updatedList,
     }));
-
   };
-
 
   // ============================================================
   // WORK EXPERIENCE CHANGE
   // ============================================================
 
   const handleWorkExperienceChange = (updatedList) => {
-
     setFormData((prev) => ({
-
       ...prev,
-
-      workExperienceData: updatedList
-
+      workExperienceData: updatedList,
     }));
-
   };
-
 
   // ============================================================
   // DOCUMENT CHECKBOX CHANGE
   // ============================================================
 
   const handleDocumentChange = (name, value) => {
-
     setFormData((prev) => ({
-
       ...prev,
-
       documentData: {
-
         ...prev.documentData,
-
-        [name]: value
-
-      }
-
+        [name]: value,
+      },
     }));
-
   };
-
 
   // ============================================================
   // DOCUMENT FILE UPLOAD
   // ============================================================
-  //
-  // Supports:
-  //
-  // Single file:
-  // File
-  //
-  // Multiple files:
-  // File[]
-  //
-  // Training certificates use multiple files.
-  //
-  // ============================================================
 
   const handleFileUpload = (field, file) => {
-
     setFormData((prev) => ({
-
       ...prev,
-
       uploadedFiles: {
-
         ...prev.uploadedFiles,
-
-        [`${field}_file`]: file
-
+        [`${field}_file`]: file,
       },
-
       documentData: {
-
         ...prev.documentData,
-
-        [field]: true
-
-      }
-
+        [field]: true,
+      },
     }));
-
   };
-
 
   // ============================================================
   // EQUAL OPPORTUNITY CHANGE
   // ============================================================
 
   const handleEqualOpportunityChange = (name, value) => {
-
     setFormData((prev) => ({
-
       ...prev,
-
       equalOpportunityData: {
-
         ...prev.equalOpportunityData,
-
-        [name]: value
-
-      }
-
+        [name]: value,
+      },
     }));
-
   };
-
 
   // ============================================================
   // HR REMARKS CHANGE
   // ============================================================
 
   const handleHRRemarksChange = (name, value) => {
-
     setFormData((prev) => ({
-
       ...prev,
-
       hrRemarksData: {
-
         ...prev.hrRemarksData,
-
-        [name]: value
-
-      }
-
+        [name]: value,
+      },
     }));
-
   };
-
 
   // ============================================================
   // SUBMIT APPLICATION
   // ============================================================
 
   const handleSubmit = async (e) => {
-
     e.preventDefault();
 
     setLoading(true);
-
     setErrorModalMessage(null);
-
 
     // ==========================================================
     // DOCUMENT CHECKLIST
     // ==========================================================
 
     const documentChecklist = {
-
       has_application_letter:
         formData.documentData.has_application_letter,
 
@@ -583,41 +496,49 @@ export default function ReceiveApplications() {
         formData.documentData.has_performance_rating,
 
       has_omnibus_sworn_statement:
-        formData.documentData.has_omnibus_sworn_statement
-
+        formData.documentData.has_omnibus_sworn_statement,
     };
 
-    const workExperienceList = Array.isArray(formData.workExperienceData)
+    // ==========================================================
+    // WORK EXPERIENCE
+    // ==========================================================
+
+    const workExperienceList = Array.isArray(
+      formData.workExperienceData
+    )
       ? formData.workExperienceData
       : formData.workExperienceData?.position_title ||
         formData.workExperienceData?.company_office
       ? [formData.workExperienceData]
       : [];
 
-    const submittedWorkExperience = workExperienceList.filter((experience) =>
-      [
-        experience.position_title,
-        experience.company_office,
-        experience.date_from,
-        experience.date_to,
-        experience.monthly_salary,
-        experience.appointment_status,
-      ].some((value) => String(value ?? "").trim() !== "") ||
-      typeof experience.is_govt_service === "boolean"
-    );
+    const submittedWorkExperience =
+      workExperienceList.filter(
+        (experience) =>
+          [
+            experience.position_title,
+            experience.company_office,
+            experience.date_from,
+            experience.date_to,
+            experience.monthly_salary,
+            experience.appointment_status,
+          ].some(
+            (value) =>
+              String(value ?? "").trim() !== ""
+          ) ||
+          typeof experience.is_govt_service === "boolean"
+      );
 
     // ==========================================================
     // BUILD PAYLOAD
     // ==========================================================
 
     const payload = {
-
       // ========================================================
       // JOB APPLICATION
       // ========================================================
 
       job_applications: {
-
         vacancy_id:
           formData.applicationData.vacancy_id || null,
 
@@ -631,17 +552,14 @@ export default function ReceiveApplications() {
           formData.applicationData.receivedBy,
 
         submission_type:
-          formData.applicationData.submissionType
-
+          formData.applicationData.submissionType,
       },
-
 
       // ========================================================
       // APPLICANT INFORMATION
       // ========================================================
 
       applicant_info: {
-
         first_name:
           formData.applicantData.firstName,
 
@@ -670,18 +588,14 @@ export default function ReceiveApplications() {
           formData.applicantData.address,
 
         contact_number:
-          formData.applicantData.contactNumber || null
-
+          formData.applicantData.contactNumber || null,
       },
-
 
       // ========================================================
       // DOCUMENT CHECKLIST
       // ========================================================
 
-      document_checklist:
-        documentChecklist,
-
+      document_checklist: documentChecklist,
 
       // ========================================================
       // EQUAL OPPORTUNITY
@@ -690,14 +604,12 @@ export default function ReceiveApplications() {
       equal_opportunity:
         formData.equalOpportunityData,
 
-
       // ========================================================
       // EDUCATION
       // ========================================================
 
       education_list:
         formData.educationData.educationList,
-
 
       // ========================================================
       // TRAINING
@@ -706,14 +618,12 @@ export default function ReceiveApplications() {
       trainings_list:
         formData.trainingData.trainings,
 
-
       // ========================================================
       // ELIGIBILITY
       // ========================================================
 
       eligibility_list:
         formData.eligibilityData,
-
 
       // ========================================================
       // WORK EXPERIENCE
@@ -728,24 +638,22 @@ export default function ReceiveApplications() {
 
       hr_remarks: {
         ...formData.hrRemarksData,
+
         application_status:
-          formData.hrRemarksData.application_status || "Complete",
-      }
-
+          formData.hrRemarksData.application_status ||
+          "Complete",
+      },
     };
-
 
     // ==========================================================
     // SUBMIT
     // ==========================================================
 
     try {
-
       /*
        * IMPORTANT:
        *
-       * postApplications() should combine:
-       *
+       * postApplications() combines:
        * 1. payload
        * 2. formData.uploadedFiles
        *
@@ -757,82 +665,67 @@ export default function ReceiveApplications() {
         formData.uploadedFiles
       );
 
-
       // ========================================================
       // SUCCESS
       // ========================================================
 
+      // Clear all inputs ONLY after successful submission.
+      // If submission fails, the user's inputs remain intact.
+      resetForm();
+
       setSuccessModal(true);
-
-
     } catch (err) {
-
       console.error(
         "Application submission error:",
         err
       );
 
-
       setErrorModalMessage(
-
         err.response?.data?.message ||
-
-        err.response?.data?.error ||
-
-        "An error occurred during submission."
-
+          err.response?.data?.error ||
+          "An error occurred during submission."
       );
-
-
     } finally {
-
       setLoading(false);
-
     }
-
   };
-
 
   // ============================================================
   // RENDER
   // ============================================================
 
   return (
-
     <div className="min-h-screen p-6 text-slate-800">
-      
-      {/* Centered container matching All Applications width */}
-      <div className="max-w-7xl mx-auto space-y-6">
+      {/* ======================================================
+          CENTERED CONTAINER
+          ====================================================== */}
 
-        {/* ======================================================
-            HEADER (Enlarged heading container context)
-            ====================================================== */}
+      <div className="mx-auto max-w-7xl space-y-6">
+        {/* ====================================================
+            HEADER
+            ==================================================== */}
 
         <div className="[&_h1]:text-xl [&_h1]:font-bold [&_h1]:text-[#1E3E74]">
           <ApplicationHeader />
         </div>
 
-
-        {/* ======================================================
+        {/* ====================================================
             PROGRESS
-            ====================================================== */}
+            ==================================================== */}
 
         <StepProgress />
 
-
-        {/* ======================================================
+        {/* ====================================================
             FORM
-            ====================================================== */}
+            ==================================================== */}
 
         <form
           onSubmit={handleSubmit}
-          className="space-y-6 max-w-5xl mx-auto"
+          className="mx-auto max-w-5xl space-y-6"
         >
-
-
-          {/* ====================================================
+          {/* ==================================================
               APPLICATION
-              ==================================================== */}
+              ================================================== */}
 
           <Applications
             formData={formData.applicationData}
@@ -840,70 +733,63 @@ export default function ReceiveApplications() {
             submissionType="Onsite"
           />
 
-
-          {/* ====================================================
+          {/* ==================================================
               APPLICANT
-              ==================================================== */}
+              ================================================== */}
 
           <ApplicantForm
             formData={formData.applicantData}
             onChange={handleApplicantChange}
           />
 
-
-          {/* ====================================================
+          {/* ==================================================
               EDUCATION
-              ==================================================== */}
+              ================================================== */}
 
           <ApplicantEducationForm
             data={formData.educationData}
             onChange={handleEducationChange}
           />
 
-
-          {/* ====================================================
+          {/* ==================================================
               TRAINING
-              ==================================================== */}
+              ================================================== */}
 
           <ApplicantTrainingForm
             trainings={formData.trainingData.trainings}
             onChange={handleTrainingChange}
           />
 
-
-          {/* ====================================================
+          {/* ==================================================
               CIVIL SERVICE ELIGIBILITY
-              ==================================================== */}
+              ================================================== */}
 
           <CivilServiceEligibilityForm
             data={formData.eligibilityData}
             onChange={handleEligibilityChange}
           />
 
-
-          {/* ====================================================
+          {/* ==================================================
               WORK EXPERIENCE
-              ==================================================== */}
+              ================================================== */}
 
           <WorkExperienceForm
             data={formData.workExperienceData}
             onChange={handleWorkExperienceChange}
           />
 
-
-          {/* ====================================================
+          {/* ==================================================
               EQUAL OPPORTUNITY
-              ==================================================== */}
+              ================================================== */}
 
           <EqualOpportunityDeclaration
             data={formData.equalOpportunityData}
             onChange={handleEqualOpportunityChange}
           />
 
-
-          {/* ====================================================
+          {/* ==================================================
               DOCUMENT CHECKLIST
-              ==================================================== */}
+              ================================================== */}
 
           <DocumentChecklist
             documents={formData.documentData}
@@ -912,39 +798,31 @@ export default function ReceiveApplications() {
             onFileUpload={handleFileUpload}
           />
 
-
-          {/* ====================================================
+          {/* ==================================================
               HR REMARKS
-              ==================================================== */}
+              ================================================== */}
 
           <HRRemarksForm
             data={formData.hrRemarksData}
             onChange={handleHRRemarksChange}
           />
 
-
-          {/* ====================================================
+          {/* ==================================================
               SUBMIT BUTTON
-              ==================================================== */}
+              ================================================== */}
 
           <div className="flex justify-end pt-4">
-
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-3 rounded-xl font-semibold text-white bg-[#1E3E74] hover:bg-[#17325e] disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors"
+              className="rounded-xl bg-[#1E3E74] px-6 py-3 font-semibold text-white transition-colors hover:bg-[#17325e] disabled:cursor-not-allowed disabled:bg-blue-400"
             >
-
               {loading
                 ? "Submitting..."
                 : "Submit Application"}
-
             </button>
-
           </div>
-
         </form>
-
 
         {/* ======================================================
             SUCCESS MODAL
@@ -959,7 +837,6 @@ export default function ReceiveApplications() {
           onConfirm={() => setSuccessModal(false)}
         />
 
-
         {/* ======================================================
             ERROR MODAL
             ====================================================== */}
@@ -971,11 +848,7 @@ export default function ReceiveApplications() {
           message={errorModalMessage}
           onClose={() => setErrorModalMessage(null)}
         />
-
       </div>
-
     </div>
-
   );
-
 }

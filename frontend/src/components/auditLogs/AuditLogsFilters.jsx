@@ -68,7 +68,7 @@ const AuditLogsFilters = ({
                                 e.target.value
                             )
                         }
-                        placeholder="Search username, action, description, or record ID..."
+                        placeholder="Search user, action, description, record ID, IP, or metadata..."
                         className={`${inputClass} pl-10`}
                     />
                 </div>
@@ -104,6 +104,9 @@ const AuditLogsFilters = ({
                         <option value="VIEW">View</option>
                         <option value="SUBMIT">Submit</option>
                         <option value="BACKUP">Backup</option>
+                        <option value="REQUEST_PASSWORD_RESET">Request Password Reset</option>
+                        <option value="RESET_PASSWORD">Reset Password</option>
+                        <option value="TEST">Test</option>
                     </select>
                 </div>
 
@@ -131,9 +134,12 @@ const AuditLogsFilters = ({
                         <option value="SCREENING">Initial Screening</option>
                         <option value="ASSESSMENT">Assessment</option>
                         <option value="RANKING">Ranking</option>
-                        <option value="PANELIST">Panelists</option>
                         <option value="DATABASE">Database</option>
                         <option value="USER">Users</option>
+                        <option value="USER_MANAGEMENT">User Management</option>
+                        <option value="INTERVIEW">Interview</option>
+                        <option value="REPORT">Reports</option>
+                        <option value="API">API Activity</option>
                     </select>
                 </div>
 

@@ -28,6 +28,7 @@ export const getRankingByVacancy = async (vacancyId) => {
         WITH assessment_scores_by_applicant AS (
             SELECT
                 scores.applicant_id,
+                criteria.assessment_criteria_id,
                 criteria.criterion_name,
                 CASE
                     WHEN p.category ILIKE '%school admin%'
@@ -66,7 +67,18 @@ export const getRankingByVacancy = async (vacancyId) => {
                     ),
                     '[]'::json
                 ) AS assessment_criteria
-            FROM assessment_scores_by_applicant
+            FROM (
+                SELECT
+                    applicant_id,
+                    assessment_criteria_id,
+                    criterion_name,
+                    AVG(score) AS score
+                FROM assessment_scores_by_applicant
+                GROUP BY
+                    applicant_id,
+                    assessment_criteria_id,
+                    criterion_name
+            ) averaged_assessment_scores
             GROUP BY applicant_id
         ),
 

@@ -1693,9 +1693,10 @@ export const updateFullApplicant = async (req, res) => {
                     (_, index) => `$${index + 1}`
                 );
 
-                const updates = suppliedColumns.map(
-                    column =>
-                        `${column} = EXCLUDED.${column}`
+                const updates = suppliedColumns.map(column =>
+                    column === "training_certificates_path"
+                        ? `${column} = COALESCE(applicant_uploaded_files.${column}, ARRAY[]::TEXT[]) || EXCLUDED.${column}`
+                        : `${column} = EXCLUDED.${column}`
                 );
 
                 await client.query(
