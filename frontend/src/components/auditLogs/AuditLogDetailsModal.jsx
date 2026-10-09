@@ -220,60 +220,9 @@ const AuditLogDetailsModal = ({
 
                             <div className="border-t border-gray-100" />
 
-                            {/* REQUEST INFORMATION */}
-                            <section>
-                                <div className="mb-4 flex items-center gap-2">
-                                    <Globe
-                                        size={18}
-                                        className="text-gray-500"
-                                    />
 
-                                    <h3 className="font-semibold text-gray-800">
-                                        Request Information
-                                    </h3>
-                                </div>
 
-                                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                                    {detailItem(
-                                        "IP Address",
-                                        log.ip_address
-                                    )}
 
-                                    {detailItem(
-                                        "Date & Time",
-                                        formatDate(log.created_at)
-                                    )}
-
-                                    <div className="sm:col-span-2">
-                                        {detailItem(
-                                            "User Agent",
-                                            log.user_agent
-                                        )}
-                                    </div>
-                                </div>
-                            </section>
-
-                            {/* METADATA */}
-                            <section>
-                                <div className="mb-3 flex items-center gap-2">
-                                    <FileText
-                                        size={18}
-                                        className="text-gray-500"
-                                    />
-
-                                    <h3 className="font-semibold text-gray-800">
-                                        Additional Metadata
-                                    </h3>
-                                </div>
-
-                                <pre className="max-h-64 overflow-auto rounded-xl border border-gray-200 bg-gray-50 p-4 text-xs leading-5 text-gray-700">
-                                    {JSON.stringify(
-                                        log.metadata || {},
-                                        null,
-                                        2
-                                    )}
-                                </pre>
-                            </section>
 
                             <div className="flex items-center gap-2 text-xs text-gray-400">
                                 <Clock size={14} />
