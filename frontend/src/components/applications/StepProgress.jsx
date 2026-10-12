@@ -1,77 +1,108 @@
 import {
   Briefcase,
   User,
+  GraduationCap,
+  BookOpen,
+  BadgeCheck,
+  Building2,
+  ShieldCheck,
   Folder,
-  FileText,
-  CheckCheck,
+  ClipboardCheck,
+  Check,
 } from "lucide-react";
 
-function StepProgress() {
-  const steps = [
-    {
-      icon: <Briefcase size={16} />,
-      title: "Vacancy",
-      active: true,
-    },
-    {
-      icon: <User size={16} />,
-      title: "Applicant",
-    },
-    {
-      icon: <Folder size={16} />,
-      title: "Documents",
-    },
-    {
-      icon: <FileText size={16} />,
-      title: "Background",
-      completed: true,
-    },
-    {
-      icon: <CheckCheck size={16} />,
-      title: "Review",
-      active: true,
-    },
-  ];
+// Icon per step id (ids come from STEPS in ReceiveApplications.jsx)
+const ICONS = {
+  vacancy: Briefcase,
+  applicant: User,
+  education: GraduationCap,
+  training: BookOpen,
+  eligibility: BadgeCheck,
+  work: Building2,
+  equal: ShieldCheck,
+  documents: Folder,
+  remarks: ClipboardCheck,
+};
+
+/**
+ * steps:       [{ id, short, title }]
+ * currentStep: zero-based index
+ * onStepClick: optional (index) => void  (only completed steps are clickable)
+ */
+function StepProgress({ steps = [], currentStep = 0, onStepClick }) {
+  const count = steps.length;
+  if (count === 0) return null;
+
+  // Line runs from the first circle's centre to the last circle's centre
+  const edge = 50 / count; // % inset on each side (columns are equal width)
+  const fill = count > 1 ? (currentStep / (count - 1)) * 100 : 0;
 
   return (
-    <div className="bg-white rounded-xl shadow-sm mt-4 px-8 py-6">
-      <div className="relative flex justify-between items-center">
+    <div className="bg-white rounded-xl shadow-sm mt-4 px-4 sm:px-8 py-6">
+      <div className="relative">
+        {/* Base line */}
+        <div
+          className="absolute top-5 h-[2px] bg-gray-200"
+          style={{ left: `${edge}%`, right: `${edge}%` }}
+        />
 
-        {/* Progress Line */}
-        <div className="absolute left-12 right-12 top-5 h-[2px] bg-[#173F78]" />
+        {/* Completed portion of the line */}
+        <div
+          className="absolute top-5 h-[2px] bg-emerald-500 transition-all duration-300"
+          style={{
+            left: `${edge}%`,
+            width: `${(100 - edge * 2) * (fill / 100)}%`,
+          }}
+        />
 
-        {steps.map((step, index) => (
-          <div
-            key={index}
-            className="relative z-10 flex flex-col items-center"
-          >
-            <div
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors
-                ${
-                  step.completed
-                    ? "bg-emerald-500 text-white"
-                    : step.active
-                    ? "bg-[#173F78] text-white"
-                    : "bg-gray-200 text-gray-500"
+        <div
+          className="relative z-10 grid"
+          style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }}
+        >
+          {steps.map((step, index) => {
+            const completed = index < currentStep;
+            const active = index === currentStep;
+            const Icon = ICONS[step.id] || Briefcase;
+            const clickable = completed && typeof onStepClick === "function";
+
+            return (
+              <button
+                key={step.id}
+                type="button"
+                disabled={!clickable}
+                onClick={() => clickable && onStepClick(index)}
+                title={step.title}
+                className={`flex flex-col items-center ${
+                  clickable ? "cursor-pointer" : "cursor-default"
                 }`}
-            >
-              {step.icon}
-            </div>
+              >
+                <div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                    completed
+                      ? "bg-emerald-500 text-white"
+                      : active
+                      ? "bg-[#173F78] text-white ring-4 ring-blue-100"
+                      : "bg-gray-200 text-gray-500"
+                  }`}
+                >
+                  {completed ? <Check size={16} /> : <Icon size={16} />}
+                </div>
 
-            <span
-              className={`mt-2 text-xs font-medium
-                ${
-                  step.completed
-                    ? "text-emerald-500"
-                    : step.active
-                    ? "text-[#173F78]"
-                    : "text-gray-400"
-                }`}
-            >
-              {step.title}
-            </span>
-          </div>
-        ))}
+                <span
+                  className={`mt-2 text-[11px] sm:text-xs font-medium text-center leading-tight ${
+                    completed
+                      ? "text-emerald-600"
+                      : active
+                      ? "text-[#173F78]"
+                      : "text-gray-400"
+                  } ${active ? "" : "hidden sm:block"}`}
+                >
+                  {step.short}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

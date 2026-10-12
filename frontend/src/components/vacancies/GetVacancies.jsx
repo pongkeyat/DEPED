@@ -252,11 +252,19 @@ export default function GetVacancies({ onPostVacancy }) {
     // ARCHIVE VACANCY
     // =====================================================
 
-    const handleArchiveClick = (vacancy) => {
-        setSelectedVacancy(vacancy);
-        setArchiveError("");
-        setShowArchiveModal(true);
-    };
+
+        const handleArchiveClick = (vacancy) => {
+            // Only CLOSED vacancies can be archived.
+            if (vacancy.status !== "Closed") {
+                setArchiveError("Only closed vacancies can be archived.");
+                return;
+            }
+
+            setSelectedVacancy(vacancy);
+            setArchiveError("");
+            setShowArchiveModal(true);
+        };
+
 
     const handleCloseArchiveModal = () => {
         if (archiving) return;
@@ -277,6 +285,13 @@ export default function GetVacancies({ onPostVacancy }) {
             setArchiveError("Vacancy ID is missing.");
             return;
         }
+
+        
+        if (selectedVacancy.status !== "Closed") {
+            setArchiveError("Only closed vacancies can be archived.");
+            return;
+        }
+
 
         try {
             setArchiving(true);
@@ -597,17 +612,19 @@ export default function GetVacancies({ onPostVacancy }) {
                                                         </button>
                                                     )}
 
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            handleArchiveClick(item)
-                                                        }
-                                                        className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100"
-                                                        title="Archive vacancy"
-                                                    >
-                                                        <Archive size={15} />
-                                                        Archive
-                                                    </button>
+
+                                    {item.status === "Closed" && (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleArchiveClick(item)}
+                                            className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100"
+                                            title="Archive closed vacancy"
+                                        >
+                                            <Archive size={15} />
+                                            Archive
+                                        </button>
+                                    )}
+
 
                                                 </div>
                                             </td>

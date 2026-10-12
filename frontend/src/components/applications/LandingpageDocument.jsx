@@ -4,12 +4,16 @@ import {
   Upload,
   FileText,
   Check,
+  Eye,
 } from "lucide-react";
 
 export default function LandingPageDocument({
   documents,
+  uploadedFiles,
   onChange,
   onFileUpload,
+  onPreview, // (File | File[]) => void  -> opens the in-app preview modal
+  requiredFields = [], // field names to mark with a red *
 }) {
   // ============================================================
   // BASIC DOCUMENTARY REQUIREMENTS
@@ -85,37 +89,75 @@ export default function LandingPageDocument({
     if (multiple) {
       const files = Array.from(e.target.files || []);
 
-      if (files.length === 0) {
-        return;
+      if (files.length > 0) {
+        onChange(field, true);
+        if (onFileUpload) onFileUpload(field, files);
       }
+    } else {
+      const file = e.target.files?.[0];
 
-      onChange(field, true);
-
-      if (onFileUpload) {
-        onFileUpload(field, files);
+      if (file) {
+        onChange(field, true);
+        if (onFileUpload) onFileUpload(field, file);
       }
-
-      return;
     }
 
-    const file = e.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    onChange(field, true);
-
-    if (onFileUpload) {
-      onFileUpload(field, file);
-    }
+    // Allow picking the same file again later
+    e.target.value = "";
   };
 
   // ============================================================
   // GET UPLOADED FILE
   // ============================================================
   const getUploadedFile = (field) => {
-    return documents?.[`${field}_file`] || null;
+    return (
+      uploadedFiles?.[`${field}_file`] ??
+      documents?.[`${field}_file`] ??
+      null
+    );
+  };
+
+  // Only real File objects can be previewed in-app
+  // (strings are server paths from already-saved records)
+  const getPreviewableFiles = (value) =>
+    [].concat(value ?? []).filter((f) => f instanceof File);
+
+  const getFileLabel = (value) => {
+    if (!value) {
+      return null;
+    }
+
+    if (typeof value === "string") {
+      return value.split(/[\\/]/).pop() || value;
+    }
+
+    if (value instanceof File) {
+      return value.name || "File attached";
+    }
+
+    if (Array.isArray(value)) {
+      const names = value
+        .map((item) => getFileLabel(item))
+        .filter(Boolean);
+
+      return names.length > 0 ? names : null;
+    }
+
+    if (typeof value === "object") {
+      if (value.name) {
+        return value.name;
+      }
+
+      if (value.path) {
+        return getFileLabel(value.path);
+      }
+
+      if (value.filename) {
+        return value.filename;
+      }
+    }
+
+    return null;
   };
 
   // ============================================================
@@ -132,11 +174,15 @@ export default function LandingPageDocument({
       return file.length > 0;
     }
 
+    if (typeof file === "string") {
+      return file.trim().length > 0;
+    }
+
     return true;
   };
 
   // ============================================================
-  // DISPLAY FILE NAME
+  // DISPLAY FILE NAME (for files that cannot be previewed)
   // ============================================================
   const getFileName = (file) => {
     if (!file) {
@@ -144,18 +190,22 @@ export default function LandingPageDocument({
     }
 
     if (Array.isArray(file)) {
-      if (file.length === 0) {
+      const names = file
+        .map((item) => getFileLabel(item))
+        .filter(Boolean);
+
+      if (names.length === 0) {
         return null;
       }
 
-      if (file.length === 1) {
-        return file[0]?.name || "File attached";
+      if (names.length === 1) {
+        return names[0];
       }
 
-      return `${file.length} files attached`;
+      return `${names.length} files attached`;
     }
 
-    return file.name || "File attached";
+    return getFileLabel(file) || "File attached";
   };
 
   return (
@@ -200,6 +250,7 @@ export default function LandingPageDocument({
           <tbody>
             {requirements.map((item, index) => {
               const uploadedFile = getUploadedFile(item.field);
+              const previewable = getPreviewableFiles(uploadedFile);
               const fileName = getFileName(uploadedFile);
               const uploaded = hasUploadedFile(item.field);
 
@@ -216,13 +267,33 @@ export default function LandingPageDocument({
                   {/* Requirement */}
                   <td className="border border-gray-300 px-4 py-3 text-gray-800 leading-6">
                     <div className="flex flex-col">
-                      <span>{item.label}</span>
+                      <span>
+                        {item.label}
+                        {requiredFields.includes(item.field) && (
+                          <span className="ml-1 text-red-500">*</span>
+                        )}
+                      </span>
 
-                      {fileName && (
-                        <span className="text-xs text-green-600 flex items-center gap-1 mt-2">
-                          <FileText size={12} />
-                          {fileName}
-                        </span>
+                      {/* Uploaded file name(s) */}
+                      {previewable.length > 1 ? (
+                        <div className="mt-2 space-y-1">
+                          {previewable.map((file, i) => (
+                            <span
+                              key={`${file.name}-${i}`}
+                              className="text-xs text-green-600 flex items-center gap-1"
+                            >
+                              <FileText size={12} />
+                              {file.name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        fileName && (
+                          <span className="text-xs text-green-600 flex items-center gap-1 mt-2">
+                            <FileText size={12} />
+                            {fileName}
+                          </span>
+                        )
                       )}
                     </div>
                   </td>
@@ -238,6 +309,28 @@ export default function LandingPageDocument({
                         >
                           <Check size={16} strokeWidth={2.5} />
                         </div>
+                      )}
+
+                      {/* PREVIEW (eye icon, beside the upload button) */}
+                      {previewable.length > 0 && onPreview && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onPreview(
+                              previewable.length > 1
+                                ? previewable
+                                : previewable[0]
+                            )
+                          }
+                          title={
+                            previewable.length > 1
+                              ? `Preview ${previewable.length} files`
+                              : "Preview file"
+                          }
+                          className="flex items-center justify-center w-8 h-8 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors"
+                        >
+                          <Eye size={16} />
+                        </button>
                       )}
 
                       {/* UPLOAD ICON */}

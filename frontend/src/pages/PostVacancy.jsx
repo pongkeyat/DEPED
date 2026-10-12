@@ -39,6 +39,8 @@ const initialFormState = {
     },
 };
 
+const DRAFT_STORAGE_KEY = "post_vacancy_draft";
+
 // =====================================================
 // COMPONENT
 // =====================================================
@@ -56,11 +58,32 @@ export default function PostVacancy({ onBack }) {
     const [loading, setLoading] = useState(false);
 
     // =====================================================
-    // MASTER FORM STATE
+    // MASTER FORM STATE (INITIALIZED FROM LOCALSTORAGE IF EXISTS)
     // =====================================================
 
-    const [masterForm, setMasterForm] =
-        useState(initialFormState);
+    const [masterForm, setMasterForm] = useState(() => {
+        try {
+            const savedDraft = localStorage.getItem(DRAFT_STORAGE_KEY);
+            if (savedDraft) {
+                return JSON.parse(savedDraft);
+            }
+        } catch (error) {
+            console.error("Failed to load draft from localStorage:", error);
+        }
+        return initialFormState;
+    });
+
+    // =====================================================
+    // AUTO-SAVE DRAFT TO LOCALSTORAGE ON CHANGE
+    // =====================================================
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(masterForm));
+        } catch (error) {
+            console.error("Failed to save draft to localStorage:", error);
+        }
+    }, [masterForm]);
 
     // =====================================================
     // POSITIONS
@@ -89,14 +112,6 @@ export default function PostVacancy({ onBack }) {
                     "POSITIONS API RESPONSE:",
                     response
                 );
-
-                /*
-                 * Your Position Management currently uses:
-                 *
-                 * response?.data
-                 *
-                 * so we support that first.
-                 */
 
                 let data = [];
 
@@ -283,23 +298,16 @@ export default function PostVacancy({ onBack }) {
     };
 
     // =====================================================
-    // RESET
+    // RESET & CLEAR DRAFT
     // =====================================================
 
     const resetForm = () => {
-        setMasterForm({
-            vacancy: {
-                ...initialFormState.vacancy,
-            },
-
-            qualifications: {
-                ...initialFormState.qualifications,
-            },
-
-            remarks: {
-                ...initialFormState.remarks,
-            },
-        });
+        setMasterForm(initialFormState);
+        try {
+            localStorage.removeItem(DRAFT_STORAGE_KEY);
+        } catch (error) {
+            console.error("Failed to clear draft from localStorage:", error);
+        }
     };
 
     // =====================================================
@@ -350,13 +358,6 @@ export default function PostVacancy({ onBack }) {
         // =================================================
         // QUALIFICATION VALIDATION
         // =================================================
-
-        /*
-         * Qualifications come from Position Management.
-         *
-         * We still verify that the selected position has
-         * qualification values before posting.
-         */
 
         const {
             education_requirement,
@@ -466,7 +467,7 @@ export default function PostVacancy({ onBack }) {
                 response
             );
 
-            // Reset
+            // Reset & clear draft storage
             resetForm();
 
             // Success

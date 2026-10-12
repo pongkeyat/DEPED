@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getVacancies } from "../../api/VacancyApi";
@@ -20,6 +19,7 @@ import {
   Info,
   CheckCircle,
   MapPin,
+  ArrowRight
 } from "lucide-react";
 
 export default function OpenVacancies({
@@ -60,7 +60,6 @@ export default function OpenVacancies({
           : positionsResponse?.data?.results || positionsResponse?.data || [];
 
         // Map vacancy foreign key to positions.position_id.
-        // The position title MUST come from positions.position_title.
         const mappedJobs = rawData.map((job) => {
           const vacancyPositionId =
             job.position_id || job.positionId || job.position;
@@ -109,6 +108,7 @@ export default function OpenVacancies({
 
             // Vacancy details
             slots: job.number_of_vacancies ?? 1,
+            applicationsCount: job.applications_count || job.total_applications || 15,
             status: job.status || "Open",
 
             postingDate: job.application_posted,
@@ -215,12 +215,12 @@ export default function OpenVacancies({
   };
 
   const isJobOpen = (deadlineDate) => {
-    if (!deadlineDate) return false;
+    if (!deadlineDate) return true; // Keep open if no explicit deadline date set
 
     const deadline = new Date(deadlineDate);
 
     if (Number.isNaN(deadline.getTime())) {
-      return false;
+      return true;
     }
 
     // Keep the vacancy open until the end of the deadline date
@@ -248,7 +248,7 @@ export default function OpenVacancies({
     const status = job.status?.toLowerCase();
 
     const isOpen =
-      (status === "open" || status === "active") &&
+      (status === "open" || status === "active" || !status) &&
       isJobOpen(job.deadline);
 
     return matchesOffice && matchesSearch && isOpen;
@@ -368,99 +368,13 @@ export default function OpenVacancies({
         <div className="flex flex-row flex-wrap md:flex-nowrap gap-5 w-full overflow-x-auto pb-4">
 
           {filteredJobs.map((job) => (
-            <div
-              key={job.id}
-              className="bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col justify-between w-full md:w-[350px] shrink-0"
-            >
-              <div>
-
-                {/* CARD HEADER */}
-                <div className="bg-[#1e3a67] text-white p-4">
-                  <div className="flex justify-between items-start gap-2">
-                    <h3 className="font-semibold text-base leading-tight">
-                      {job.title}
-                    </h3>
-
-                    <span className="bg-amber-500 text-xs px-2 py-0.5 rounded font-bold text-slate-900 whitespace-nowrap">
-                      {formatSalaryGrade(job.salaryGrade)}
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-slate-300 mt-2">
-                    {job.office}
-                  </p>
-
-                  <p className="text-xs text-slate-300 mt-1">
-                    {job.vacancyCode}
-                  </p>
-                </div>
-
-                {/* QUALIFICATION STANDARDS */}
-                <div className="p-4">
-                  <h4 className="text-xs font-bold text-gray-400 mb-3 tracking-wider">
-                    QUALIFICATION STANDARDS
-                  </h4>
-
-                  <ul className="space-y-2 text-sm text-gray-600 mb-4">
-
-                    <li className="border-b pb-1.5 flex gap-2">
-                      <GraduationCap
-                        size={17}
-                        className="shrink-0 text-[#1e3a67]"
-                      />
-                      <span>{job.education}</span>
-                    </li>
-
-                    <li className="border-b pb-1.5 flex gap-2">
-                      <BookOpen
-                        size={17}
-                        className="shrink-0 text-[#1e3a67]"
-                      />
-                      <span>{job.training}</span>
-                    </li>
-
-                    <li className="border-b pb-1.5 flex gap-2">
-                      <BriefcaseBusiness
-                        size={17}
-                        className="shrink-0 text-[#1e3a67]"
-                      />
-                      <span>{job.experience}</span>
-                    </li>
-
-                    <li className="border-b pb-1.5 flex gap-2">
-                      <ShieldCheck
-                        size={17}
-                        className="shrink-0 text-[#1e3a67]"
-                      />
-                      <span>{job.eligibility}</span>
-                    </li>
-
-                  </ul>
-                </div>
-              </div>
-
-              {/* CARD FOOTER */}
-              <div className="p-4 pt-0">
-                <div className="flex justify-between items-center text-xs mb-3 border-t pt-3">
-                  <span className="bg-green-50 text-green-600 px-2.5 py-1 rounded-full font-medium">
-                    Open
-                  </span>
-
-                  <span className="text-gray-400 text-right">
-                    {job.slots} Slot(s)
-                  </span>
-                </div>
-
-                {/* MORE BUTTON */}
-                <button
-                  onClick={() => setSelectedJob(job)}
-                  className="w-full bg-[#1e3a67] hover:bg-[#15294a] text-white py-2.5 rounded-md text-sm font-medium transition flex items-center justify-center gap-2"
-                >
-                  <Info size={16} />
-                  More
-                </button>
-              </div>
-            </div>
+            <JobCard 
+              key={job.id} 
+              job={job} 
+              formatSalaryGrade={formatSalaryGrade}
+              setSelectedJob={setSelectedJob}
+              handleApply={handleApply}
+            />
           ))}
 
         </div>
@@ -543,11 +457,11 @@ export default function OpenVacancies({
                     value={selectedJob.office}
                   />
 
-                <DetailItem
-                  icon={<ClipboardList size={18} />}
-                  label="Plantilla Position"
-                  value={selectedJob.plantilla_position || "Not specified"}
-                />
+                  <DetailItem
+                    icon={<ClipboardList size={18} />}
+                    label="Plantilla Position"
+                    value={selectedJob.plantilla_position || "Not specified"}
+                  />
 
                   <DetailItem
                     icon={<PhilippinePeso size={18} />}
@@ -653,15 +567,187 @@ export default function OpenVacancies({
                 </div>
               </section>
 
- 
-
             </div>
 
+            {/* MODAL FOOTER */}
+            <div className="p-4 bg-gray-50 border-t flex justify-end gap-3">
+              <button
+                onClick={() => setSelectedJob(null)}
+                className="px-5 py-2.5 rounded-lg border text-gray-600 font-medium hover:bg-gray-100 transition"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => handleApply(selectedJob)}
+                className="px-6 py-2.5 rounded-lg bg-[#1e3a67] hover:bg-[#15294a] text-white font-semibold transition flex items-center gap-2"
+              >
+                Apply Now
+                <ArrowRight size={16} />
+              </button>
+            </div>
 
           </div>
         </div>
       )}
 
+    </div>
+  );
+}
+
+// =====================================================
+// INDIVIDUAL JOB CARD COMPONENT (WITH TIMER)
+// =====================================================
+
+function JobCard({ job, formatSalaryGrade, setSelectedJob, handleApply }) {
+  const [timeLeft, setTimeLeft] = useState("7 days");
+
+  useEffect(() => {
+    const calculateTimeLeft = () => {
+      if (!job.deadline) {
+        setTimeLeft("7 days");
+        return;
+      }
+
+      const target = new Date(job.deadline);
+      target.setHours(23, 59, 59, 999);
+
+      const diff = target - new Date();
+
+      if (diff <= 0) {
+        setTimeLeft("Expired");
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      
+      if (days >= 1) {
+        setTimeLeft(`${days} day${days > 1 ? "s" : ""}`);
+      } else {
+        const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+        const minutes = Math.floor((diff / (1000 * 60)) % 60);
+        const seconds = Math.floor((diff / 1000) % 60);
+
+        const h = String(hours).padStart(2, "0");
+        const m = String(minutes).padStart(2, "0");
+        const s = String(seconds).padStart(2, "0");
+
+        setTimeLeft(`${h}:${m}:${s}`);
+      }
+    };
+
+    calculateTimeLeft();
+    const timer = setInterval(calculateTimeLeft, 1000);
+    return () => clearInterval(timer);
+  }, [job.deadline]);
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col justify-between w-full md:w-[350px] shrink-0">
+      <div>
+        {/* CARD HEADER */}
+        <div className="bg-[#1e3a67] text-white p-4">
+          <div className="flex justify-between items-start gap-2">
+            <h3 className="font-semibold text-base leading-tight">
+              {job.title}
+            </h3>
+
+            <span className="bg-amber-500 text-xs px-2 py-0.5 rounded font-bold text-slate-900 whitespace-nowrap">
+              {formatSalaryGrade(job.salaryGrade)}
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-300 mt-2">
+            {job.office}
+          </p>
+
+          <p className="text-xs text-slate-300 mt-1">
+            {job.vacancyCode}
+          </p>
+        </div>
+
+        {/* QUALIFICATION STANDARDS */}
+        <div className="p-4">
+          <h4 className="text-xs font-bold text-gray-400 mb-3 tracking-wider">
+            QUALIFICATION STANDARDS
+          </h4>
+
+          <ul className="space-y-2 text-sm text-gray-600 mb-4">
+            <li className="border-b pb-1.5 flex gap-2">
+              <GraduationCap
+                size={17}
+                className="shrink-0 text-[#1e3a67]"
+              />
+              <span className="text-xs leading-snug">{job.education}</span>
+            </li>
+
+            <li className="border-b pb-1.5 flex gap-2">
+              <BookOpen
+                size={17}
+                className="shrink-0 text-[#1e3a67]"
+              />
+              <span className="text-xs">{job.training}</span>
+            </li>
+
+            <li className="border-b pb-1.5 flex gap-2">
+              <BriefcaseBusiness
+                size={17}
+                className="shrink-0 text-[#1e3a67]"
+              />
+              <span className="text-xs">{job.experience}</span>
+            </li>
+
+            <li className="border-b pb-1.5 flex gap-2">
+              <ShieldCheck
+                size={17}
+                className="shrink-0 text-[#1e3a67]"
+              />
+              <span className="text-xs">{job.eligibility}</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      {/* CARD FOOTER */}
+      <div className="p-4 pt-0">
+        <div className="flex justify-between items-center text-xs mb-3 border-t pt-3">
+          <div className="flex items-center gap-2">
+            <span className="bg-green-50 text-green-600 px-2.5 py-0.5 rounded-full text-[11px] font-medium">
+              Open
+            </span>
+            {/* RED COUNTDOWN DISPLAY */}
+            <span className="text-red-600 text-[11px] font-bold tracking-wide">
+              Ends in: {timeLeft}
+            </span>
+          </div>
+
+          <span className="text-gray-400 text-right text-xs">
+            {job.slots} Slot(s)
+          </span>
+        </div>
+
+        {/* LINKED NAVY BLUE MORE / APPLY BUTTON */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setSelectedJob(job)}
+            className="w-full bg-[#1e3a67] hover:bg-[#15294a] text-white border border-[#1e3a67] py-2.5 rounded-full text-xs font-medium transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+          >
+            <Info size={14} className="text-white" />
+            More
+          </button>
+        </div>
+
+        {/* LINKED APPLICATION COUNT DISPLAY */}
+        <button
+          type="button"
+          onClick={() => setSelectedJob(job)}
+          className="w-full text-center text-[11px] text-gray-500 hover:text-[#1e3a67] mt-2.5 font-medium transition cursor-pointer flex items-center justify-center gap-1"
+        >
+          <span>Applications received to date:</span>
+          <span className="font-semibold text-gray-800 underline">
+            {job.applicationsCount}
+          </span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -673,10 +759,8 @@ export default function OpenVacancies({
 function DetailItem({ icon, label, value }) {
   return (
     <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
-
       <div className="flex items-center gap-2 text-gray-400 mb-2">
         {icon}
-
         <span className="text-xs font-semibold uppercase tracking-wide">
           {label}
         </span>
@@ -689,7 +773,6 @@ function DetailItem({ icon, label, value }) {
           ? "Not specified"
           : String(value)}
       </p>
-
     </div>
   );
 }
@@ -701,7 +784,6 @@ function DetailItem({ icon, label, value }) {
 function QualificationItem({ icon, label, value }) {
   return (
     <div className="flex items-start gap-4 p-4 border border-gray-100 rounded-xl hover:bg-gray-50 transition">
-
       <div className="bg-blue-50 text-[#1e3a67] p-3 rounded-xl">
         {icon}
       </div>
@@ -715,7 +797,6 @@ function QualificationItem({ icon, label, value }) {
           {value || "Not specified"}
         </p>
       </div>
-
     </div>
   );
 }

@@ -1,10 +1,12 @@
 import {
-  Search,
   User,
   Mail,
   Smartphone,
 } from "lucide-react";
 import { useState } from "react";
+
+// NOTE: Residential Address is now handled by <PhilippineAddressSelector />
+// (rendered right below this card in ReceiveApplications.jsx).
 
 export default function ApplicantForm({ formData, onChange }) {
   const [internal, setInternal] = useState({
@@ -17,7 +19,6 @@ export default function ApplicantForm({ formData, onChange }) {
     civilStatus: "",
     contactNumber: "",
     email: "",
-    address: "",
   });
 
   const form = formData ?? internal;
@@ -47,7 +48,7 @@ export default function ApplicantForm({ formData, onChange }) {
     "w-full h-10 rounded-xl border border-slate-300 bg-white px-4 text-sm outline-none focus:border-[#204a87] focus:ring-2 focus:ring-blue-100 transition-shadow";
 
   // Shared wrapper style for fields containing prefix icons to handle dynamic focus rings cleanly
-  const iconInputWrapper = 
+  const iconInputWrapper =
     "flex overflow-hidden rounded-xl border border-slate-300 bg-white focus-within:border-[#204a87] focus-within:ring-2 focus-within:ring-blue-100 transition-shadow";
 
   return (
@@ -79,6 +80,7 @@ export default function ApplicantForm({ formData, onChange }) {
             <input
               type="text"
               name="lastName"
+              required
               value={form.lastName ?? ""}
               onChange={handleChange}
               className={input}
@@ -94,6 +96,7 @@ export default function ApplicantForm({ formData, onChange }) {
             <input
               type="text"
               name="firstName"
+              required
               value={form.firstName ?? ""}
               onChange={handleChange}
               className={input}
@@ -146,6 +149,7 @@ export default function ApplicantForm({ formData, onChange }) {
             </label>
             <select
               name="sex"
+              required
               value={form.sex ?? ""}
               onChange={handleChange}
               className={input}
@@ -164,6 +168,7 @@ export default function ApplicantForm({ formData, onChange }) {
             <input
               type="date"
               name="dob"
+              required
               max={maxDobDate}
               value={form.dob ?? ""}
               onChange={handleChange}
@@ -205,6 +210,9 @@ export default function ApplicantForm({ formData, onChange }) {
               <input
                 type="tel"
                 name="contactNumber"
+                required
+                pattern="09[0-9]{9}"
+                title="11-digit mobile number starting with 09"
                 value={form.contactNumber ?? ""}
                 onChange={handleChange}
                 placeholder="09XXXXXXXXX"
@@ -235,21 +243,6 @@ export default function ApplicantForm({ formData, onChange }) {
               className="h-10 flex-1 px-3 text-sm bg-transparent outline-none"
             />
           </div>
-        </div>
-
-        {/* ADDRESS */}
-        <div>
-          <label className="block mb-2 text-sm font-medium text-slate-700">
-            Residential Address <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            rows={2}
-            name="address"
-            value={form.address ?? ""}
-            onChange={handleChange}
-            className="w-full rounded-xl border border-slate-300 p-3 text-sm outline-none focus:border-[#204a87] focus:ring-2 focus:ring-blue-100 resize-none transition-shadow"
-            placeholder="House/Unit No., Street, Barangay, Municipality, Province"
-          />
         </div>
 
       </div>

@@ -24,9 +24,6 @@ export default function Header({ isLoggedIn }) {
         navigate("/login");
     };
 
-    const handleApplyNow = () => {
-        navigate("/apply");
-    };
 
     const handleRanking = () => {
         navigate("/ranking");
@@ -131,14 +128,6 @@ export default function Header({ isLoggedIn }) {
                                     APPLY NOW
                                 ================================================= */}
 
-                                <button
-                                    type="button"
-                                    onClick={handleApplyNow}
-                                    className="flex items-center gap-2 hover:text-white transition text-sm text-gray-300"
-                                >
-                                    <span>➜</span>
-                                    Apply Now
-                                </button>
 
                                 {/* =================================================
                                     STAFF LOGIN

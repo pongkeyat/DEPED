@@ -14,6 +14,28 @@ const categories = [
 ];
 
 // =========================================================
+// DUMMY OFFICE / UNITS
+// =========================================================
+
+const officeUnits = [
+    "Human Resource Management Office",
+    "Office of the Schools Division Superintendent",
+    "Office of the Regional Director",
+    "Curriculum and Learning Management Division (CLMD)",
+    "Education Support and Services Division (ESSD)",
+    "Field Technical Assistance Division (FTAD)",
+    "Quality Assurance Division (QAD)",
+    "Policy, Planning and Research Division (PPRD)",
+    "Human Resource Development Division (HRDD)",
+    "Administrative Division (AD)",
+    "Finance Division (FD)",
+    "School Division Office (SDO)",
+
+
+
+];
+
+// =========================================================
 // CATEGORY NORMALIZATION
 // =========================================================
 
@@ -703,17 +725,28 @@ export default function PostVacancyForm({
                         Office / Unit Assignment
                     </label>
 
-                    <input
-                        type="text"
+                    <select
                         name="office_unit"
-                        placeholder="e.g. Human Resource Management Office"
                         value={
                             formData?.office_unit ||
                             ""
                         }
                         onChange={onChange}
-                        className="w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584]"
-                    />
+                        className="w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584] bg-white"
+                    >
+                        <option value="">
+                            Select Office / Unit
+                        </option>
+
+                        {officeUnits.map((office) => (
+                            <option
+                                key={office}
+                                value={office}
+                            >
+                                {office}
+                            </option>
+                        ))}
+                    </select>
                 </div>
 
                 {/* =================================================
