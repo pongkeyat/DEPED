@@ -1,4 +1,3 @@
-
 import pool from "../config/db.js";
 
 import {
@@ -300,7 +299,8 @@ export const getAllVacancies = async (req, res) => {
                 q.training_requirement,
                 q.experience_requirement,
                 q.eligibility_requirement,
-                r.remark_text
+                r.remark_text,
+                r.memo
             FROM public.vacancies v
             LEFT JOIN public.positions p
                 ON v.position_id = p.position_id
@@ -422,65 +422,9 @@ export const getVacancyById = async (req, res) => {
 export const updateVacancy = async (req, res) => {
     const { id } = req.params;
 
-    const {
-        position_id,
-        plantilla_position,
-        office_unit,
-        place_of_assignment,
-        number_of_vacancies,
-        application_posted,
-        application_deadline,
-        education_requirement,
-        training_requirement,
-        experience_requirement,
-        eligibility_requirement,
-        remark_text
-    } = req.body;
-
-    if (
-        !position_id ||
-        !plantilla_position ||
-        !office_unit ||
-        !place_of_assignment ||
-        number_of_vacancies === undefined ||
-        number_of_vacancies === null ||
-        Number(number_of_vacancies) <= 0 ||
-        !application_posted ||
-        !application_deadline ||
-        !education_requirement ||
-        !training_requirement ||
-        !experience_requirement ||
-        !eligibility_requirement
-    ) {
-        return res.status(400).json({
-            success: false,
-            error: "All required fields must be provided."
-        });
-    }
-
-    const postedDate = new Date(application_posted);
-    const deadlineDate = new Date(application_deadline);
-
-    if (
-        isNaN(postedDate.getTime()) ||
-        isNaN(deadlineDate.getTime())
-    ) {
-        return res.status(400).json({
-            success: false,
-            error: "Invalid application dates."
-        });
-    }
-
-    if (deadlineDate < postedDate) {
-        return res.status(400).json({
-            success: false,
-            error: "Application deadline cannot be before the posted date."
-        });
-    }
-
     try {
-        const existingVacancy =
-            await getVacancyByIdService(id);
+        // 1. Fetch existing vacancy first
+        const existingVacancy = await getVacancyByIdService(id);
 
         if (!existingVacancy) {
             return res.status(404).json({
@@ -499,6 +443,43 @@ export const updateVacancy = async (req, res) => {
             });
         }
 
+        // 2. Fallback to existing values if fields are not provided in req.body
+        const position_id = req.body.position_id ?? existingVacancy.position_id;
+        const plantilla_position = req.body.plantilla_position ?? existingVacancy.plantilla_position;
+        const office_unit = req.body.office_unit ?? existingVacancy.office_unit;
+        const place_of_assignment = req.body.place_of_assignment ?? existingVacancy.place_of_assignment;
+        const number_of_vacancies = req.body.number_of_vacancies ?? existingVacancy.number_of_vacancies;
+        const application_posted = req.body.application_posted ?? existingVacancy.application_posted;
+        const application_deadline = req.body.application_deadline ?? existingVacancy.application_deadline;
+
+        // Handle nested qualifications structure safely
+        const existingQuals = existingVacancy.qualifications || existingVacancy;
+        const education_requirement = req.body.education_requirement ?? existingQuals.education_requirement;
+        const training_requirement = req.body.training_requirement ?? existingQuals.training_requirement;
+        const experience_requirement = req.body.experience_requirement ?? existingQuals.experience_requirement;
+        const eligibility_requirement = req.body.eligibility_requirement ?? existingQuals.eligibility_requirement;
+        
+        const remark_text = req.body.remark_text ?? existingVacancy.remark_text;
+
+        // 3. Validate dates
+        const postedDate = new Date(application_posted);
+        const deadlineDate = new Date(application_deadline);
+
+        if (isNaN(postedDate.getTime()) || isNaN(deadlineDate.getTime())) {
+            return res.status(400).json({
+                success: false,
+                error: "Invalid application dates."
+            });
+        }
+
+        if (deadlineDate < postedDate) {
+            return res.status(400).json({
+                success: false,
+                error: "Application deadline cannot be before the posted date."
+            });
+        }
+
+        // 4. Perform update
         const updatedVacancy = await updateVacancyService(
             id,
             {
@@ -624,12 +605,27 @@ export const archiveVacancy = async (req, res) => {
 // WORKFLOW: OPEN -> EVALUATION -> ASSESSMENT -> CLOSED
 // ============================================================
 
+
 export const updateVacancyStatus = async (req, res) => {
     const { id } = req.params;
+    const { memo, status: requestedStatus } = req.body;
+
     const client = await pool.connect();
+
+    let updatedApplicants = 0;
+    let updatedApplicantIds = [];
+    let previousStatus;
+    let nextStatus;
+    let deadline;
+    let deadlinePassed;
+    let screeningTriggered = false;
 
     try {
         await client.query("BEGIN");
+
+        // ======================================================
+        // GET VACANCY
+        // ======================================================
 
         const vacancyResult = await client.query(
             `
@@ -651,46 +647,118 @@ export const updateVacancyStatus = async (req, res) => {
 
             return res.status(404).json({
                 success: false,
-                error: `Vacancy '${id}' not found or archived.`
+                error: `Vacancy '${id}' not found or archived.`,
             });
         }
 
         const vacancy = vacancyResult.rows[0];
-        const previousStatus = vacancy.status;
-        let nextStatus = previousStatus;
 
-        // Each API call advances only one stage.
-        if (previousStatus === "Evaluation") {
-            nextStatus = "Assessment";
-        } else if (previousStatus === "Assessment") {
-            nextStatus = "Closed";
+        previousStatus = vacancy.status;
+        nextStatus = previousStatus;
+        deadline = vacancy.application_deadline;
+        deadlinePassed = vacancy.deadline_passed;
+
+        // ======================================================
+        // VALIDATE TERMINATION MEMO
+        // ======================================================
+
+        let cleanedMemo = null;
+
+        if (requestedStatus === "Terminated") {
+            cleanedMemo =
+                typeof memo === "string" ? memo.trim() : "";
+
+            if (!cleanedMemo) {
+                await client.query("ROLLBACK");
+
+                return res.status(400).json({
+                    success: false,
+                    error: "A memo is required when terminating a vacancy.",
+                });
+            }
+
+            if (previousStatus === "Terminated") {
+                await client.query("ROLLBACK");
+
+                return res.status(400).json({
+                    success: false,
+                    error: "This vacancy has already been terminated.",
+                });
+            }
+        }
+
+        // ======================================================
+        // DETERMINE NEXT STATUS
+        // ======================================================
+
+        if (previousStatus === "Terminated") {
+            nextStatus = "Terminated";
+        } else if (requestedStatus === "Terminated") {
+            nextStatus = "Terminated";
+        } else if (requestedStatus === "Evaluation") {
+            nextStatus = "Evaluation";
         } else if (
             previousStatus === "Open" &&
             vacancy.deadline_passed
         ) {
             nextStatus = "Evaluation";
+        } else if (previousStatus === "Evaluation") {
+            nextStatus = "Assessment";
+        } else if (previousStatus === "Assessment") {
+            nextStatus = "Closed";
         } else if (previousStatus === "Closed") {
             nextStatus = "Closed";
         }
 
-        const vacancyUpdateResult = await client.query(
+        // ======================================================
+        // DETERMINE WHETHER INITIAL SCREENING SHOULD RUN
+        // ======================================================
+
+        screeningTriggered =
+            previousStatus !== nextStatus &&
+            ["Evaluation", "Terminated"].includes(nextStatus);
+
+        // ======================================================
+        // UPDATE VACANCY STATUS
+        // ======================================================
+
+        await client.query(
             `
             UPDATE public.vacancies
             SET status = $1
             WHERE vacancy_id = $2
-            RETURNING *
             `,
             [nextStatus, id]
         );
 
-        let updatedApplicants = 0;
-        let updatedApplicantIds = [];
+        // ======================================================
+        // INSERT NEW TERMINATION MEMO
+        // Save to both columns.
+        // Do not update or overwrite previous remarks.
+        // ======================================================
 
-        // When the vacancy first becomes Closed, update eligible applicants.
         if (
-            previousStatus !== "Closed" &&
-            nextStatus === "Closed"
+            requestedStatus === "Terminated" &&
+            cleanedMemo
         ) {
+            await client.query(
+                `
+                INSERT INTO public.vacancies_remarks (
+                    vacancy_id,
+                    remark_text,
+                    memo
+                )
+                VALUES ($1, $2, $3)
+                `,
+                [id, cleanedMemo, cleanedMemo]
+            );
+        }
+
+        // ======================================================
+        // MOVE COMPLETE APPLICANTS TO INITIAL SCREENING
+        // ======================================================
+
+        if (screeningTriggered) {
             const applicationUpdateResult = await client.query(
                 `
                 UPDATE public.hr_remarks_final_notes AS hr
@@ -716,17 +784,43 @@ export const updateVacancyStatus = async (req, res) => {
             );
         }
 
+        // ======================================================
+        // COMMIT TRANSACTION
+        // ======================================================
+
         await client.query("COMMIT");
+    } catch (error) {
+        try {
+            await client.query("ROLLBACK");
+        } catch (rollbackError) {
+            console.error("Rollback error:", rollbackError);
+        }
 
-        let emailsSent = 0;
-        let emailsFailed = 0;
+        console.error(
+            `Error updating status for vacancy ${id}:`,
+            error
+        );
 
-        // Send initial screening emails only on transition to Closed.
-        if (
-            previousStatus !== "Closed" &&
-            nextStatus === "Closed" &&
-            updatedApplicantIds.length > 0
-        ) {
+        return res.status(500).json({
+            success: false,
+            error: "Internal server error",
+        });
+    } finally {
+        client.release();
+    }
+
+    // ======================================================
+    // SEND INITIAL SCREENING EMAILS
+    // ======================================================
+
+    let emailsSent = 0;
+    let emailsFailed = 0;
+
+    if (
+        screeningTriggered &&
+        updatedApplicantIds.length > 0
+    ) {
+        try {
             const applicantsResult = await pool.query(
                 `
                 SELECT
@@ -766,41 +860,48 @@ export const updateVacancyStatus = async (req, res) => {
                     );
                 }
             }
+        } catch (emailQueryError) {
+            console.error(
+                "Failed to retrieve applicants for initial screening emails:",
+                emailQueryError
+            );
         }
+    }
 
-        return res.status(200).json({
-            success: true,
-            message: previousStatus === nextStatus
+    // ======================================================
+    // GET UPDATED VACANCY
+    // ======================================================
+
+    const updatedVacancyResult = await pool.query(
+        `
+        SELECT *
+        FROM public.vacancies
+        WHERE vacancy_id = $1
+        `,
+        [id]
+    );
+
+    // ======================================================
+    // RESPONSE
+    // ======================================================
+
+    return res.status(200).json({
+        success: true,
+
+        message:
+            previousStatus === nextStatus
                 ? `Vacancy status remains ${nextStatus}.`
                 : `Vacancy status changed from ${previousStatus} to ${nextStatus}.`,
-            previousStatus,
-            currentStatus: nextStatus,
-            deadline: vacancy.application_deadline,
-            deadlinePassed: vacancy.deadline_passed,
-            data: vacancyUpdateResult.rows[0],
-            applicantsUpdated: updatedApplicants,
-            emailsSent,
-            emailsFailed
-        });
 
-    } catch (error) {
-        try {
-            await client.query("ROLLBACK");
-        } catch (rollbackError) {
-            console.error("Rollback error:", rollbackError);
-        }
+        previousStatus,
+        currentStatus: nextStatus,
+        deadline,
+        deadlinePassed,
 
-        console.error(
-            `Error updating status for vacancy ${id}:`,
-            error
-        );
+        data: updatedVacancyResult.rows[0],
 
-        return res.status(500).json({
-            success: false,
-            error: "Internal server error"
-        });
-
-    } finally {
-        client.release();
-    }
+        applicantsUpdated: updatedApplicants,
+        emailsSent,
+        emailsFailed,
+    });
 };

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import {
     Search,
@@ -10,63 +9,57 @@ import {
     Archive,
     Pencil,
     X,
+    Eye,
 } from "lucide-react";
-
 import {
     getVacancies,
     archiveVacancy,
+    updateVacancyStatus,
 } from "../../api/VacancyApi";
-
 import EditVacancyModal from "./EditVacancyModal";
-
 export default function GetVacancies({ onPostVacancy }) {
     const [vacancies, setVacancies] = useState([]);
     const [loading, setLoading] = useState(true);
-
     // Archive modal
     const [selectedVacancy, setSelectedVacancy] = useState(null);
     const [showArchiveModal, setShowArchiveModal] = useState(false);
     const [archiving, setArchiving] = useState(false);
     const [archiveError, setArchiveError] = useState("");
 
+    // Termination memo view modal
+    const [selectedMemoVacancy, setSelectedMemoVacancy] = useState(null);
+    const [showMemoModal, setShowMemoModal] = useState(false);
     // Edit modal
     const [selectedEditVacancy, setSelectedEditVacancy] = useState(null);
     const [showEditModal, setShowEditModal] = useState(false);
-
     // Search and filters
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState("");
     const [officeFilter, setOfficeFilter] = useState("");
-
     const [appliedFilters, setAppliedFilters] = useState({
         status: "",
         office: "",
         search: "",
     });
-
     // Pagination
     const [entriesPerPage, setEntriesPerPage] = useState(25);
     const [currentPage, setCurrentPage] = useState(1);
-
     // Refresh trigger
     const [refreshKey, setRefreshKey] = useState(0);
-
     // =====================================================
     // FETCH VACANCIES
     // =====================================================
-
     const fetchVacancies = async () => {
         try {
             setLoading(true);
-
             const response = await getVacancies();
             const data = response?.data || [];
-
             setVacancies(
                 Array.isArray(data)
                     ? data.filter((vacancy) =>
-                        vacancy.status === "Open" ||
-                        vacancy.status === "Closed"
+                        ["Open", "Evaluation", "Assessment", "Closed", "Terminated"].includes(
+                            vacancy.status
+                        )
                     )
                     : []
             );
@@ -77,31 +70,24 @@ export default function GetVacancies({ onPostVacancy }) {
             setLoading(false);
         }
     };
-
     useEffect(() => {
         fetchVacancies();
     }, [refreshKey]);
-
     // =====================================================
     // METRIC CARDS
     // =====================================================
-
     const totalVacancies = vacancies.length;
-
     const openVacancies = vacancies.filter(
         (v) => v.status === "Open" || !v.status
     ).length;
-
     const closedVacancies = vacancies.filter(
         (v) => v.status === "Closed"
     ).length;
-
     const totalSlots = vacancies.reduce(
         (acc, curr) =>
             acc + (Number(curr.number_of_vacancies) || 0),
         0
     );
-
     const cards = [
         {
             title: "Total Vacancies",
@@ -136,177 +122,136 @@ export default function GetVacancies({ onPostVacancy }) {
             iconColor: "text-purple-500",
         },
     ];
-
     // =====================================================
     // FILTER HANDLERS
     // =====================================================
-
     const handleApplyFilters = () => {
         setAppliedFilters({
             status: statusFilter,
             office: officeFilter,
             search: searchTerm.trim().toLowerCase(),
         });
-
         setCurrentPage(1);
     };
-
     const handleResetFilters = () => {
         setStatusFilter("");
         setOfficeFilter("");
         setSearchTerm("");
-
         setAppliedFilters({
             status: "",
             office: "",
             search: "",
         });
-
         setCurrentPage(1);
     };
-
     // =====================================================
     // FILTER VACANCIES
     // =====================================================
-
     const filteredVacancies = vacancies.filter((item) => {
         const matchesStatus =
             !appliedFilters.status ||
             item.status === appliedFilters.status;
-
         const matchesOffice =
             !appliedFilters.office ||
             item.office_unit === appliedFilters.office;
-
         const positionTitle = (
             item.position_title ||
             item.plantilla_position ||
             ""
         ).toLowerCase();
-
         const vacancyId = String(
             item.vacancy_id || item.id || ""
         ).toLowerCase();
-
         const matchesSearch =
             !appliedFilters.search ||
             positionTitle.includes(appliedFilters.search) ||
             vacancyId.includes(appliedFilters.search);
-
         return (
             matchesStatus &&
             matchesOffice &&
             matchesSearch
         );
     });
-
     // =====================================================
     // PAGINATION
     // =====================================================
-
     const totalPages = Math.max(
         1,
         Math.ceil(
             filteredVacancies.length / entriesPerPage
         )
     );
-
     const startIndex =
         (currentPage - 1) * entriesPerPage;
-
     const paginatedVacancies =
         filteredVacancies.slice(
             startIndex,
             startIndex + entriesPerPage
         );
-
     useEffect(() => {
         if (currentPage > totalPages) {
             setCurrentPage(totalPages);
         }
     }, [currentPage, totalPages]);
-
     // =====================================================
     // EDIT VACANCY
     // =====================================================
-
     const handleEditClick = (vacancy) => {
         setSelectedEditVacancy(vacancy);
         setShowEditModal(true);
     };
-
     const handleCloseEditModal = () => {
         setShowEditModal(false);
         setSelectedEditVacancy(null);
     };
-
     const handleVacancyUpdated = () => {
         // Refresh vacancy list after successful update
         setShowEditModal(false);
         setSelectedEditVacancy(null);
-
         setRefreshKey((prev) => prev + 1);
     };
-
     // =====================================================
     // ARCHIVE VACANCY
     // =====================================================
-
-
-        const handleArchiveClick = (vacancy) => {
-            // Only CLOSED vacancies can be archived.
-            if (vacancy.status !== "Closed") {
-                setArchiveError("Only closed vacancies can be archived.");
-                return;
-            }
-
-            setSelectedVacancy(vacancy);
-            setArchiveError("");
-            setShowArchiveModal(true);
-        };
-
-
+    const handleArchiveClick = (vacancy) => {
+        // Only CLOSED vacancies can be archived.
+        if (vacancy.status !== "Closed") {
+            setArchiveError("Only closed vacancies can be archived.");
+            return;
+        }
+        setSelectedVacancy(vacancy);
+        setArchiveError("");
+        setShowArchiveModal(true);
+    };
     const handleCloseArchiveModal = () => {
         if (archiving) return;
-
         setShowArchiveModal(false);
         setSelectedVacancy(null);
         setArchiveError("");
     };
-
     const handleConfirmArchive = async () => {
         if (!selectedVacancy) return;
-
         const vacancyId =
             selectedVacancy.vacancy_id ||
             selectedVacancy.id;
-
         if (!vacancyId) {
             setArchiveError("Vacancy ID is missing.");
             return;
         }
-
-        
         if (selectedVacancy.status !== "Closed") {
             setArchiveError("Only closed vacancies can be archived.");
             return;
         }
-
-
         try {
             setArchiving(true);
             setArchiveError("");
-
             await archiveVacancy(vacancyId);
-
             setShowArchiveModal(false);
             setSelectedVacancy(null);
-
             setCurrentPage(1);
             setRefreshKey((prev) => prev + 1);
         } catch (err) {
             console.error("Archive vacancy error:", err);
-
             setArchiveError(
                 err.response?.data?.message ||
                 "Failed to archive vacancy. Please try again."
@@ -315,11 +260,60 @@ export default function GetVacancies({ onPostVacancy }) {
             setArchiving(false);
         }
     };
-
     // =====================================================
+    // =====================================================
+    // TERMINATE VACANCY -> TERMINATED
+    // =====================================================
+    const [terminatingVacancyId, setTerminatingVacancyId] = useState(null);
+    const [terminationReason, setTerminationReason] = useState("");
+    const [terminating, setTerminating] = useState(false);
+    const [terminationError, setTerminationError] = useState("");
+    const handleTerminateClick = (vacancy) => {
+        const id = vacancy.vacancy_id || vacancy.id;
+        if (!id) return;
+        if (String(terminatingVacancyId) === String(id)) {
+            setTerminatingVacancyId(null);
+        } else {
+            setTerminatingVacancyId(id);
+        }
+        setTerminationReason("");
+        setTerminationError("");
+    };
+    const handleSubmitTermination = async (vacancy) => {
+        const id = vacancy.vacancy_id || vacancy.id;
+        const reason = terminationReason.trim();
+        if (!id) {
+            setTerminationError("Vacancy ID is missing.");
+            return;
+        }
+        if (!reason) {
+            setTerminationError("Please enter a reason.");
+            return;
+        }
+        try {
+            setTerminating(true);
+            setTerminationError("");
+            // Send both the new status and required termination memo.
+            await updateVacancyStatus(id, {
+                status: "Terminated",
+                memo: reason,
+            });
+            setTerminatingVacancyId(null);
+            setTerminationReason("");
+            setCurrentPage(1);
+            setRefreshKey((previous) => previous + 1);
+        } catch (error) {
+            setTerminationError(
+                error.response?.data?.error ||
+                error.response?.data?.message ||
+                "Failed to terminate vacancy. Please try again."
+            );
+        } finally {
+            setTerminating(false);
+        }
+    };
     // LOADING SCREEN
     // =====================================================
-
     if (loading) {
         return (
             <div className="flex min-h-[400px] items-center justify-center">
@@ -329,20 +323,15 @@ export default function GetVacancies({ onPostVacancy }) {
             </div>
         );
     }
-
     // =====================================================
     // MAIN COMPONENT
     // =====================================================
-
     return (
-       <div className="mx-auto min-h-screen w-full max-w-7xl space-y-6  py-6">
-
+        <div className="mx-auto min-h-screen w-full max-w-7xl space-y-6  py-6">
             {/* METRIC CARDS */}
-
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
                 {cards.map((card) => {
                     const Icon = card.icon;
-
                     return (
                         <div
                             key={card.title}
@@ -355,12 +344,10 @@ export default function GetVacancies({ onPostVacancy }) {
                                         className={card.iconColor}
                                     />
                                 </div>
-
                                 <div>
                                     <h2 className="text-4xl font-bold text-gray-800">
                                         {card.value}
                                     </h2>
-
                                     <p className="text-sm text-gray-500">
                                         {card.title}
                                     </p>
@@ -370,17 +357,13 @@ export default function GetVacancies({ onPostVacancy }) {
                     );
                 })}
             </div>
-
             {/* FILTERS */}
-
             <div className="rounded-xl bg-white p-6 shadow-sm">
                 <div className="grid grid-cols-1 gap-5 lg:grid-cols-4">
-
                     <div>
                         <label className="mb-2 block text-sm font-medium text-gray-700">
                             Status
                         </label>
-
                         <select
                             value={statusFilter}
                             onChange={(e) =>
@@ -390,15 +373,16 @@ export default function GetVacancies({ onPostVacancy }) {
                         >
                             <option value="">All Status</option>
                             <option value="Open">Open</option>
+                            <option value="Evaluation">Evaluation</option>
+                            <option value="Assessment">Assessment</option>
                             <option value="Closed">Closed</option>
+                            <option value="Terminated">Terminated</option>
                         </select>
                     </div>
-
                     <div>
                         <label className="mb-2 block text-sm font-medium text-gray-700">
                             Office / Unit
                         </label>
-
                         <select
                             value={officeFilter}
                             onChange={(e) =>
@@ -407,7 +391,6 @@ export default function GetVacancies({ onPostVacancy }) {
                             className="w-full rounded-lg border border-gray-300 bg-gray-50 px-4 py-3 outline-none focus:border-blue-500"
                         >
                             <option value="">All Offices</option>
-
                             {[...new Set(
                                 vacancies
                                     .map((v) => v.office_unit)
@@ -424,7 +407,6 @@ export default function GetVacancies({ onPostVacancy }) {
                                 ))}
                         </select>
                     </div>
-
                     <div className="flex items-end gap-3 lg:col-span-2 lg:justify-end">
                         <button
                             type="button"
@@ -434,7 +416,6 @@ export default function GetVacancies({ onPostVacancy }) {
                             <Filter size={18} />
                             Filter
                         </button>
-
                         <button
                             type="button"
                             onClick={handleResetFilters}
@@ -445,25 +426,19 @@ export default function GetVacancies({ onPostVacancy }) {
                     </div>
                 </div>
             </div>
-
             {/* VACANCY TABLE */}
-
             <div className="overflow-hidden rounded-xl bg-white shadow-sm">
-
                 <div className="bg-[#1b4584] px-6 py-4">
                     <h2 className="font-semibold text-white">
                         Vacancy Postings
                     </h2>
                 </div>
-
                 {/* SEARCH AND ENTRIES */}
-
                 <div className="flex flex-col gap-4 border-b p-5 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center gap-2">
                         <span className="text-sm text-gray-500">
                             Show
                         </span>
-
                         <select
                             value={entriesPerPage}
                             onChange={(e) => {
@@ -479,18 +454,15 @@ export default function GetVacancies({ onPostVacancy }) {
                             <option value={50}>50</option>
                             <option value={100}>100</option>
                         </select>
-
                         <span className="text-sm text-gray-500">
                             entries
                         </span>
                     </div>
-
                     <div className="relative w-full md:w-72">
                         <Search
                             size={18}
                             className="absolute left-3 top-3 text-gray-400"
                         />
-
                         <input
                             type="text"
                             value={searchTerm}
@@ -507,12 +479,9 @@ export default function GetVacancies({ onPostVacancy }) {
                         />
                     </div>
                 </div>
-
                 {/* TABLE CONTENT */}
-
                 <div className="overflow-x-auto">
                     <table className="min-w-full">
-
                         <thead className="bg-gray-50 text-sm uppercase text-gray-600">
                             <tr>
                                 <th className="px-6 py-4 text-left">#</th>
@@ -526,14 +495,11 @@ export default function GetVacancies({ onPostVacancy }) {
                                 <th className="px-6 py-4 text-center">Actions</th>
                             </tr>
                         </thead>
-
                         <tbody className="divide-y divide-gray-100 text-sm">
-
                             {paginatedVacancies.length > 0 ? (
                                 paginatedVacancies.map((item, index) => {
                                     const vacancyId =
                                         item.vacancy_id || item.id;
-
                                     return (
                                         <tr
                                             key={vacancyId || index}
@@ -542,27 +508,22 @@ export default function GetVacancies({ onPostVacancy }) {
                                             <td className="px-6 py-4 font-medium text-gray-400">
                                                 {startIndex + index + 1}
                                             </td>
-
                                             <td className="px-6 py-4 font-mono text-xs text-gray-500">
                                                 {vacancyId || "N/A"}
                                             </td>
-
                                             <td className="px-6 py-4">
                                                 <div className="font-semibold text-gray-900">
                                                     {item.position_title ||
                                                         item.plantilla_position ||
                                                         "N/A"}
                                                 </div>
-
                                                 <div className="text-xs text-gray-500">
                                                     SG-{item.salary_grade || "N/A"}
                                                 </div>
                                             </td>
-
                                             <td className="px-6 py-4 text-gray-600">
                                                 {item.office_unit || "N/A"}
                                             </td>
-
                                             <td className="px-6 py-4 text-gray-600">
                                                 {item.application_posted
                                                     ? new Date(
@@ -570,7 +531,6 @@ export default function GetVacancies({ onPostVacancy }) {
                                                     ).toLocaleDateString()
                                                     : "N/A"}
                                             </td>
-
                                             <td className="px-6 py-4 text-gray-600">
                                                 {item.application_deadline
                                                     ? new Date(
@@ -578,28 +538,29 @@ export default function GetVacancies({ onPostVacancy }) {
                                                     ).toLocaleDateString()
                                                     : "N/A"}
                                             </td>
-
                                             <td className="px-6 py-4 text-center font-bold text-gray-700">
                                                 {item.number_of_vacancies ?? 0}
                                             </td>
-
                                             <td className="px-6 py-4 text-center">
-                                                {item.status === "Closed" ? (
-                                                    <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700">
-                                                        Closed
-                                                    </span>
-                                                ) : (
-                                                    <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700">
-                                                        Open
-                                                    </span>
-                                                )}
+                                                <span
+                                                    className={`rounded-full px-3 py-1 text-xs font-medium ${
+                                                        item.status === "Open"
+                                                            ? "bg-green-100 text-green-700"
+                                                            : item.status === "Evaluation"
+                                                              ? "bg-blue-100 text-blue-700"
+                                                              : item.status === "Assessment"
+                                                                ? "bg-purple-100 text-purple-700"
+                                                                : item.status === "Terminated"
+                                                                  ? "bg-gray-200 text-gray-800"
+                                                                  : "bg-red-100 text-red-700"
+                                                    }`}
+                                                >
+                                                    {item.status || "Open"}
+                                                </span>
                                             </td>
-
                                             {/* EDIT AND ARCHIVE ACTIONS */}
-
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center justify-center gap-2">
-
                                                     {item.status === "Open" && (
                                                         <button
                                                             type="button"
@@ -608,24 +569,57 @@ export default function GetVacancies({ onPostVacancy }) {
                                                             title="Edit vacancy"
                                                         >
                                                             <Pencil size={15} />
-                                                            Edit
+                                                            Extend
                                                         </button>
                                                     )}
+                                                    {item.status === "Open" && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleTerminateClick(item)}
+                                                            className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+                                                        >
+                                                            <XCircle size={15} />
+                                                            Terminate
+                                                        </button>
+                                                    )}
+                                                    {item.status === "Terminated" && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setSelectedMemoVacancy(item);
+                                                            setShowMemoModal(true);
+                                                        }}
+                                                        className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:bg-gray-100"
+                                                        title="View termination memo"
+                                                    >
+                                                        <Eye size={15} />
+                                                        View Memo
+                                                    </button>
+                                                )}
 
+                                                {["Evaluation", "Assessment"].includes(item.status) && (
+                                                    <button
+                                                        type="button"
+                                                        disabled
+                                                        className="inline-flex cursor-not-allowed items-center gap-2 whitespace-nowrap rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-400 opacity-70"
+                                                        title="Archive is disabled until the vacancy is Closed"
+                                                    >
+                                                        <Archive size={15} />
+                                                        Archive
+                                                    </button>
+                                                )}
 
-                                    {item.status === "Closed" && (
-                                        <button
-                                            type="button"
-                                            onClick={() => handleArchiveClick(item)}
-                                            className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100"
-                                            title="Archive closed vacancy"
-                                        >
-                                            <Archive size={15} />
-                                            Archive
-                                        </button>
-                                    )}
-
-
+                                                {item.status === "Closed" && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleArchiveClick(item)}
+                                                        className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100"
+                                                        title="Archive closed vacancy"
+                                                    >
+                                                        <Archive size={15} />
+                                                        Archive
+                                                    </button>
+                                                )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -642,11 +636,9 @@ export default function GetVacancies({ onPostVacancy }) {
                                                 size={40}
                                                 className="text-gray-300"
                                             />
-
                                             <p className="font-medium text-gray-500">
                                                 No vacancies found.
                                             </p>
-
                                             <p className="text-sm text-gray-400">
                                                 Try changing your search or filters.
                                             </p>
@@ -657,9 +649,7 @@ export default function GetVacancies({ onPostVacancy }) {
                         </tbody>
                     </table>
                 </div>
-
                 {/* PAGINATION */}
-
                 <div className="flex flex-col items-center justify-between gap-4 border-t p-5 sm:flex-row">
                     <p className="text-sm text-gray-500">
                         Showing{" "}
@@ -674,7 +664,6 @@ export default function GetVacancies({ onPostVacancy }) {
                         {" "}of{" "}
                         {filteredVacancies.length} entries
                     </p>
-
                     <div className="flex items-center gap-2">
                         <button
                             type="button"
@@ -688,11 +677,9 @@ export default function GetVacancies({ onPostVacancy }) {
                         >
                             Previous
                         </button>
-
                         <span className="rounded-lg bg-[#1b4584] px-4 py-2 text-sm font-semibold text-white">
                             {currentPage} / {totalPages}
                         </span>
-
                         <button
                             type="button"
                             disabled={currentPage >= totalPages}
@@ -708,11 +695,9 @@ export default function GetVacancies({ onPostVacancy }) {
                     </div>
                 </div>
             </div>
-
             {/* ============================================= */}
             {/* EDIT VACANCY MODAL */}
             {/* ============================================= */}
-
             {showEditModal && selectedEditVacancy && (
                 <EditVacancyModal
                     isOpen={showEditModal}
@@ -721,11 +706,9 @@ export default function GetVacancies({ onPostVacancy }) {
                     onUpdated={handleVacancyUpdated}
                 />
             )}
-
             {/* ============================================= */}
             {/* ARCHIVE CONFIRMATION MODAL */}
             {/* ============================================= */}
-
             {showArchiveModal && selectedVacancy && (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -743,18 +726,15 @@ export default function GetVacancies({ onPostVacancy }) {
                                         className="text-red-600"
                                     />
                                 </div>
-
                                 <div>
                                     <h2 className="text-lg font-bold text-gray-900">
                                         Archive Vacancy
                                     </h2>
-
                                     <p className="text-sm text-gray-500">
                                         Confirm your action
                                     </p>
                                 </div>
                             </div>
-
                             <button
                                 type="button"
                                 onClick={handleCloseArchiveModal}
@@ -764,50 +744,41 @@ export default function GetVacancies({ onPostVacancy }) {
                                 <X size={20} />
                             </button>
                         </div>
-
                         <p className="mb-4 text-sm leading-6 text-gray-600">
                             Are you sure you want to archive this vacancy?
                         </p>
-
                         <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
                             <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                                 Vacancy ID
                             </p>
-
                             <p className="mb-3 font-mono text-sm font-semibold text-gray-800">
                                 {selectedVacancy.vacancy_id ||
                                     selectedVacancy.id ||
                                     "N/A"}
                             </p>
-
                             <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                                 Position
                             </p>
-
                             <p className="font-semibold text-gray-900">
                                 {selectedVacancy.position_title ||
                                     selectedVacancy.plantilla_position ||
                                     "N/A"}
                             </p>
-
                             <p className="mt-1 text-sm text-gray-500">
                                 {selectedVacancy.office_unit ||
                                     "No office specified"}
                             </p>
                         </div>
-
                         <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-5 text-amber-800">
                             Archiving will remove this vacancy from the active
                             vacancy listings. Its records should remain in the
                             database for historical reference.
                         </div>
-
                         {archiveError && (
                             <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                                 {archiveError}
                             </div>
                         )}
-
                         <div className="flex justify-end gap-3">
                             <button
                                 type="button"
@@ -817,7 +788,6 @@ export default function GetVacancies({ onPostVacancy }) {
                             >
                                 Cancel
                             </button>
-
                             <button
                                 type="button"
                                 onClick={handleConfirmArchive}
@@ -825,10 +795,225 @@ export default function GetVacancies({ onPostVacancy }) {
                                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 <Archive size={16} />
-
                                 {archiving
                                     ? "Archiving..."
                                     : "Yes, Archive"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* ============================================= */}
+            {/* TERMINATION MEMO MODAL */}
+            {/* ============================================= */}
+            {terminatingVacancyId !== null && (
+                <div
+                    className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+                    onClick={() => {
+                        if (terminating) return;
+                        setTerminatingVacancyId(null);
+                        setTerminationReason("");
+                        setTerminationError("");
+                    }}
+                >
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="termination-memo-title"
+                        className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="mb-5 flex items-start justify-between gap-4">
+                            <div className="flex items-start gap-3">
+                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-100">
+                                    <XCircle size={24} className="text-red-600" />
+                                </div>
+                                <div>
+                                    <h2 id="termination-memo-title" className="text-lg font-bold text-gray-900">
+                                        Termination Memo
+                                    </h2>
+                                    <p className="mt-1 text-sm text-gray-500">
+                                        Provide the memo explaining why this vacancy is being terminated.
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                aria-label="Close termination memo"
+                                disabled={terminating}
+                                onClick={() => {
+                                    setTerminatingVacancyId(null);
+                                    setTerminationReason("");
+                                    setTerminationError("");
+                                }}
+                                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                                Vacancy ID
+                            </p>
+                            <p className="mt-1 font-mono text-sm font-semibold text-gray-800">
+                                {vacancies.find((vacancy) => String(vacancy.vacancy_id || vacancy.id) === String(terminatingVacancyId))?.vacancy_id || terminatingVacancyId}
+                            </p>
+                            <p className="mt-3 text-xs font-medium uppercase tracking-wide text-gray-500">
+                                Position
+                            </p>
+                            <p className="mt-1 font-semibold text-gray-900">
+                                {vacancies.find((vacancy) => String(vacancy.vacancy_id || vacancy.id) === String(terminatingVacancyId))?.position_title ||
+                                    vacancies.find((vacancy) => String(vacancy.vacancy_id || vacancy.id) === String(terminatingVacancyId))?.plantilla_position ||
+                                    "N/A"}
+                            </p>
+                        </div>
+                        <form
+                            onSubmit={(event) => {
+                                event.preventDefault();
+                                const vacancy = vacancies.find(
+                                    (item) => String(item.vacancy_id || item.id) === String(terminatingVacancyId)
+                                );
+                                if (vacancy) handleSubmitTermination(vacancy);
+                            }}
+                        >
+                            <label htmlFor="termination-reason" className="mb-2 block text-sm font-semibold text-gray-700">
+                                Memo / Reason for Termination <span className="text-red-600">*</span>
+                            </label>
+                            <textarea
+                                id="termination-reason"
+                                value={terminationReason}
+                                onChange={(event) => {
+                                    setTerminationReason(event.target.value);
+                                    setTerminationError("");
+                                }}
+                                required
+                                maxLength={500}
+                                disabled={terminating}
+                                rows={4}
+                                placeholder="Enter the memo or reason for termination..."
+                                className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100 disabled:bg-gray-100"
+                            />
+                            <p className="mt-1 text-right text-xs text-gray-400">
+                                {terminationReason.length}/500 characters
+                            </p>
+                            {terminationError && (
+                                <p className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                                    {terminationError}
+                                </p>
+                            )}
+                            <p className="mt-3 text-xs leading-5 text-gray-500">
+                                Submitting this memo will set the vacancy status to Terminated, save the memo, and stop new applications. Existing applicants can continue through recruitment.
+                            </p>
+                            <div className="mt-6 flex justify-end gap-3">
+                                <button
+                                    type="button"
+                                    disabled={terminating}
+                                    onClick={() => {
+                                        setTerminatingVacancyId(null);
+                                        setTerminationReason("");
+                                        setTerminationError("");
+                                    }}
+                                    className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={terminating || !terminationReason.trim()}
+                                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    <XCircle size={16} />
+                                    {terminating ? "Submitting..." : "Submit Memo"}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ============================================= */}
+            {/* VIEW TERMINATION MEMO MODAL */}
+            {/* ============================================= */}
+            {showMemoModal && selectedMemoVacancy && (
+                <div
+                    className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
+                    onClick={() => {
+                        setShowMemoModal(false);
+                        setSelectedMemoVacancy(null);
+                    }}
+                >
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="view-termination-memo-title"
+                        className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="mb-5 flex items-start justify-between gap-4">
+                            <div className="flex items-start gap-3">
+                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gray-100">
+                                    <Eye size={24} className="text-gray-700" />
+                                </div>
+                                <div>
+                                    <h2
+                                        id="view-termination-memo-title"
+                                        className="text-lg font-bold text-gray-900"
+                                    >
+                                        Termination Memo
+                                    </h2>
+                                    <p className="mt-1 text-sm text-gray-500">
+                                        {selectedMemoVacancy.position_title ||
+                                            selectedMemoVacancy.plantilla_position ||
+                                            "Vacancy"}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                aria-label="Close memo"
+                                onClick={() => {
+                                    setShowMemoModal(false);
+                                    setSelectedMemoVacancy(null);
+                                }}
+                                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                                Vacancy ID
+                            </p>
+                            <p className="mt-1 font-mono text-sm font-semibold text-gray-800">
+                                {selectedMemoVacancy.vacancy_id ||
+                                    selectedMemoVacancy.id ||
+                                    "N/A"}
+                            </p>
+                        </div>
+
+                        <div className="rounded-xl border border-gray-200 p-4">
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                Memo / Reason for Termination
+                            </p>
+                            <p className="whitespace-pre-wrap break-words text-sm leading-6 text-gray-700">
+                                {selectedMemoVacancy.memo ||
+                                    selectedMemoVacancy.termination_memo ||
+                                    selectedMemoVacancy.latest_memo ||
+                                    "No memo was returned for this vacancy. Make sure the getVacancies API includes the latest memo from vacancies_remarks."}
+                            </p>
+                        </div>
+
+                        <div className="mt-6 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowMemoModal(false);
+                                    setSelectedMemoVacancy(null);
+                                }}
+                                className="rounded-lg bg-[#1b4584] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#17386d]"
+                            >
+                                Close
                             </button>
                         </div>
                     </div>

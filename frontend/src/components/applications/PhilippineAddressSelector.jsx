@@ -179,9 +179,8 @@ export default function PhilippineAddressSelector({ value, onChange }) {
         </label>
 
         <label className="text-sm font-medium">
-          House/Unit No. &amp; Street <span className="text-red-500">*</span>
+          House/Unit No. &amp; Street
           <input
-            required
             type="text"
             disabled={!parts.barangay}
             placeholder="e.g. 123 Rizal St."

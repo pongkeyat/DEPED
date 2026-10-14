@@ -1,8 +1,34 @@
+
 import transporters from "../config/emailTransporters.js";
 
 const transporter = transporters.interviewSession;
 
+// ============================================================
+// FORMAT SESSION TIME
+// Converts HH:mm or HH:mm:ss to a readable 12-hour time.
+// Examples: 09:30 -> 9:30 AM, 13:00 -> 1:00 PM
+// ============================================================
 
+const formatSessionTime = (time) => {
+    if (!time) {
+        return "To be announced";
+    }
+
+    const match = String(time).match(
+        /^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d(?:\.\d+)?)?$/
+    );
+
+    if (!match) {
+        return "To be announced";
+    }
+
+    const hours = Number(match[1]);
+    const minutes = match[2];
+    const period = hours >= 12 ? "PM" : "AM";
+    const formattedHours = hours % 12 || 12;
+
+    return `${formattedHours}:${minutes} ${period}`;
+};
 
 // ============================================================
 // ASSESSMENT / INTERVIEW SESSION EMAIL
@@ -19,45 +45,73 @@ export const sendAssessmentInvitationEmail = async ({
     venue,
 }) => {
     try {
+        // Validate applicant email
         if (!email) {
             throw new Error(
                 "Assessment invitation email cannot be sent: applicant email is missing."
             );
         }
 
+        // Validate email configuration
         if (!process.env.EMAIL) {
             throw new Error(
                 "Assessment invitation email cannot be sent: EMAIL is not configured."
             );
         }
 
+        // Applicant name
         const applicantName =
             `${firstName || ""} ${lastName || ""}`.trim() ||
             "Applicant";
 
+        // Format session date
         const formattedDate = sessionDate
-            ? new Date(sessionDate).toLocaleDateString("en-US", {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-              })
+            ? new Date(`${String(sessionDate).slice(0, 10)}T00:00:00`).toLocaleDateString(
+                  "en-US",
+                  {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                  }
+              )
             : "To be announced";
 
-        const formattedTime = sessionTime || "To be announced";
+        // Format session time
+        const formattedTime = formatSessionTime(sessionTime);
+
+        // Escape dynamic text before inserting it into HTML
+        const escapeHtml = (value) =>
+            String(value ?? "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+
+        const safeApplicantName = escapeHtml(applicantName);
+        const safePositionTitle = escapeHtml(positionTitle || "N/A");
+        const safeApplicationCode = escapeHtml(applicationCode || "N/A");
+        const safeVenue = escapeHtml(venue || "To be announced");
 
         const mailOptions = {
             from: {
                 name: "DepEd La Union Schools Division Office",
                 address: process.env.EMAIL,
             },
+
             to: email,
+
             subject: "Assessment/Interview Schedule – DepEd Recruitment",
+
             html: `
                 <!DOCTYPE html>
                 <html>
                 <head>
                     <meta charset="UTF-8" />
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                    <meta
+                        name="viewport"
+                        content="width=device-width, initial-scale=1.0"
+                    />
 
                     <style>
                         body {
@@ -71,6 +125,7 @@ export const sendAssessmentInvitationEmail = async ({
                         .wrapper {
                             width: 100%;
                             padding: 30px 15px;
+                            box-sizing: border-box;
                         }
 
                         .container {
@@ -131,6 +186,7 @@ export const sendAssessmentInvitationEmail = async ({
                         .label {
                             width: 42%;
                             padding: 12px 18px;
+                            box-sizing: border-box;
                             font-weight: bold;
                             font-size: 13px;
                             color: #64748b;
@@ -140,8 +196,10 @@ export const sendAssessmentInvitationEmail = async ({
                         .value {
                             width: 58%;
                             padding: 12px 18px;
+                            box-sizing: border-box;
                             font-size: 13px;
                             color: #334155;
+                            overflow-wrap: anywhere;
                         }
 
                         .notice {
@@ -160,6 +218,31 @@ export const sendAssessmentInvitationEmail = async ({
                             text-align: center;
                             font-size: 12px;
                             color: #64748b;
+                            line-height: 1.6;
+                        }
+
+                        @media only screen and (max-width: 480px) {
+                            .content {
+                                padding: 20px;
+                            }
+
+                            .header {
+                                padding: 24px 18px;
+                            }
+
+                            .header h1 {
+                                font-size: 19px;
+                            }
+
+                            .row {
+                                flex-direction: column;
+                            }
+
+                            .label,
+                            .value {
+                                width: 100%;
+                                padding: 10px 14px;
+                            }
                         }
                     </style>
                 </head>
@@ -175,7 +258,7 @@ export const sendAssessmentInvitationEmail = async ({
                             <div class="content">
 
                                 <p>
-                                    Dear <strong>${applicantName}</strong>,
+                                    Dear <strong>${safeApplicantName}</strong>,
                                 </p>
 
                                 <p>
@@ -202,7 +285,7 @@ export const sendAssessmentInvitationEmail = async ({
                                         </div>
 
                                         <div class="value">
-                                            ${positionTitle || "N/A"}
+                                            ${safePositionTitle}
                                         </div>
                                     </div>
 
@@ -212,9 +295,7 @@ export const sendAssessmentInvitationEmail = async ({
                                         </div>
 
                                         <div class="value">
-                                            <strong>
-                                                ${applicationCode || "N/A"}
-                                            </strong>
+                                            <strong>${safeApplicationCode}</strong>
                                         </div>
                                     </div>
 
@@ -234,7 +315,7 @@ export const sendAssessmentInvitationEmail = async ({
                                         </div>
 
                                         <div class="value">
-                                            ${formattedTime}
+                                            <strong>${formattedTime}</strong>
                                         </div>
                                     </div>
 
@@ -244,7 +325,7 @@ export const sendAssessmentInvitationEmail = async ({
                                         </div>
 
                                         <div class="value">
-                                            ${venue || "To be announced"}
+                                            ${safeVenue}
                                         </div>
                                     </div>
 
@@ -290,8 +371,10 @@ export const sendAssessmentInvitationEmail = async ({
             `,
         };
 
+        // Send email
         const result = await transporter.sendMail(mailOptions);
 
+        // Verify SMTP accepted the recipient
         const wasAccepted = result.accepted?.some(
             (recipient) =>
                 String(recipient).trim().toLowerCase() ===

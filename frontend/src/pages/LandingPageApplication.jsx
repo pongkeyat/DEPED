@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import { FileText } from "lucide-react";
 import { useLocation } from "react-router-dom";
@@ -181,7 +180,6 @@ export default function LandingPageApplication({
 
   // Modals
   const [successModal, setSuccessModal] = useState(false);
-  const [applicationTicket, setApplicationTicket] = useState("");
   const [errorModalMessage, setErrorModalMessage] = useState(null);
   const [discardModal, setDiscardModal] = useState(false);
 
@@ -464,9 +462,7 @@ export default function LandingPageApplication({
     };
 
     try {
-      const response = await postApplications(payload);
-
-      setApplicationTicket(response?.data?.ticket || "");
+      await postApplications(payload);
 
       // Clear the draft and form only after successful submission.
       await clearDraft();
@@ -939,11 +935,7 @@ export default function LandingPageApplication({
         isOpen={successModal}
         type="confirm"
         title="Success!"
-        message={
-          applicationTicket
-            ? `Application submitted successfully!\nApplication Ticket: ${applicationTicket}`
-            : "Application submitted successfully, but the application ticket was not returned. Please contact the HR Office."
-        }
+        message="Application submitted successfully!"
         onClose={() => setSuccessModal(false)}
         onConfirm={() => setSuccessModal(false)}
       />

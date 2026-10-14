@@ -17,15 +17,31 @@ export const postInterviewSession = async (req, res) => {
         vacancy_id,
         selectedApplicants,
         session_date,
+        session_time,
         venue,
         panelUserIds,
         remarks
     } = req.body || {};
 
     // 1. Validate required fields
-    if (!vacancy_id || !session_date || !venue) {
+    if (
+        !vacancy_id ||
+        !session_date ||
+        !session_time ||
+        !venue
+    ) {
         return res.status(400).json({
-            error: "Vacancy ID, Session Date, and Venue are required."
+            error:
+                "Vacancy ID, Session Date, Session Time, and Venue are required."
+        });
+    }
+
+    // Validate time in HH:mm format
+    if (
+        !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(session_time))
+    ) {
+        return res.status(400).json({
+            error: "Session Time must use HH:mm format, such as 09:30 or 14:00."
         });
     }
 
@@ -35,13 +51,15 @@ export const postInterviewSession = async (req, res) => {
         });
     }
 
-    if (new Set(selectedApplicants.map(String)).size !== selectedApplicants.length) {
+    if (
+        new Set(selectedApplicants.map(String)).size !==
+        selectedApplicants.length
+    ) {
         return res.status(400).json({
             error: "Duplicate applicants are not allowed."
         });
     }
 
-    // Panel size is dynamic: 3, 4, 5, or more members.
     if (!Array.isArray(panelUserIds) || panelUserIds.length === 0) {
         return res.status(400).json({
             error: "Select at least one HRMPSB panel member."
@@ -63,17 +81,22 @@ export const postInterviewSession = async (req, res) => {
 
     const client = await pool.connect();
     let transactionStarted = false;
+
     const applicantsForEmail = [];
 
     try {
         await client.query("BEGIN");
         transactionStarted = true;
 
-        // 2. Verify the vacancy
+        // 2. Verify vacancy
         const vacancyResult = await client.query(
-            `SELECT v.vacancy_id, v.position_id, p.position_title
+            `SELECT
+                v.vacancy_id,
+                v.position_id,
+                p.position_title
              FROM vacancies v
-             INNER JOIN positions p ON p.position_id = v.position_id
+             INNER JOIN positions p
+                ON p.position_id = v.position_id
              WHERE v.vacancy_id = $1
              LIMIT 1`,
             [String(vacancy_id)]
@@ -87,9 +110,12 @@ export const postInterviewSession = async (req, res) => {
 
         const vacancy = vacancyResult.rows[0];
 
-        // 3. Verify every selected user is an active HRMPSB member
+        // 3. Verify active HRMPSB panel members
         const panelResult = await client.query(
-            `SELECT id, first_name, last_name
+            `SELECT
+                id,
+                first_name,
+                last_name
              FROM users
              WHERE id = ANY($1::integer[])
                AND LOWER(TRIM(role)) = 'hrmpsb'
@@ -106,14 +132,14 @@ export const postInterviewSession = async (req, res) => {
             throw error;
         }
 
-        // Use names for the existing conducted_by display field.
-        // Actual assignments are saved separately using user IDs.
         const panelistNames = panelResult.rows
-            .map(user => `${user.first_name || ""} ${user.last_name || ""}`.trim())
+            .map(user =>
+                `${user.first_name || ""} ${user.last_name || ""}`.trim()
+            )
             .filter(Boolean)
             .join(", ");
 
-        // 4. Verify applicants and collect email information
+        // 4. Verify applicants
         for (const applicationId of selectedApplicants) {
             const applicantResult = await client.query(
                 `SELECT
@@ -144,6 +170,7 @@ export const postInterviewSession = async (req, res) => {
             }
 
             const applicant = applicantResult.rows[0];
+
             const normalizedStatus = String(
                 applicant.application_status || ""
             ).trim().toLowerCase();
@@ -177,8 +204,10 @@ export const postInterviewSession = async (req, res) => {
             });
         }
 
-        // 5. Create the parent assessment session
-        const assessmentSessionResult = await client.query(
+        // 5. Create the parent session.
+        // interview_sessions uses assessment_session_id as its parent FK.
+        // This is retained for database compatibility.
+        const parentResult = await client.query(
             `INSERT INTO assessment_sessions (
                 vacancy_id,
                 session_date,
@@ -187,16 +216,7 @@ export const postInterviewSession = async (req, res) => {
                 remarks
              )
              VALUES ($1, $2, $3, $4, $5)
-             RETURNING
-                assessment_session_id,
-                vacancy_id,
-                TO_CHAR(session_date, 'YYYY-MM-DD') AS session_date,
-                venue,
-                conducted_by,
-                remarks,
-                status,
-                created_at,
-                updated_at`,
+             RETURNING assessment_session_id`,
             [
                 String(vacancy_id),
                 session_date,
@@ -206,11 +226,10 @@ export const postInterviewSession = async (req, res) => {
             ]
         );
 
-        const assessmentSession = assessmentSessionResult.rows[0];
-        const assessmentSessionId = assessmentSession.assessment_session_id;
+        const assessmentSessionId =
+            parentResult.rows[0].assessment_session_id;
 
-        // 6. Save all panel assignments
-        // This is inside the same transaction as the session creation.
+        // 6. Save panel assignments
         for (const userId of normalizedPanelUserIds) {
             await client.query(
                 `INSERT INTO assessment_session_panel_members (
@@ -232,17 +251,19 @@ export const postInterviewSession = async (req, res) => {
                     vacancy_id,
                     job_applications_id,
                     session_date,
+                    session_time,
                     venue,
                     conducted_by,
                     remarks
                  )
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                  RETURNING
                     session_id,
                     assessment_session_id,
                     vacancy_id,
                     job_applications_id,
                     TO_CHAR(session_date, 'YYYY-MM-DD') AS session_date,
+                    TO_CHAR(session_time, 'HH24:MI') AS session_time,
                     venue,
                     conducted_by,
                     remarks,
@@ -254,6 +275,7 @@ export const postInterviewSession = async (req, res) => {
                     String(vacancy_id),
                     String(applicationId),
                     session_date,
+                    session_time,
                     venue,
                     panelistNames,
                     remarks || ""
@@ -282,12 +304,12 @@ export const postInterviewSession = async (req, res) => {
             }
         }
 
-        // 9. Commit all database changes before sending emails
+        // 9. Commit before sending emails
         await client.query("COMMIT");
         transactionStarted = false;
 
-        // 10. Send invitation emails after the transaction commits
-        const emailResults = [];
+        // 10. Send invitation emails with the scheduled time
+        const emailNotifications = [];
 
         for (const applicant of applicantsForEmail) {
             try {
@@ -298,11 +320,11 @@ export const postInterviewSession = async (req, res) => {
                     positionTitle: applicant.positionTitle,
                     applicationCode: applicant.applicationCode,
                     sessionDate: session_date,
-                    sessionTime: null,
+                    sessionTime: session_time,
                     venue
                 });
 
-                emailResults.push({
+                emailNotifications.push({
                     applicant_id: applicant.applicant_id,
                     email: applicant.email,
                     sent: true,
@@ -314,7 +336,7 @@ export const postInterviewSession = async (req, res) => {
                     emailError
                 );
 
-                emailResults.push({
+                emailNotifications.push({
                     applicant_id: applicant.applicant_id,
                     email: applicant.email,
                     sent: false,
@@ -323,10 +345,10 @@ export const postInterviewSession = async (req, res) => {
             }
         }
 
-        // 11. Return the created session and assigned panel
+        // 11. Return result
         return res.status(201).json({
-            message: "Assessment session created successfully.",
-            assessmentSession,
+            message: "Interview sessions created successfully.",
+            sessionTime: session_time,
             panelMembers: panelResult.rows.map(user => ({
                 id: user.id,
                 first_name: user.first_name,
@@ -335,7 +357,7 @@ export const postInterviewSession = async (req, res) => {
             panelMemberCount: normalizedPanelUserIds.length,
             sessions: insertedSessions,
             applicantStatus: "for assessment",
-            emailNotifications: emailResults
+            emailNotifications
         });
     } catch (error) {
         if (transactionStarted) {
@@ -346,7 +368,7 @@ export const postInterviewSession = async (req, res) => {
             }
         }
 
-        console.error("Error creating assessment session:", error);
+        console.error("Error creating interview sessions:", error);
 
         if (error.statusCode) {
             return res.status(error.statusCode).json({
@@ -368,7 +390,7 @@ export const postInterviewSession = async (req, res) => {
 
         if (error.code === "23514") {
             return res.status(400).json({
-                error: "The applicant status violates a database constraint. Ensure 'for assessment' is an allowed status."
+                error: "The applicant status violates a database constraint."
             });
         }
 
@@ -380,7 +402,6 @@ export const postInterviewSession = async (req, res) => {
     }
 };
 
-
 // GET /api/interview-sessions - Retrieve all interview sessions with joined details
 // ============================================================
 // GET /api/interview-sessions
@@ -388,235 +409,147 @@ export const postInterviewSession = async (req, res) => {
 // ============================================================
 
 export const getInterviewSessions = async (req, res) => {
-
     try {
-
         const queryText = `
-
             SELECT
-
-                a_session.assessment_session_id,
-
-                a_session.vacancy_id,
-
+                s.assessment_session_id,
+                s.vacancy_id,
                 v.position_title,
-
                 p.category,
 
                 CASE
-
-                    WHEN UPPER(TRIM(p.category))
-                        IN (
-                            'TEACHING',
-                            'TEACHING POSITIONS'
-                        )
+                    WHEN UPPER(TRIM(p.category)) IN (
+                        'TEACHING',
+                        'TEACHING POSITIONS'
+                    )
                     THEN 'TEACHING'
 
-
-                    WHEN UPPER(TRIM(p.category))
-                        IN (
-                            'RELATED TEACHING',
-                            'RELATED-TEACHING',
-                            'RELATED TEACHING POSITIONS'
-                        )
+                    WHEN UPPER(TRIM(p.category)) IN (
+                        'RELATED TEACHING',
+                        'RELATED-TEACHING',
+                        'RELATED TEACHING POSITIONS'
+                    )
                     THEN 'RELATED_TEACHING'
 
-
-                    WHEN UPPER(TRIM(p.category))
-                        IN (
-                            'SCHOOL ADMINISTRATION',
-                            'SCHOOL ADMINISTRATION POSITIONS'
-                        )
+                    WHEN UPPER(TRIM(p.category)) IN (
+                        'SCHOOL ADMINISTRATION',
+                        'SCHOOL ADMINISTRATION POSITIONS'
+                    )
                     THEN 'SCHOOL_ADMINISTRATION'
 
-
-                    WHEN UPPER(TRIM(p.category))
-                        IN (
-                            'NON-TEACHING',
-                            'NON TEACHING',
-                            'NON-TEACHING POSITIONS',
-                            'NON TEACHING POSITIONS'
-                        )
+                    WHEN UPPER(TRIM(p.category)) IN (
+                        'NON-TEACHING',
+                        'NON TEACHING',
+                        'NON-TEACHING POSITIONS',
+                        'NON TEACHING POSITIONS'
+                    )
                     THEN 'NON_TEACHING'
 
-
                     ELSE NULL
-
                 END AS assessment_type,
 
+                TO_CHAR(s.session_date, 'YYYY-MM-DD')
+                    AS session_date,
 
-                TO_CHAR(
-                    a_session.session_date,
-                    'YYYY-MM-DD'
-                ) AS session_date,
+                TO_CHAR(s.session_time, 'HH24:MI')
+                    AS session_time,
 
-
-                a_session.venue,
-
-                a_session.conducted_by,
-
-                a_session.remarks,
-
-                a_session.status,
-
+                s.venue,
+                s.conducted_by,
+                s.remarks,
+                s.status,
 
                 COUNT(i.session_id) FILTER (
                     WHERE LOWER(
                         TRIM(COALESCE(h.application_status, ''))
                     ) <> 'rank'
-                )
-                    AS applicant_count,
-
+                ) AS applicant_count,
 
                 COALESCE(
-
                     JSON_AGG(
-
                         JSON_BUILD_OBJECT(
-
-                            'session_id',
-                            i.session_id,
-
+                            'session_id', i.session_id,
+                            'assessment_session_id',
+                                i.assessment_session_id,
                             'job_applications_id',
-                            i.job_applications_id,
-
-                            'applicant_id',
-                            a.applicant_id,
-
-                            'first_name',
-                            a.first_name,
-
-                            'middle_name',
-                            a.middle_name,
-
-                            'last_name',
-                            a.last_name,
-
-                            'suffix',
-                            a.suffix,
-
-                            'application_status',
-                            h.application_status
-
+                                i.job_applications_id,
+                            'applicant_id', a.applicant_id,
+                            'first_name', a.first_name,
+                            'middle_name', a.middle_name,
+                            'last_name', a.last_name,
+                            'suffix', a.suffix,
+                            'application_status', h.application_status,
+                            'session_date',
+                                TO_CHAR(i.session_date, 'YYYY-MM-DD'),
+                            'session_time',
+                                TO_CHAR(i.session_time, 'HH24:MI'),
+                            'venue', i.venue
                         )
-
                         ORDER BY
                             a.last_name ASC,
                             a.first_name ASC
-
-                    )
-
-                    FILTER (
+                    ) FILTER (
                         WHERE i.session_id IS NOT NULL
                           AND LOWER(
                               TRIM(COALESCE(h.application_status, ''))
                           ) <> 'rank'
                     ),
-
                     '[]'::json
-
                 ) AS applicants
 
-
-            FROM assessment_sessions a_session
-
+            FROM assessment_sessions s
 
             INNER JOIN vacancies v
-
-                ON v.vacancy_id =
-                    a_session.vacancy_id
-
+                ON v.vacancy_id = s.vacancy_id
 
             INNER JOIN positions p
-
-                ON p.position_id =
-                    v.position_id
-
+                ON p.position_id = v.position_id
 
             LEFT JOIN interview_sessions i
-
                 ON i.assessment_session_id =
-                    a_session.assessment_session_id
-
+                   s.assessment_session_id
 
             LEFT JOIN job_applications j
-
                 ON j.job_applications_id =
-                    i.job_applications_id
-
+                   i.job_applications_id
 
             LEFT JOIN applicant_information a
-
                 ON a.job_applications_id =
-                    j.job_applications_id
-
+                   j.job_applications_id
 
             LEFT JOIN hr_remarks_final_notes h
-
-                ON h.applicant_id =
-                    a.applicant_id
-
+                ON h.applicant_id = a.applicant_id
 
             GROUP BY
-
-                a_session.assessment_session_id,
-
-                a_session.vacancy_id,
-
+                s.assessment_session_id,
+                s.vacancy_id,
                 v.position_title,
-
                 p.category,
-
-                a_session.session_date,
-
-                a_session.venue,
-
-                a_session.conducted_by,
-
-                a_session.remarks,
-
-                a_session.status
-
+                s.session_date,
+                s.session_time,
+                s.venue,
+                s.conducted_by,
+                s.remarks,
+                s.status
 
             ORDER BY
-
-                a_session.session_date DESC,
-
-                a_session.assessment_session_id DESC;
-
+                s.session_date DESC,
+                s.session_time DESC NULLS LAST,
+                s.assessment_session_id DESC;
         `;
 
-
-        const result =
-            await pool.query(queryText);
-
+        const result = await pool.query(queryText);
 
         return res.status(200).json({
-
-            message:
-                "Assessment sessions retrieved successfully.",
-
-            sessions:
-                result.rows
-
+            message: "Interview sessions retrieved successfully.",
+            sessions: result.rows
         });
-
-
     } catch (error) {
-
-        console.error(
-            "Error fetching assessment sessions:",
-            error
-        );
-
+        console.error("Error fetching interview sessions:", error);
 
         return res.status(500).json({
-
-            error:
-                "Internal server error."
-
+            error: error.message || "Internal server error."
         });
-
     }
 };
 

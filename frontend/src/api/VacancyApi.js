@@ -20,6 +20,10 @@ const PATCH_ARCHIVE =
     import.meta.env.VITE_VACANCIES_PATCH_ARCHIVE ||
     "http://localhost:5000/api/vacancies";
 
+const PATCH_STATUS =
+    import.meta.env.VITE_VACANCIES_PATCH_STATUS ||
+    "http://localhost:5000/api/vacancies";
+
 
 // ============================================================
 // CREATE VACANCY
@@ -163,6 +167,40 @@ export const archiveVacancy = async (vacancy_id) => {
     } catch (error) {
         console.error(
             "Error archiving vacancy:",
+            error.response?.data || error.message
+        );
+
+        throw error;
+    }
+};
+
+
+// ============================================================
+// UPDATE VACANCY STATUS
+// PATCH /api/vacancies/:id/status
+// ============================================================
+
+
+export const updateVacancyStatus = async (vacancy_id, statusOrData, memo = "") => {
+    try {
+        // Support both a status string and an object containing status and memo.
+        const payload =
+            typeof statusOrData === "object" && statusOrData !== null
+                ? statusOrData
+                : {
+                      status: statusOrData,
+                      ...(memo ? { memo } : {}),
+                  };
+
+        const res = await axios.patch(
+            `${PATCH_STATUS}/${encodeURIComponent(vacancy_id)}/status`,
+            payload
+        );
+
+        return res.data;
+    } catch (error) {
+        console.error(
+            "Error updating vacancy status:",
             error.response?.data || error.message
         );
 

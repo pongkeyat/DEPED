@@ -14,8 +14,26 @@ const categories = [
 ];
 
 // =========================================================
-// DUMMY OFFICE / UNITS
+// PLACES OF ASSIGNMENT
 // =========================================================
+
+const placesOfAssignment = [
+    "Regional Office 1",
+    "SDO Ilocos Norte",
+    "SDO Ilocos Sur",
+    "SDO La Union",
+    "SDO Pangasinan I (Lingayen)",
+    "SDO Pangasinan II (Binalonan)",
+    "SDO Alaminos City",
+    "SDO Batac City",
+    "SDO Candon City",
+    "SDO Dagupan City",
+    "SDO Laoag City",
+    "SDO San Carlos City",
+    "SDO San Fernando City",
+    "SDO Urdaneta City",
+    "SDO Vigan City",
+];
 
 const officeUnits = [
     "Human Resource Management Office",
@@ -30,9 +48,6 @@ const officeUnits = [
     "Administrative Division (AD)",
     "Finance Division (FD)",
     "School Division Office (SDO)",
-
-
-
 ];
 
 // =========================================================
@@ -83,10 +98,21 @@ const normalizeCategory = (category) => {
 export default function PostVacancyForm({
     formData,
     onChange,
+    showValidationErrors = false,
 }) {
     const [positions, setPositions] = useState([]);
     const [loadingPositions, setLoadingPositions] =
         useState(true);
+    const isMissing = (value) =>
+        showValidationErrors && !String(value ?? "").trim();
+    const missingFieldClass =
+        "border-red-500 ring-1 ring-red-500";
+    const missingFieldMessage = (value) =>
+        isMissing(value) ? (
+            <p className="mt-1 text-xs text-red-600">
+                This field is required.
+            </p>
+        ) : null;
 
     // =========================================================
     // TODAY
@@ -254,12 +280,30 @@ export default function PostVacancyForm({
                 position.category ||
                 position.job_category ||
                 "";
+            const positionTitle =
+                position.position_title ||
+                position.plantilla_position ||
+                "";
 
-            return (
+            const matchesCategory =
                 normalizeCategory(
                     positionCategory
-                ) === selectedCategory
-            );
+                ) === selectedCategory;
+
+            if (
+                matchesCategory &&
+                selectedCategory ===
+                    normalizeCategory(
+                        "Teaching Positions"
+                    ) &&
+                String(positionTitle)
+                    .trim()
+                    .toLowerCase() === "teacher 1"
+            ) {
+                return false;
+            }
+
+            return matchesCategory;
         });
     }, [
         positions,
@@ -516,7 +560,13 @@ export default function PostVacancyForm({
                         Position Category
                     </label>
 
-                    <div className="flex flex-wrap gap-2">
+                    <div
+                        className={`flex flex-wrap gap-2 rounded-md ${
+                            isMissing(formData?.category)
+                                ? "ring-1 ring-red-500"
+                                : ""
+                        }`}
+                    >
                         {categories.map(
                             (category) => {
                                 const isSelected =
@@ -548,6 +598,7 @@ export default function PostVacancyForm({
                             }
                         )}
                     </div>
+                    {missingFieldMessage(formData?.category)}
                 </div>
 
                 {/* =================================================
@@ -572,7 +623,11 @@ export default function PostVacancyForm({
                             loadingPositions ||
                             !formData?.category
                         }
-                        className="w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584] disabled:bg-gray-100"
+                        className={`w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584] disabled:bg-gray-100 ${
+                            isMissing(formData?.position_id)
+                                ? missingFieldClass
+                                : ""
+                        }`}
                     >
                         <option value="">
                             {loadingPositions
@@ -607,6 +662,7 @@ export default function PostVacancyForm({
                             }
                         )}
                     </select>
+                    {missingFieldMessage(formData?.position_id)}
 
                     {formData?.category &&
                         !loadingPositions &&
@@ -637,8 +693,13 @@ export default function PostVacancyForm({
                             ""
                         }
                         onChange={onChange}
-                        className="w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584]"
+                        className={`w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584] ${
+                            isMissing(formData?.plantilla_position)
+                                ? missingFieldClass
+                                : ""
+                        }`}
                     />
+                    {missingFieldMessage(formData?.plantilla_position)}
                 </div>
 
                 {/* =================================================
@@ -650,17 +711,29 @@ export default function PostVacancyForm({
                         Place of Assignment
                     </label>
 
-                    <input
-                        type="text"
+                    <select
                         name="place_of_assignment"
-                        placeholder="e.g. Administrative"
                         value={
                             formData?.place_of_assignment ||
                             ""
                         }
                         onChange={onChange}
-                        className="w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584]"
-                    />
+                        className={`w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584] ${
+                            isMissing(formData?.place_of_assignment)
+                                ? missingFieldClass
+                                : ""
+                        }`}
+                    >
+                        <option value="">
+                            Select Place of Assignment
+                        </option>
+                        {placesOfAssignment.map((place) => (
+                            <option key={place} value={place}>
+                                {place}
+                            </option>
+                        ))}
+                    </select>
+                    {missingFieldMessage(formData?.place_of_assignment)}
                 </div>
 
                 {/* =================================================
@@ -711,8 +784,22 @@ export default function PostVacancyForm({
                             }
                             onChange={onChange}
                             min="1"
-                            className="w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584]"
+                            className={`w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584] ${
+                                isMissing(formData?.number_of_vacancies) ||
+                                Number(formData?.number_of_vacancies) <= 0
+                                    ? showValidationErrors
+                                        ? missingFieldClass
+                                        : ""
+                                    : ""
+                            }`}
                         />
+                        {isMissing(formData?.number_of_vacancies) ||
+                        (showValidationErrors &&
+                            Number(formData?.number_of_vacancies) <= 0) ? (
+                            <p className="mt-1 text-xs text-red-600">
+                                Enter a number greater than zero.
+                            </p>
+                        ) : null}
                     </div>
                 </div>
 
@@ -732,7 +819,11 @@ export default function PostVacancyForm({
                             ""
                         }
                         onChange={onChange}
-                        className="w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584] bg-white"
+                        className={`w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584] bg-white ${
+                            isMissing(formData?.office_unit)
+                                ? missingFieldClass
+                                : ""
+                        }`}
                     >
                         <option value="">
                             Select Office / Unit
@@ -747,6 +838,7 @@ export default function PostVacancyForm({
                             </option>
                         ))}
                     </select>
+                    {missingFieldMessage(formData?.office_unit)}
                 </div>
 
                 {/* =================================================
@@ -771,8 +863,13 @@ export default function PostVacancyForm({
                             }
                             onChange={onChange}
                             min={todayStr}
-                            className="w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584]"
+                            className={`w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584] ${
+                                isMissing(formData?.application_posted)
+                                    ? missingFieldClass
+                                    : ""
+                            }`}
                         />
+                        {missingFieldMessage(formData?.application_posted)}
                     </div>
 
                     {/* APPLICATION DEADLINE */}
@@ -798,8 +895,13 @@ export default function PostVacancyForm({
                                       )
                                     : todayStr
                             }
-                            className="w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584]"
+                            className={`w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584] ${
+                                isMissing(formData?.application_deadline)
+                                    ? missingFieldClass
+                                    : ""
+                            }`}
                         />
+                        {missingFieldMessage(formData?.application_deadline)}
                     </div>
                 </div>
             </div>
