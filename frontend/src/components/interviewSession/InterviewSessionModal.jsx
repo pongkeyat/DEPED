@@ -142,10 +142,9 @@ export default function InterviewSessionModal({
           const closedVacancies = Array.isArray(list)
             ? list.filter(
                 (vacancy) =>
-                  String(vacancy.status || "")
+                  String(vacancy.status || vacancy.vacancy_status || "")
                     .trim()
-
-                    .toLowerCase() === "closed",
+                    .toLowerCase() === "assessment",
               )
             : [];
 
@@ -444,15 +443,14 @@ export default function InterviewSessionModal({
   const handleChange = (event) => {
     const { name, value } = event.target;
 
+    // Keep each field's value in the same state used by validation and payload.
     setFormData((prev) => ({
       ...prev,
-
       [name]: value,
     }));
 
     setErrors((prev) => ({
       ...prev,
-
       [name]: "",
     }));
   };
@@ -492,28 +490,39 @@ export default function InterviewSessionModal({
 
     const newErrors = {};
 
-    if (!formData.vacancy_id) {
+    const vacancyId = String(formData.vacancy_id ?? "").trim();
+    const sessionDate = String(formData.session_date ?? "").trim();
+    const sessionTime = String(formData.session_time ?? "").trim();
+    const venue = String(formData.venue ?? "").trim();
+
+    if (!vacancyId) {
       newErrors.vacancy_id = "Please select a vacancy.";
     }
 
-    if (!formData.job_applications_id || !formData.job_applications_id.length) {
+    if (
+      !Array.isArray(formData.job_applications_id) ||
+      formData.job_applications_id.length === 0
+    ) {
       newErrors.job_applications_id =
         "Please select at least one qualified applicant.";
     }
 
-    if (!formData.session_date) {
+    if (!sessionDate) {
       newErrors.session_date = "Session date is required.";
     }
 
-    if (!formData.session_time) {
+    if (!sessionTime) {
       newErrors.session_time = "Session time is required.";
     }
 
-    if (!formData.venue.trim()) {
+    if (!venue) {
       newErrors.venue = "Venue location is required.";
     }
 
-    if (!formData.panelUserIds || !formData.panelUserIds.length) {
+    if (
+      !Array.isArray(formData.panelUserIds) ||
+      formData.panelUserIds.length === 0
+    ) {
       newErrors.panelUserIds = "Select at least one HRMPSB panel member.";
     }
 
@@ -524,10 +533,16 @@ export default function InterviewSessionModal({
     }
 
     try {
+      // Build the request payload explicitly so the API receives the expected
+      // field names and the latest values from the form.
       const payload = {
-        ...formData,
-
+        vacancy_id: vacancyId,
+        job_applications_id: formData.job_applications_id,
+        session_date: sessionDate,
+        session_time: sessionTime,
+        venue,
         panelUserIds: formData.panelUserIds.map(Number),
+        remarks: String(formData.remarks ?? "").trim(),
       };
 
       console.log("========================================");
@@ -548,11 +563,14 @@ export default function InterviewSessionModal({
         payload.panelUserIds,
       );
 
-      console.log(
-        "Applicants:",
+      console.log("Required session fields:", {
+        vacancy_id: payload.vacancy_id,
+        session_date: payload.session_date,
+        session_time: payload.session_time,
+        venue: payload.venue,
+      });
 
-        payload.selectedApplicants,
-      );
+      console.log("Applicants:", payload.job_applications_id);
 
       // ====================================================
 
@@ -693,7 +711,7 @@ export default function InterviewSessionModal({
 
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold uppercase tracking-wide text-slate-600">
-              Select Job Vacancy (Closed Only)
+              Select Job Vacancy (Assessment Only)
             </label>
 
             <select
@@ -708,7 +726,7 @@ export default function InterviewSessionModal({
               <option value="">
                 {loadingVacancies
                   ? "Loading vacancies..."
-                  : "-- Select Closed Vacancy --"}
+                  : "-- Select Assessment Vacancy --"}
               </option>
 
               {vacancies.map((vacancy) => (

@@ -79,9 +79,10 @@ export default function DashboardCards({
   const metrics = getCounts();
 
   const statCards = [
-    { 
+    {
       title: "Open Vacancies", 
       count: loading ? "..." : metrics.vacanciesCount, 
+      to: "/vacancyPosting",
       color: "border-[#113a70]", 
       iconBg: "bg-[#e8edf5] text-[#113a70]",
       icon: (
@@ -92,9 +93,10 @@ export default function DashboardCards({
         </svg>
       )
     },
-    { 
+    {
       title: "Applications (This Month)", 
       count: loading ? "..." : metrics.monthCount, 
+      to: "/allApplications",
       color: "border-[#3b82f6]", 
       iconBg: "bg-[#eff6ff] text-[#3b82f6]",
       icon: (
@@ -103,9 +105,10 @@ export default function DashboardCards({
         </svg>
       )
     },
-    { 
+    {
       title: "Pending Screening", 
       count: loading ? "..." : metrics.pendingCount, 
+      to: "/initialScreening",
       label: "Screen", 
       color: "border-[#f5a623]", 
       iconBg: "bg-[#fffbeb] text-[#f5a623]",
@@ -115,9 +118,10 @@ export default function DashboardCards({
         </svg>
       )
     },
-    { 
+    {
       title: "Qualified", 
       count: loading ? "..." : metrics.qualifiedCount, 
+      to: "/initialEvaluationResults",
       color: "border-[#10b981]", 
       iconBg: "bg-[#ecfdf5] text-[#10b981]",
       icon: (
@@ -126,9 +130,10 @@ export default function DashboardCards({
         </svg>
       )
     },
-    { 
+    {
       title: "For Assessment", 
       count: loading ? "..." : metrics.assessmentCount, 
+      to: "/interviewSession",
       color: "border-[#8b5cf6]", 
       iconBg: "bg-[#faf5ff] text-[#8b5cf6]",
       icon: (
@@ -137,9 +142,10 @@ export default function DashboardCards({
         </svg>
       )
     },
-    { 
+    {
       title: "Total Applications", 
       count: loading ? "..." : metrics.totalCount, 
+      to: "/allApplications",
       color: "border-[#059669]", 
       iconBg: "bg-[#f0fdf4] text-[#059669]",
       icon: (
@@ -189,10 +195,13 @@ export default function DashboardCards({
 
       {/* Stat Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
-        {statCards.map((card, idx) => (
-          <div
-            key={idx}
-            className="flex min-h-36 flex-col gap-3.5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+        {statCards.map((card) => (
+          <button
+            key={card.title}
+            type="button"
+            onClick={() => navigate(card.to)}
+            aria-label={`${card.title}: ${card.count}`}
+            className="flex min-h-36 cursor-pointer flex-col gap-3.5 rounded-xl border border-gray-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e3a6d] focus-visible:ring-offset-2"
           >
             <div className="flex items-start justify-between w-full">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center text-[#1E3E74]">
@@ -208,7 +217,7 @@ export default function DashboardCards({
                 {card.title}
               </h4>
             </div>
-          </div>
+          </button>
         ))}
       </div>
 

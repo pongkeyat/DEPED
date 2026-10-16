@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import cron from "node-cron";
 
 import {
     createVacancyService,
@@ -11,7 +12,10 @@ import {
     archiveVacancyService
 } from "./vacancies.services.js";
 
-import { sendInitialScreeningEmail } from "./email.service.js";
+import {
+    sendInitialScreeningEmail,
+    sendRequirementsReminderEmail,
+} from "./email.service.js";
 
 // ============================================================
 // HELPER: Generate Vacancy ID
@@ -40,6 +44,67 @@ const generateVacancyId = async (client) => {
     }
 
     return `${prefix}${String(nextSequence).padStart(4, "0")}`;
+};
+
+const getDateKey = (value) => {
+    if (!value) return "";
+    if (value instanceof Date) return value.toISOString().slice(0, 10);
+    return String(value).slice(0, 10);
+};
+
+const sendVacancyDeadlineReminders = async (vacancyId) => {
+    const applicantsResult = await pool.query(
+        `
+        SELECT
+            ai.email_address,
+            ai.first_name,
+            ai.last_name,
+            ai.ticket,
+            COALESCE(p.position_title, v.position_title) AS position_title,
+            v.application_deadline
+        FROM public.vacancies AS v
+        LEFT JOIN public.positions AS p
+            ON p.position_id = v.position_id
+        JOIN public.job_applications AS ja
+            ON ja.vacancy_id = v.vacancy_id
+        JOIN public.applicant_information AS ai
+            ON ai.job_applications_id = ja.job_applications_id
+        WHERE v.vacancy_id = $1
+          AND ai.email_address IS NOT NULL
+          AND TRIM(ai.email_address) <> ''
+        ORDER BY ai.applicant_id
+        `,
+        [vacancyId]
+    );
+
+    const emailReminders = {
+        recipients: applicantsResult.rowCount,
+        sent: 0,
+        failed: 0,
+    };
+
+    for (const applicant of applicantsResult.rows) {
+        const result = await sendRequirementsReminderEmail(
+            applicant.email_address,
+            applicant.first_name,
+            applicant.last_name,
+            applicant.ticket,
+            applicant.position_title,
+            applicant.application_deadline
+        );
+
+        if (result?.success) {
+            emailReminders.sent++;
+        } else {
+            emailReminders.failed++;
+            console.error(
+                `[Requirements Reminder] Failed for ${applicant.email_address}:`,
+                result?.error || "Unknown email error"
+            );
+        }
+    }
+
+    return emailReminders;
 };
 
 // ============================================================
@@ -451,6 +516,9 @@ export const updateVacancy = async (req, res) => {
         const number_of_vacancies = req.body.number_of_vacancies ?? existingVacancy.number_of_vacancies;
         const application_posted = req.body.application_posted ?? existingVacancy.application_posted;
         const application_deadline = req.body.application_deadline ?? existingVacancy.application_deadline;
+        const deadlineChanged =
+            getDateKey(application_deadline) !==
+            getDateKey(existingVacancy.application_deadline);
 
         // Handle nested qualifications structure safely
         const existingQuals = existingVacancy.qualifications || existingVacancy;
@@ -500,10 +568,35 @@ export const updateVacancy = async (req, res) => {
             }
         );
 
+        let emailReminders = null;
+        if (deadlineChanged) {
+            try {
+                emailReminders = await sendVacancyDeadlineReminders(id);
+            } catch (emailError) {
+                console.error(
+                    `Failed to send deadline reminders for vacancy ${id}:`,
+                    emailError
+                );
+                emailReminders = {
+                    recipients: null,
+                    sent: 0,
+                    failed: null,
+                    error: "Unable to send deadline reminder emails.",
+                };
+            }
+        }
+
         return res.status(200).json({
             success: true,
-            message: "Vacancy successfully updated.",
-            data: updatedVacancy
+            message: emailReminders?.error
+                ? "Vacancy updated, but deadline reminder emails could not be sent."
+                : emailReminders?.recipients === 0
+                  ? "Vacancy updated, but there are no applicant email addresses to notify."
+                : emailReminders?.failed
+                  ? "Vacancy updated, but some deadline reminder emails failed."
+                  : "Vacancy successfully updated.",
+            data: updatedVacancy,
+            ...(deadlineChanged ? { emailReminders } : {}),
         });
 
     } catch (error) {
@@ -606,6 +699,7 @@ export const archiveVacancy = async (req, res) => {
 // ============================================================
 
 
+
 export const updateVacancyStatus = async (req, res) => {
     const { id } = req.params;
     const { memo, status: requestedStatus } = req.body;
@@ -623,10 +717,7 @@ export const updateVacancyStatus = async (req, res) => {
     try {
         await client.query("BEGIN");
 
-        // ======================================================
         // GET VACANCY
-        // ======================================================
-
         const vacancyResult = await client.query(
             `
             SELECT
@@ -658,10 +749,7 @@ export const updateVacancyStatus = async (req, res) => {
         deadline = vacancy.application_deadline;
         deadlinePassed = vacancy.deadline_passed;
 
-        // ======================================================
         // VALIDATE TERMINATION MEMO
-        // ======================================================
-
         let cleanedMemo = null;
 
         if (requestedStatus === "Terminated") {
@@ -687,19 +775,21 @@ export const updateVacancyStatus = async (req, res) => {
             }
         }
 
-        // ======================================================
         // DETERMINE NEXT STATUS
-        // ======================================================
-
-        if (previousStatus === "Terminated") {
+        if (requestedStatus === "Terminated") {
             nextStatus = "Terminated";
-        } else if (requestedStatus === "Terminated") {
-            nextStatus = "Terminated";
+        } else if (
+            requestedStatus === "Assessment" &&
+            ["Evaluation", "Terminated"].includes(previousStatus)
+        ) {
+            // Allow Evaluation or Terminated -> Assessment
+            // when the API explicitly requests Assessment.
+            nextStatus = "Assessment";
         } else if (requestedStatus === "Evaluation") {
             nextStatus = "Evaluation";
         } else if (
             previousStatus === "Open" &&
-            vacancy.deadline_passed
+            deadlinePassed
         ) {
             nextStatus = "Evaluation";
         } else if (previousStatus === "Evaluation") {
@@ -710,18 +800,12 @@ export const updateVacancyStatus = async (req, res) => {
             nextStatus = "Closed";
         }
 
-        // ======================================================
         // DETERMINE WHETHER INITIAL SCREENING SHOULD RUN
-        // ======================================================
-
         screeningTriggered =
             previousStatus !== nextStatus &&
             ["Evaluation", "Terminated"].includes(nextStatus);
 
-        // ======================================================
         // UPDATE VACANCY STATUS
-        // ======================================================
-
         await client.query(
             `
             UPDATE public.vacancies
@@ -731,12 +815,7 @@ export const updateVacancyStatus = async (req, res) => {
             [nextStatus, id]
         );
 
-        // ======================================================
-        // INSERT NEW TERMINATION MEMO
-        // Save to both columns.
-        // Do not update or overwrite previous remarks.
-        // ======================================================
-
+        // SAVE TERMINATION MEMO
         if (
             requestedStatus === "Terminated" &&
             cleanedMemo
@@ -754,10 +833,7 @@ export const updateVacancyStatus = async (req, res) => {
             );
         }
 
-        // ======================================================
         // MOVE COMPLETE APPLICANTS TO INITIAL SCREENING
-        // ======================================================
-
         if (screeningTriggered) {
             const applicationUpdateResult = await client.query(
                 `
@@ -784,10 +860,6 @@ export const updateVacancyStatus = async (req, res) => {
             );
         }
 
-        // ======================================================
-        // COMMIT TRANSACTION
-        // ======================================================
-
         await client.query("COMMIT");
     } catch (error) {
         try {
@@ -809,10 +881,7 @@ export const updateVacancyStatus = async (req, res) => {
         client.release();
     }
 
-    // ======================================================
     // SEND INITIAL SCREENING EMAILS
-    // ======================================================
-
     let emailsSent = 0;
     let emailsFailed = 0;
 
@@ -868,10 +937,7 @@ export const updateVacancyStatus = async (req, res) => {
         }
     }
 
-    // ======================================================
     // GET UPDATED VACANCY
-    // ======================================================
-
     const updatedVacancyResult = await pool.query(
         `
         SELECT *
@@ -881,27 +947,146 @@ export const updateVacancyStatus = async (req, res) => {
         [id]
     );
 
-    // ======================================================
     // RESPONSE
-    // ======================================================
-
     return res.status(200).json({
         success: true,
-
         message:
             previousStatus === nextStatus
                 ? `Vacancy status remains ${nextStatus}.`
                 : `Vacancy status changed from ${previousStatus} to ${nextStatus}.`,
-
         previousStatus,
         currentStatus: nextStatus,
         deadline,
         deadlinePassed,
-
         data: updatedVacancyResult.rows[0],
-
         applicantsUpdated: updatedApplicants,
         emailsSent,
         emailsFailed,
     });
 };
+
+// ============================================================
+// AUTOMATED REQUIREMENTS REMINDER
+// Send a reminder at 8:00 AM Philippine time when a vacancy's
+// application deadline is exactly two days away.
+// ============================================================
+
+const sendUpcomingDeadlineRequirementsReminders = async () => {
+    try {
+        console.log(
+            "[Requirements Reminder] Checking upcoming deadlines..."
+        );
+
+        // Get today's date in Philippine time.
+        const manilaDate = new Intl.DateTimeFormat("en-CA", {
+            timeZone: "Asia/Manila",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+        }).format(new Date());
+
+        // Calculate the date two days from today.
+        const today = new Date(`${manilaDate}T00:00:00`);
+        today.setDate(today.getDate() + 2);
+
+        const targetDeadline = [
+            today.getFullYear(),
+            String(today.getMonth() + 1).padStart(2, "0"),
+            String(today.getDate()).padStart(2, "0"),
+        ].join("-");
+
+        console.log(
+            `[Requirements Reminder] Target deadline: ${targetDeadline}`
+        );
+
+        const applicantsResult = await pool.query(
+            `
+            SELECT
+                ai.email_address,
+                ai.first_name,
+                ai.last_name,
+                ai.ticket,
+                p.position_title,
+                v.application_deadline,
+                v.vacancy_id
+            FROM public.vacancies AS v
+            LEFT JOIN public.positions AS p
+                ON p.position_id = v.position_id
+            JOIN public.job_applications AS ja
+                ON ja.vacancy_id = v.vacancy_id
+            JOIN public.applicant_information AS ai
+                ON ai.job_applications_id = ja.job_applications_id
+            WHERE v.application_deadline = $1::date
+              AND v.status = 'Open'
+              AND v.is_archived = FALSE
+              AND ai.email_address IS NOT NULL
+              AND TRIM(ai.email_address) <> ''
+            ORDER BY v.vacancy_id, ai.applicant_id
+            `,
+            [targetDeadline]
+        );
+
+        console.log(
+            `[Requirements Reminder] Applicants found: ${applicantsResult.rowCount}`
+        );
+
+        let emailsSent = 0;
+        let emailsFailed = 0;
+
+        for (const applicant of applicantsResult.rows) {
+            try {
+                const result = await sendRequirementsReminderEmail(
+                    applicant.email_address,
+                    applicant.first_name,
+                    applicant.last_name,
+                    applicant.ticket,
+                    applicant.position_title,
+                    applicant.application_deadline
+                );
+
+                if (result?.success) {
+                    emailsSent++;
+
+                    console.log(
+                        `[Requirements Reminder] Email sent to ${applicant.email_address}`
+                    );
+                } else {
+                    emailsFailed++;
+
+                    console.error(
+                        `[Requirements Reminder] Failed for ${applicant.email_address}:`,
+                        result?.error || "Unknown email error"
+                    );
+                }
+            } catch (emailError) {
+                emailsFailed++;
+
+                console.error(
+                    `[Requirements Reminder] Error sending to ${applicant.email_address}:`,
+                    emailError
+                );
+            }
+        }
+
+        console.log(
+            `[Requirements Reminder] Finished. Found: ${applicantsResult.rowCount}, sent: ${emailsSent}, failed: ${emailsFailed}.`
+        );
+    } catch (error) {
+        console.error(
+            "[Requirements Reminder] Scheduled check failed:",
+            error
+        );
+    }
+};
+
+// ============================================================
+// RUN DAILY AT 8:00 AM PHILIPPINE TIME
+// ============================================================
+
+cron.schedule(
+    "0 8 * * *",
+    sendUpcomingDeadlineRequirementsReminders,
+    {
+        timezone: "Asia/Manila",
+    }
+);

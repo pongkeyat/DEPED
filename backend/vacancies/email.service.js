@@ -130,3 +130,54 @@ export const sendInitialScreeningEmail = async (
         };
     }
 };
+
+
+
+export const sendRequirementsReminderEmail = async (
+    email,
+    firstName,
+    lastName,
+    ticket,
+    positionTitle,
+    deadline
+) => {
+    try {
+        const formattedDeadline = new Date(deadline).toLocaleDateString(
+            "en-PH",
+            {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+                timeZone: "Asia/Manila",
+            }
+        );
+
+        await transporter.sendMail({
+            from: process.env.EMAIL,
+            to: email,
+            subject: "Reminder: Submit Your Application Requirements",
+
+            text: `
+Dear ${firstName} ${lastName},
+
+This is a friendly reminder to submit your application requirements for the position of ${positionTitle}.
+
+Application Ticket: ${ticket}
+Application Deadline: ${formattedDeadline}
+
+Please ensure that you submit all required documents before the deadline.
+
+Thank you.
+
+DepEd Recruitment Management System
+            `,
+        });
+
+        console.log(`Requirements reminder sent to ${email}`);
+
+        return { success: true };
+    } catch (error) {
+        console.error("Failed to send requirements reminder:", error);
+        return { success: false, error: error.message };
+    }
+};

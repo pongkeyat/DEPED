@@ -11,12 +11,16 @@ import {
     ClipboardList,
     FileSpreadsheet,
     RefreshCw,
-    Loader2
+    Loader2,
+    Search,
+    Download
 } from "lucide-react";
 
 import {
     getApplicantSummaryReport
 } from "../api/ReportApi";
+import { getApplications } from "../api/ApplicationApi";
+import { getVacancies } from "../api/VacancyApi";
 
 
 export default function ApplicantSummaryReport() {
@@ -35,6 +39,15 @@ export default function ApplicantSummaryReport() {
     const [loading, setLoading] = useState(true);
     const [generating, setGenerating] = useState(false);
     const [error, setError] = useState("");
+
+    // Added applicant list and vacancy filter; existing summary stays intact.
+    const [applications, setApplications] = useState([]);
+    const [vacancies, setVacancies] = useState([]);
+    const [selectedVacancy, setSelectedVacancy] = useState("");
+    const [applicantSearch, setApplicantSearch] = useState("");
+    const [applicantsLoading, setApplicantsLoading] = useState(false);
+    const [applicantsGenerating, setApplicantsGenerating] = useState(false);
+    const [applicantError, setApplicantError] = useState("");
 
 
     // ============================================================
@@ -126,11 +139,132 @@ export default function ApplicantSummaryReport() {
     };
 
 
+    const extractArray = (response, keys = []) => {
+        if (Array.isArray(response)) return response;
+        if (Array.isArray(response?.data)) return response.data;
+        for (const key of keys) {
+            if (Array.isArray(response?.data?.[key])) return response.data[key];
+            if (Array.isArray(response?.[key])) return response[key];
+        }
+        return [];
+    };
+
+    const fetchApplicantData = async () => {
+        try {
+            setApplicantsLoading(true);
+            setApplicantError("");
+            const [applicationResponse, vacancyResponse] = await Promise.all([
+                getApplications(),
+                getVacancies(),
+            ]);
+            setApplications(extractArray(applicationResponse, ["applications", "applicants", "results"]));
+            setVacancies(extractArray(vacancyResponse, ["vacancies", "results"]));
+        } catch (err) {
+            console.error("Error fetching applicants/vacancies:", err);
+            setApplicantError("Unable to load applicants or vacancies. Please check the API responses.");
+            setApplications([]);
+            setVacancies([]);
+        } finally {
+            setApplicantsLoading(false);
+        }
+    };
+
     useEffect(() => {
-
         fetchReport();
-
+        fetchApplicantData();
     }, []);
+
+    const normalizeId = (value) => String(value ?? "").trim();
+    const getVacancyId = (vacancy) => vacancy.vacancy_id ?? vacancy.id ?? "";
+    const getApplicationVacancyId = (application) =>
+        application.vacancy_id ?? application.vacancy?.vacancy_id ?? "";
+    const getApplicantName = (applicant) => {
+        const fullName = [applicant.first_name, applicant.middle_name, applicant.last_name, applicant.suffix]
+            .filter((value) => String(value || "").trim())
+            .join(" ");
+        return fullName || applicant.applicant_name || applicant.full_name || "N/A";
+    };
+
+    const selectedVacancyData = vacancies.find(
+        (vacancy) => normalizeId(getVacancyId(vacancy)) === normalizeId(selectedVacancy)
+    );
+
+    const filteredApplicants = applications.filter((application) => {
+        if (!selectedVacancy) return false;
+        const matchesVacancy = normalizeId(getApplicationVacancyId(application)) === normalizeId(selectedVacancy);
+        if (!matchesVacancy) return false;
+        const query = applicantSearch.trim().toLowerCase();
+        if (!query) return true;
+        return [
+            getApplicantName(application), application.applicant_id,
+            application.job_applications_id, application.application_code,
+            application.ticket, application.email_address, application.email,
+            application.application_status, application.status,
+        ].some((value) => String(value ?? "").toLowerCase().includes(query));
+    });
+
+    const generateApplicantsExcel = () => {
+        try {
+            setApplicantsGenerating(true);
+            if (!selectedVacancy) {
+                alert("Please select a vacancy first.");
+                return;
+            }
+            if (!filteredApplicants.length) {
+                alert("No applicants found for this vacancy and search.");
+                return;
+            }
+
+            const positionTitle = selectedVacancyData?.position_title ||
+                selectedVacancyData?.plantilla_position || "Selected Vacancy";
+            const rows = filteredApplicants.map((application, index) => ({
+                "No.": index + 1,
+                "Applicant ID": application.applicant_id || "",
+                "Application Code": application.application_code || application.applicationCode || "",
+                "Ticket": application.ticket || "",
+                "Application ID": application.job_applications_id || "",
+                "Applicant Name": getApplicantName(application),
+                "Email Address": application.email_address || application.email || "",
+                "Vacancy ID": getApplicationVacancyId(application),
+                "Position Title": application.position_title || positionTitle,
+                "Salary Grade": application.salary_grade || selectedVacancyData?.salary_grade || "",
+                "Category": application.category || selectedVacancyData?.category || "",
+                "Application Status": application.application_status || application.status || "",
+            }));
+
+            const worksheetData = [
+                ["APPLICANT LIST REPORT"],
+                ["Recruitment Management and Evaluation System"],
+                [],
+                ["Selected Vacancy", positionTitle],
+                ["Vacancy ID", selectedVacancy],
+                ["Total Applicants", rows.length],
+                [],
+                Object.keys(rows[0]),
+                ...rows.map((row) => Object.values(row)),
+            ];
+            const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+            worksheet["!cols"] = [
+                { wch: 8 }, { wch: 20 }, { wch: 22 }, { wch: 20 },
+                { wch: 22 }, { wch: 32 }, { wch: 32 }, { wch: 22 },
+                { wch: 32 }, { wch: 15 }, { wch: 24 }, { wch: 22 },
+            ];
+            worksheet["!merges"] = [
+                { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } },
+                { s: { r: 1, c: 0 }, e: { r: 1, c: 11 } },
+            ];
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Applicants");
+            const date = new Date().toISOString().split("T")[0];
+            const safeTitle = String(positionTitle).replace(/[\\/:*?"<>|]/g, "").trim().replace(/\s+/g, "_");
+            XLSX.writeFile(workbook, `Applicants_${safeTitle}_${date}.xlsx`);
+        } catch (err) {
+            console.error("Error generating applicant Excel:", err);
+            alert("Failed to generate the applicant Excel report.");
+        } finally {
+            setApplicantsGenerating(false);
+        }
+    };
 
 
     // ============================================================
@@ -445,7 +579,7 @@ export default function ApplicantSummaryReport() {
 
                     <button
                         type="button"
-                        onClick={fetchReport}
+                        onClick={() => { fetchReport(); fetchApplicantData(); }}
                         disabled={loading}
                         className="
                             inline-flex
@@ -732,6 +866,118 @@ export default function ApplicantSummaryReport() {
 
             </div>
 
+
+            {/* ================================================== */}
+            {/* APPLICANTS BY VACANCY - ADDED, EXISTING SUMMARY KEPT */}
+            {/* ================================================== */}
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <div className="border-b border-gray-100 px-6 py-5">
+                    <h2 className="text-lg font-bold text-gray-900">Applicants by Vacancy</h2>
+                    <p className="mt-1 text-sm text-gray-500">Select a vacancy to view only applicants who applied for it, then export the list to Excel.</p>
+                </div>
+
+                <div className="space-y-5 p-6">
+                    {applicantError && (
+                        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                            {applicantError}
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div>
+                            <label htmlFor="report-vacancy-filter" className="mb-2 block text-sm font-semibold text-gray-700">Vacancy</label>
+                            <select
+                                id="report-vacancy-filter"
+                                value={selectedVacancy}
+                                onChange={(event) => setSelectedVacancy(event.target.value)}
+                                disabled={applicantsLoading}
+                                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-[#1E3E74] focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
+                            >
+                                <option value="">Select a vacancy</option>
+                                {vacancies.map((vacancy) => {
+                                    const vacancyId = getVacancyId(vacancy);
+                                    if (!vacancyId) return null;
+                                    const title = vacancy.position_title || vacancy.plantilla_position || "Untitled Position";
+                                    return (
+                                        <option key={vacancyId} value={vacancyId}>
+                                            {title}{vacancy.salary_grade ? ` | SG ${vacancy.salary_grade}` : ""} ({vacancyId})
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label htmlFor="report-applicant-search" className="mb-2 block text-sm font-semibold text-gray-700">Search Applicants</label>
+                            <div className="relative">
+                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                <input
+                                    id="report-applicant-search"
+                                    value={applicantSearch}
+                                    onChange={(event) => setApplicantSearch(event.target.value)}
+                                    disabled={!selectedVacancy}
+                                    placeholder="Search name, application code, email..."
+                                    className="w-full rounded-xl border border-gray-300 py-3 pl-9 pr-4 text-sm outline-none focus:border-[#1E3E74] focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col gap-3 rounded-xl bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p className="text-sm font-semibold text-gray-800">
+                                {selectedVacancyData?.position_title || selectedVacancyData?.plantilla_position || (selectedVacancy ? "Selected Vacancy" : "No vacancy selected")}
+                            </p>
+                            <p className="mt-1 text-xs text-gray-500">
+                                {selectedVacancy ? `Vacancy ID: ${selectedVacancy} · ${filteredApplicants.length} matching applicant(s)` : "Choose a vacancy to show its applicants."}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={generateApplicantsExcel}
+                            disabled={applicantsLoading || applicantsGenerating || !selectedVacancy || filteredApplicants.length === 0}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {applicantsGenerating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                            {applicantsGenerating ? "Generating..." : "Export Applicants (.xlsx)"}
+                        </button>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-xl border border-gray-200">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-gray-500">Applicant</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-gray-500">Application Code</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-gray-500">Ticket</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-gray-500">Email</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-gray-500">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 bg-white">
+                                {applicantsLoading ? (
+                                    <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-500">Loading applicants...</td></tr>
+                                ) : !selectedVacancy ? (
+                                    <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-500">Select a vacancy to view applicants.</td></tr>
+                                ) : filteredApplicants.length === 0 ? (
+                                    <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-500">No applicants found for this vacancy.</td></tr>
+                                ) : filteredApplicants.map((applicant, index) => (
+                                    <tr key={applicant.job_applications_id || applicant.applicant_id || index} className="hover:bg-gray-50">
+                                        <td className="whitespace-nowrap px-4 py-3">
+                                            <p className="text-sm font-semibold text-gray-800">{getApplicantName(applicant)}</p>
+                                            <p className="mt-1 text-xs text-gray-400">{applicant.applicant_id || "No applicant ID"}</p>
+                                        </td>
+                                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">{applicant.application_code || applicant.applicationCode || "—"}</td>
+                                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">{applicant.ticket || "—"}</td>
+                                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">{applicant.email_address || applicant.email || "—"}</td>
+                                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">{applicant.application_status || applicant.status || "Pending"}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
 
             {/* ================================================== */}
             {/* REPORT INFORMATION */}

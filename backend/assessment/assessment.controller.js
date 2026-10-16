@@ -185,7 +185,10 @@ export const postPanelistAssessment = async (
 
                     p.position_title,
                     p.category,
-                    p.salary_grade
+                    p.salary_grade,
+                    screening.education_points,
+                    screening.training_points,
+                    screening.experience_points
 
                 FROM applicant_information ai
 
@@ -200,6 +203,20 @@ export const postPanelistAssessment = async (
                 JOIN positions p
                     ON p.position_id =
                        v.position_id
+
+                LEFT JOIN LATERAL (
+                    SELECT
+                        ins.education_points,
+                        ins.training_points,
+                        ins.experience_points
+                    FROM initial_screening ins
+                    WHERE ins.job_applications_id =
+                          ai.job_applications_id
+                      AND UPPER(TRIM(ins.overall_result)) =
+                          'QUALIFIED'
+                    ORDER BY ins.screening_id DESC
+                    LIMIT 1
+                ) screening ON TRUE
 
                 WHERE ai.applicant_id = $1
 
@@ -348,6 +365,15 @@ export const postPanelistAssessment = async (
 
                         scores:
                             scoresResult.rows,
+
+                        initialEvaluationScores: {
+                            education_points:
+                                applicant.education_points,
+                            training_points:
+                                applicant.training_points,
+                            experience_points:
+                                applicant.experience_points,
+                        },
                     });
 
                     console.log(
@@ -749,7 +775,10 @@ export const postAssessment = async (req, res) => {
                     v.position_title,
 
                     p.category,
-                    p.salary_grade
+                    p.salary_grade,
+                    screening.education_points,
+                    screening.training_points,
+                    screening.experience_points
 
                 FROM applicant_information ai
 
@@ -764,6 +793,20 @@ export const postAssessment = async (req, res) => {
                 JOIN positions p
                     ON p.position_id =
                        v.position_id
+
+                LEFT JOIN LATERAL (
+                    SELECT
+                        ins.education_points,
+                        ins.training_points,
+                        ins.experience_points
+                    FROM initial_screening ins
+                    WHERE ins.job_applications_id =
+                          ai.job_applications_id
+                      AND UPPER(TRIM(ins.overall_result)) =
+                          'QUALIFIED'
+                    ORDER BY ins.screening_id DESC
+                    LIMIT 1
+                ) screening ON TRUE
 
                 WHERE ai.applicant_id = $1
 
@@ -912,6 +955,15 @@ export const postAssessment = async (req, res) => {
 
                         scores:
                             scoresResult.rows,
+
+                        initialEvaluationScores: {
+                            education_points:
+                                applicant.education_points,
+                            training_points:
+                                applicant.training_points,
+                            experience_points:
+                                applicant.experience_points,
+                        },
 
                     });
 
