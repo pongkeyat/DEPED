@@ -57,6 +57,17 @@ export const getQualifiedApplicantForAssessment = async (
             ai.applicant_id,
             ai.job_applications_id,
 
+            (
+                SELECT CASE
+                    WHEN COUNT(*) > 0
+                         AND BOOL_AND(we.is_internal IS NOT NULL)
+                    THEN BOOL_OR(we.is_internal)
+                    ELSE NULL
+                END
+                FROM work_experience we
+                WHERE we.applicant_id = ai.applicant_id
+            ) AS is_internal,
+
             ja.vacancy_id,
 
             v.position_id,
@@ -148,6 +159,9 @@ export const getQualifiedApplicantForAssessment = async (
 
         job_applications_id:
             applicant.job_applications_id,
+
+        is_internal:
+            applicant.is_internal,
 
         vacancy_id:
             applicant.vacancy_id,
@@ -1402,12 +1416,19 @@ export const submitAssessment = async (
                 }
 
 
-                finalScore =
-                    Number(
-                        optionResult.rows[0]
-                            .points || 0
-                    );
+                const optionPoints = Number(optionResult.rows[0].points || 0);
 
+                // The database stores the RPMS midpoint value for Performance.
+                // Convert it to the applicable criterion weight (20/25 by criterion;
+                // position-specific General Services weight needs position mapping).
+                if (
+                    criterionName === "PERFORMANCE" &&
+                    ["RELATED_TEACHING", "SCHOOL_ADMINISTRATION", "NON_TEACHING"].includes(assessmentType)
+                ) {
+                    finalScore = (optionPoints / 5) * Number(criterion.max_points);
+                } else {
+                    finalScore = optionPoints;
+                }
 
                 if (
                     Number.isNaN(
@@ -2567,18 +2588,16 @@ export const submitPanelistAssessment = async ({
                 const option =
                     optionResult.rows[0];
 
-                const optionPoints =
-                    Number(
-                        option.points
-                    );
+                const optionPoints = Number(option.points);
+                const isPerformanceCriterion =
+                    criterionName === "PERFORMANCE" &&
+                    ["RELATED_TEACHING", "SCHOOL_ADMINISTRATION", "NON_TEACHING"].includes(assessmentType);
+                const expectedOptionScore = isPerformanceCriterion
+                    ? (optionPoints / 5) * Number(criterion.max_points)
+                    : optionPoints;
 
-                if (
-                    optionPoints !==
-                    score
-                ) {
-                    throw new Error(
-                        `OPTION_SCORE_MISMATCH_${criterionId}`
-                    );
+                if (Math.abs(expectedOptionScore - score) > 0.0001) {
+                    throw new Error(`OPTION_SCORE_MISMATCH_${criterionId}`);
                 }
             }
 

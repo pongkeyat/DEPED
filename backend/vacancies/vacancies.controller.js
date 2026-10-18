@@ -61,7 +61,8 @@ const sendVacancyDeadlineReminders = async (vacancyId) => {
             ai.last_name,
             ai.ticket,
             COALESCE(p.position_title, v.position_title) AS position_title,
-            v.application_deadline
+            v.application_deadline,
+            ja.submission_type
         FROM public.vacancies AS v
         LEFT JOIN public.positions AS p
             ON p.position_id = v.position_id
@@ -72,6 +73,7 @@ const sendVacancyDeadlineReminders = async (vacancyId) => {
         WHERE v.vacancy_id = $1
           AND ai.email_address IS NOT NULL
           AND TRIM(ai.email_address) <> ''
+          AND LOWER(COALESCE(ja.submission_type, '')) = 'online'
         ORDER BY ai.applicant_id
         `,
         [vacancyId]
@@ -90,7 +92,8 @@ const sendVacancyDeadlineReminders = async (vacancyId) => {
             applicant.last_name,
             applicant.ticket,
             applicant.position_title,
-            applicant.application_deadline
+            applicant.application_deadline,
+            applicant.submission_type
         );
 
         if (result?.success) {
@@ -1012,7 +1015,8 @@ const sendUpcomingDeadlineRequirementsReminders = async () => {
                 ai.ticket,
                 p.position_title,
                 v.application_deadline,
-                v.vacancy_id
+                v.vacancy_id,
+                ja.submission_type
             FROM public.vacancies AS v
             LEFT JOIN public.positions AS p
                 ON p.position_id = v.position_id
@@ -1025,6 +1029,7 @@ const sendUpcomingDeadlineRequirementsReminders = async () => {
               AND v.is_archived = FALSE
               AND ai.email_address IS NOT NULL
               AND TRIM(ai.email_address) <> ''
+              AND LOWER(COALESCE(ja.submission_type, '')) = 'online'
             ORDER BY v.vacancy_id, ai.applicant_id
             `,
             [targetDeadline]
@@ -1045,7 +1050,8 @@ const sendUpcomingDeadlineRequirementsReminders = async () => {
                     applicant.last_name,
                     applicant.ticket,
                     applicant.position_title,
-                    applicant.application_deadline
+                    applicant.application_deadline,
+                    applicant.submission_type
                 );
 
                 if (result?.success) {

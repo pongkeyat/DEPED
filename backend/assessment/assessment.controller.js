@@ -568,11 +568,135 @@ export const getPanelistSubmissionStatus = async (
             [assessmentSessionId, Number(userId)]
         );
 
+        const applicantSubmissionCountsResult =
+            await pool.query(
+                `
+                WITH session_applicants AS (
+                    SELECT DISTINCT
+                        ai.applicant_id,
+                        CASE
+                            WHEN UPPER(TRIM(p.category)) IN (
+                                'TEACHING',
+                                'TEACHING POSITIONS'
+                            ) THEN 'TEACHING'
+                            WHEN UPPER(TRIM(p.category)) IN (
+                                'RELATED TEACHING',
+                                'RELATED-TEACHING',
+                                'RELATED TEACHING POSITIONS',
+                                'RELATED-TEACHING POSITIONS'
+                            ) THEN 'RELATED_TEACHING'
+                            WHEN UPPER(TRIM(p.category)) IN (
+                                'SCHOOL ADMINISTRATION',
+                                'SCHOOL ADMINISTRATION POSITION',
+                                'SCHOOL ADMINISTRATION POSITIONS'
+                            ) THEN 'SCHOOL_ADMINISTRATION'
+                            WHEN UPPER(TRIM(p.category)) IN (
+                                'NON-TEACHING',
+                                'NON TEACHING',
+                                'NON-TEACHING POSITIONS',
+                                'NON TEACHING POSITIONS'
+                            ) THEN 'NON_TEACHING'
+                            ELSE ''
+                        END AS assessment_type
+                    FROM assessment_sessions s
+                    INNER JOIN vacancies v
+                        ON v.vacancy_id = s.vacancy_id
+                    INNER JOIN positions p
+                        ON p.position_id = v.position_id
+                    INNER JOIN interview_sessions i
+                        ON i.assessment_session_id =
+                           s.assessment_session_id
+                    INNER JOIN applicant_information ai
+                        ON ai.job_applications_id =
+                           i.job_applications_id
+                    LEFT JOIN hr_remarks_final_notes h
+                        ON h.applicant_id = ai.applicant_id
+                    WHERE s.assessment_session_id = $1
+                      AND LOWER(
+                            TRIM(COALESCE(h.application_status, ''))
+                          ) <> 'rank'
+                ),
+                required_criteria AS (
+                    SELECT
+                        UPPER(TRIM(assessment_type)) AS assessment_type,
+                        COUNT(*) AS required_count
+                    FROM assessment_criteria
+                    WHERE is_active = TRUE
+                    GROUP BY UPPER(TRIM(assessment_type))
+                ),
+                assigned_panelists AS (
+                    SELECT DISTINCT asp.user_id
+                    FROM assessment_session_panel_members asp
+                    INNER JOIN users u
+                        ON u.id = asp.user_id
+                    WHERE asp.assessment_session_id = $1
+                      AND COALESCE(u.is_archived, FALSE) = FALSE
+                ),
+                panelist_count AS (
+                    SELECT COUNT(*) AS panelist_count
+                    FROM assigned_panelists
+                ),
+                panelist_criteria AS (
+                    SELECT
+                        score.applicant_id,
+                        score.scored_by_user_id,
+                        COUNT(DISTINCT score.assessment_criteria_id)
+                            AS criteria_count
+                    FROM assessment_scores score
+                    INNER JOIN session_applicants applicant
+                        ON applicant.applicant_id = score.applicant_id
+                    INNER JOIN assessment_criteria criterion
+                        ON criterion.assessment_criteria_id =
+                           score.assessment_criteria_id
+                       AND criterion.is_active = TRUE
+                       AND UPPER(TRIM(criterion.assessment_type)) =
+                           applicant.assessment_type
+                    INNER JOIN assigned_panelists assigned
+                        ON assigned.user_id = score.scored_by_user_id
+                    WHERE score.assessment_session_id = $1
+                    GROUP BY
+                        score.applicant_id,
+                        score.scored_by_user_id
+                )
+                SELECT
+                    applicant.applicant_id,
+                    COUNT(panelist.scored_by_user_id) FILTER (
+                        WHERE panelist.criteria_count >=
+                              required.required_count
+                          AND required.required_count > 0
+                    ) AS "completedPanelists",
+                    assigned.panelist_count AS "panelistCount",
+                    (
+                        required.required_count > 0
+                        AND assigned.panelist_count > 0
+                        AND COUNT(panelist.scored_by_user_id) FILTER (
+                            WHERE panelist.criteria_count >=
+                                  required.required_count
+                        ) = assigned.panelist_count
+                    ) AS "allPanelistsSubmitted"
+                FROM session_applicants applicant
+                LEFT JOIN required_criteria required
+                    ON required.assessment_type =
+                       applicant.assessment_type
+                LEFT JOIN panelist_criteria panelist
+                    ON panelist.applicant_id = applicant.applicant_id
+                CROSS JOIN panelist_count assigned
+                GROUP BY
+                    applicant.applicant_id,
+                    required.required_count,
+                    assigned.panelist_count
+                ORDER BY applicant.applicant_id
+                `,
+                [assessmentSessionId]
+            );
+
         return res.status(200).json({
             success: true,
             submittedApplicantIds: result.rows.map(
                 (row) => row.applicant_id
             ),
+            applicantSubmissionCounts:
+                applicantSubmissionCountsResult.rows,
         });
     } catch (error) {
         console.error(

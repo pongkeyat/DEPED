@@ -139,9 +139,27 @@ export const sendRequirementsReminderEmail = async (
     lastName,
     ticket,
     positionTitle,
-    deadline
+    deadline,
+    submissionType = null
 ) => {
     try {
+        const normalizedSubmissionType =
+            typeof submissionType === "string"
+                ? submissionType.trim().toLowerCase()
+                : "";
+
+        if (normalizedSubmissionType && normalizedSubmissionType !== "online") {
+            console.log(
+                `Skipping requirements reminder for ${email}: submission type '${normalizedSubmissionType}' is not eligible.`
+            );
+
+            return {
+                success: true,
+                skipped: true,
+                email,
+            };
+        }
+
         const formattedDeadline = new Date(deadline).toLocaleDateString(
             "en-PH",
             {

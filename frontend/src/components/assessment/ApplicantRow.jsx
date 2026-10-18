@@ -45,6 +45,61 @@ export default function ApplicantRow({
       .replace(/\s+/g, " ")
       .trim() || "Unnamed Applicant";
 
+  const getApplicantType = (...applicants) => {
+    const parseInternalFlag = (value) => {
+      if (typeof value === "boolean") {
+        return value;
+      }
+
+      if (typeof value === "string") {
+        const normalizedValue = value.trim().toLowerCase();
+
+        if (normalizedValue === "true") return true;
+        if (normalizedValue === "false") return false;
+      }
+
+      return null;
+    };
+
+    for (const applicant of applicants) {
+      const explicitType =
+        applicant?.applicant_type || applicant?.applicantType;
+
+      if (typeof explicitType === "string") {
+        const normalizedType = explicitType.trim().toLowerCase();
+        if (normalizedType === "internal") return "Internal";
+        if (normalizedType === "external") return "External";
+      }
+
+      const directFlag = parseInternalFlag(
+        applicant?.is_internal ?? applicant?.isInternal
+      );
+
+      if (directFlag !== null) {
+        return directFlag ? "Internal" : "External";
+      }
+
+      const workExperiences =
+        applicant?.work_experience_list ||
+        applicant?.workExperienceList ||
+        applicant?.work_experiences ||
+        [];
+      const workFlags = Array.isArray(workExperiences)
+        ? workExperiences.map((work) =>
+            parseInternalFlag(work?.is_internal ?? work?.isInternal)
+          )
+        : [];
+
+      if (workFlags.length > 0 && workFlags.every((flag) => flag !== null)) {
+        return workFlags.some(Boolean) ? "Internal" : "External";
+      }
+    }
+
+    return "Not specified";
+  };
+
+  const applicantType = getApplicantType(details, item);
+
   // Application code displayed in the second table column.
   const applicationCode =
     details?.application_code ||
@@ -396,10 +451,12 @@ export default function ApplicantRow({
           sum,
           criterion
         ) =>
-          sum +
-          Number(
-            scores?.[criterion.id] || 0
-          ),
+          sum + (() => {
+            const selected = Number(scores?.[criterion.id] || 0);
+            const isPerformance = normalize(criterion.name) === "PERFORMANCE" &&
+              ["RELATED_TEACHING", "SCHOOL_ADMINISTRATION", "NON_TEACHING"].includes(assessmentType);
+            return isPerformance ? (selected / 5) * Number(criterion.max || 0) : selected;
+          })(),
         0
       );
 
@@ -514,14 +571,25 @@ export default function ApplicantRow({
           {applicantName}
         </div>
 
-
-
-        <div className="text-xs text-gray-400">
+        <div className="mt-1 text-xs text-gray-400">
           {positionTitle || "No Position"}
         </div>
 
-      </td>
+        <div className="mt-2">
+          <span
+            className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+              applicantType === "Internal"
+                ? "border-blue-200 bg-blue-50 text-blue-700"
+                : applicantType === "External"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-gray-200 bg-gray-50 text-gray-500"
+            }`}
+          >
+            {applicantType}
+          </span>
+        </div>
 
+      </td>
       {/* ======================================================
           DYNAMIC CRITERIA
       ====================================================== */}

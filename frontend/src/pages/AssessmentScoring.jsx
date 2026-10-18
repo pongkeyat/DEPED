@@ -452,10 +452,16 @@ export default function AssessmentScoring() {
                                     "EXPERIENCE"
                             );
 
+                        const isPerformanceCriterion =
+                            normalizedName === "PERFORMANCE" &&
+                            ["RELATED_TEACHING", "SCHOOL_ADMINISTRATION", "NON_TEACHING"].includes(normalizedAssessmentType);
+
+                        // Performance uses the RPMS midpoint dropdown in all three categories.
+                        // SQL migration sets these criteria to is_manual = false.
                         const isManual =
-                            Boolean(
-                                criterion.is_manual
-                            );
+                            isPerformanceCriterion
+                                ? false
+                                : Boolean(criterion.is_manual);
 
                         const type =
                             isIntegratedETE
@@ -732,17 +738,48 @@ export default function AssessmentScoring() {
                 }
 
                 if (mounted) {
-                    setPanelSubmissionStatus(
-                        Object.fromEntries(
-                            response.submittedApplicantIds.map(
-                                (id) => [
-                                    id,
-                                    { submitted: true },
-                                ]
-                            )
-                        )
+                    const ownSubmittedStatus = Object.fromEntries(
+                        response.submittedApplicantIds.map((id) => [
+                            String(id),
+                            { submitted: true },
+                        ])
                     );
-                    setPanelSubmissionStatusReady(true);
+
+                    // Backend should return per-applicant counts for the selected session.
+                    // Supported shape: applicantSubmissionStatus: { [applicantId]: { completedPanelists, panelistCount, allPanelistsSubmitted } }
+                    // or applicantSubmissionCounts: [{ applicant_id, completedPanelists, panelistCount }].
+                    let applicantCounts = {};
+                    const statusMap = response.applicantSubmissionStatus;
+                    if (statusMap && typeof statusMap === "object" && !Array.isArray(statusMap)) {
+                        applicantCounts = Object.fromEntries(
+                            Object.entries(statusMap).map(([id, status]) => [String(id), status || {}])
+                        );
+                    } else if (Array.isArray(response.applicantSubmissionCounts)) {
+                        applicantCounts = Object.fromEntries(
+                            response.applicantSubmissionCounts.map((entry) => [
+                                String(entry.applicant_id || entry.applicantId || entry.job_applications_id || ""),
+                                {
+                                    completedPanelists: Number(entry.completedPanelists ?? entry.completed_panelists ?? entry.submitted_count ?? 0),
+                                    panelistCount: Number(entry.panelistCount ?? entry.panelist_count ?? entry.total_panelists ?? 0),
+                                    allPanelistsSubmitted: Boolean(entry.allPanelistsSubmitted ?? entry.all_panelists_submitted),
+                                },
+                            ]).filter(([id]) => id)
+                        );
+                    }
+
+                    if (mounted) {
+                        const submissionStatus = { ...applicantCounts };
+                        Object.entries(ownSubmittedStatus).forEach(
+                            ([id, status]) => {
+                                submissionStatus[id] = {
+                                    ...submissionStatus[id],
+                                    ...status,
+                                };
+                            }
+                        );
+                        setPanelSubmissionStatus(submissionStatus);
+                        setPanelSubmissionStatusReady(true);
+                    }
                 }
             } catch (err) {
                 if (mounted) {
@@ -930,12 +967,11 @@ export default function AssessmentScoring() {
                 )
                 .reduce(
                     (sum, criterion) =>
-                        sum +
-                        Number(
-                            selectedScores[
-                                criterion.id
-                            ] || 0
-                        ),
+                        sum + (() => {
+                        const selected = Number(selectedScores[criterion.id] || 0);
+                        const isPerformance = String(criterion.name || "").trim().toUpperCase() === "PERFORMANCE";
+                        return isPerformance ? (selected / 5) * Number(criterion.max || 0) : selected;
+                    })(),
                     0
                 );
 
@@ -1395,9 +1431,9 @@ export default function AssessmentScoring() {
                                     null,
 
                                 score:
-                                    Number(
-                                        score
-                                    ),
+                                    criterion.name && String(criterion.name).trim().toUpperCase() === "PERFORMANCE"
+                                        ? (Number(score) / 5) * Number(criterion.max || 0)
+                                        : Number(score),
 
                                 remarks: "",
                             };
@@ -1528,15 +1564,10 @@ export default function AssessmentScoring() {
 
                     [applicantId]: {
                         submitted: true,
-
                         panelistCount,
-
                         completedPanelists,
-
                         allPanelistsSubmitted,
-
                         finalAverage,
-
                         finalRank,
                     },
                 })
@@ -2007,31 +2038,34 @@ export default function AssessmentScoring() {
                                                             submissionStatusReady={
                                                                 panelSubmissionStatusReady
                                                             }
+
+                                                            panelSubmissionStatus={
+                                                                panelSubmissionStatus[id]
+                                                            }
                                                         />
 
                                                         {/* ==================================================
                                                             PANELIST SUBMISSION STATUS
                                                         ================================================== */}
 
-                                                        {panelStatus?.submitted && (
-                                                            <tr>
-                                                                <td
-                                                                    colSpan={
-                                                                        criteria.length +
-                                                                        2
-                                                                    }
-                                                                    className="border-x border-b border-gray-200 bg-gray-50 px-4 py-2"
-                                                                >
-                                                                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                                                        {panelStatus &&
+                                                            Number(panelStatus.panelistCount) > 0 && (
+                                                                <tr>
+                                                                    <td
+                                                                        colSpan={
+                                                                            criteria.length +
+                                                                            2
+                                                                        }
+                                                                        className="border-x border-b border-gray-200 bg-gray-50 px-4 py-2"
+                                                                    >
+                                                                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                                {panelStatus.submitted && (
+                                                                                    <span className="rounded-full bg-green-100 px-3 py-1 font-semibold text-green-700">
+                                                                                        Your assessment has been submitted
+                                                                                    </span>
+                                                                                )}
 
-                                                                        <div className="flex flex-wrap items-center gap-2">
-
-                                                                            <span className="rounded-full bg-green-100 px-3 py-1 font-semibold text-green-700">
-                                                                                Your assessment has been submitted
-                                                                            </span>
-
-                                                                            {panelStatus.panelistCount >
-                                                                                0 && (
                                                                                 <span className="rounded-full bg-blue-100 px-3 py-1 font-medium text-blue-700">
                                                                                     {
                                                                                         panelStatus.completedPanelists
@@ -2042,55 +2076,54 @@ export default function AssessmentScoring() {
                                                                                     }{" "}
                                                                                     panel members submitted
                                                                                 </span>
-                                                                            )}
 
-                                                                            {panelStatus.allPanelistsSubmitted && (
-                                                                                <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-700">
-                                                                                    All panel assessments completed
-                                                                                </span>
-                                                                            )}
-                                                                        </div>
-
-                                                                        <div className="flex items-center gap-3 text-gray-600">
-
-                                                                            {!panelStatus.allPanelistsSubmitted && (
-                                                                                <span>
-                                                                                    Current panelist total:{" "}
-                                                                                    <strong>
-                                                                                        {currentWorkingTotal.toFixed(
-                                                                                            2
-                                                                                        )}
-                                                                                    </strong>
-                                                                                </span>
-                                                                            )}
-
-                                                                            {panelStatus.allPanelistsSubmitted &&
-                                                                                panelStatus.finalAverage !==
-                                                                                    null && (
-                                                                                    <span className="font-semibold text-gray-900">
-                                                                                        Final Average:{" "}
-                                                                                        {Number(
-                                                                                            panelStatus.finalAverage
-                                                                                        ).toFixed(
-                                                                                            2
-                                                                                        )}
+                                                                                {panelStatus.allPanelistsSubmitted && (
+                                                                                    <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-700">
+                                                                                        All panel assessments completed
                                                                                     </span>
                                                                                 )}
+                                                                            </div>
 
-                                                                            {panelStatus.allPanelistsSubmitted &&
-                                                                                panelStatus.finalRank && (
-                                                                                    <span className="font-semibold text-indigo-700">
-                                                                                        Final Rank: #
-                                                                                        {
-                                                                                            panelStatus.finalRank
-                                                                                        }
-                                                                                    </span>
-                                                                                )}
+                                                                            <div className="flex items-center gap-3 text-gray-600">
+                                                                                {panelStatus.submitted &&
+                                                                                    !panelStatus.allPanelistsSubmitted && (
+                                                                                        <span>
+                                                                                            Current panelist total:{" "}
+                                                                                            <strong>
+                                                                                                {currentWorkingTotal.toFixed(
+                                                                                                    2
+                                                                                                )}
+                                                                                            </strong>
+                                                                                        </span>
+                                                                                    )}
+
+                                                                                {panelStatus.allPanelistsSubmitted &&
+                                                                                    panelStatus.finalAverage !==
+                                                                                        null && (
+                                                                                        <span className="font-semibold text-gray-900">
+                                                                                            Final Average:{" "}
+                                                                                            {Number(
+                                                                                                panelStatus.finalAverage
+                                                                                            ).toFixed(
+                                                                                                2
+                                                                                            )}
+                                                                                        </span>
+                                                                                    )}
+
+                                                                                {panelStatus.allPanelistsSubmitted &&
+                                                                                    panelStatus.finalRank && (
+                                                                                        <span className="font-semibold text-indigo-700">
+                                                                                            Final Rank: #
+                                                                                            {
+                                                                                                panelStatus.finalRank
+                                                                                            }
+                                                                                        </span>
+                                                                                    )}
+                                                                            </div>
                                                                         </div>
-                                                                    </div>
-                                                                </td>
-                                                            </tr>
-                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            )}
                                                     </React.Fragment>
                                                 );
                                             }
