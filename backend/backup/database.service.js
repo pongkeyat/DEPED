@@ -1,3 +1,4 @@
+
 import { execFile } from "child_process";
 import { promisify } from "util";
 import fs from "fs/promises";
@@ -6,16 +7,16 @@ import path from "path";
 const execFileAsync = promisify(execFile);
 
 // ======================================================
-// PostgreSQL executables
+// POSTGRESQL EXECUTABLES
 // ======================================================
 
-const PG_BIN = "C:\\Program Files\\PostgreSQL\\18\\bin";
+const PG_BIN = String.raw`C:\Program Files\PostgreSQL\18\bin`;
 
 const PG_DUMP = path.join(PG_BIN, "pg_dump.exe");
 const PG_RESTORE = path.join(PG_BIN, "pg_restore.exe");
 
 // ======================================================
-// Database configuration
+// DATABASE CONFIGURATION
 // ======================================================
 
 const DB_HOST = process.env.DB_HOST || "localhost";
@@ -25,270 +26,212 @@ const DB_USER = process.env.DB_USER || "postgres";
 const DB_PASSWORD = process.env.DB_PASSWORD;
 
 // ======================================================
-// Backup directory
+// BACKUP DIRECTORY
 // ======================================================
 
 const BACKUP_DIR = path.resolve("backups");
 
 // ======================================================
-// Create timestamp
+// SHARED POSTGRES ENVIRONMENT
+// ======================================================
+
+const getPostgresEnv = () => ({
+    ...process.env,
+    PGPASSWORD: DB_PASSWORD || "",
+});
+
+// ======================================================
+// CREATE TIMESTAMP
 // ======================================================
 
 const createTimestamp = () => {
-    const now = new Date();
-
-    return now
+    return new Date()
         .toISOString()
         .replace("T", "_")
         .replace(/:/g, "-")
-        .replace(/\..+/, "");
+        .replace(/\.\d{3}Z$/, "");
 };
 
 // ======================================================
-// CREATE BACKUP
+// VALIDATE BACKUP FILENAME
+// ======================================================
+
+const validateBackupFilename = (filename) => {
+    if (!filename || typeof filename !== "string") {
+        throw new Error("Backup filename is required.");
+    }
+
+    if (path.basename(filename) !== filename) {
+        throw new Error("Invalid backup filename.");
+    }
+
+    if (!filename.toLowerCase().endsWith(".dump")) {
+        throw new Error("Only .dump backup files are allowed.");
+    }
+
+    return filename;
+};
+
+// ======================================================
+// CREATE DATABASE BACKUP
 // ======================================================
 
 export const createDatabaseBackup = async ({
-    prefix = "deped_backup"
+    prefix = "deped_backup",
 } = {}) => {
+    await fs.mkdir(BACKUP_DIR, { recursive: true });
 
-    await fs.mkdir(BACKUP_DIR, {
-        recursive: true
-    });
-
-    const timestamp = createTimestamp();
-
-    const filename = `${prefix}_${timestamp}.dump`;
-
-    const backupPath = path.join(
-        BACKUP_DIR,
-        filename
-    );
+    const filename = `${prefix}_${createTimestamp()}.dump`;
+    const backupPath = path.join(BACKUP_DIR, filename);
 
     const args = [
-        "-h",
-        DB_HOST,
-
-        "-p",
-        DB_PORT,
-
-        "-U",
-        DB_USER,
-
-        "-F",
-        "c",
-
+        "-h", DB_HOST,
+        "-p", DB_PORT,
+        "-U", DB_USER,
+        "-F", "c",
         "-b",
-
         "-v",
-
-        "-f",
-        backupPath,
-
-        DB_NAME
+        "-f", backupPath,
+        DB_NAME,
     ];
 
     try {
+        await execFileAsync(PG_DUMP, args, {
+            env: getPostgresEnv(),
+            maxBuffer: 1024 * 1024 * 20,
+        });
 
-        await execFileAsync(
-            PG_DUMP,
-            args,
-            {
-                env: {
-                    ...process.env,
-                    PGPASSWORD: DB_PASSWORD
-                },
-
-                maxBuffer: 1024 * 1024 * 20
-            }
-        );
-
-        const stats = await fs.stat(
-            backupPath
-        );
+        const stats = await fs.stat(backupPath);
 
         return {
             filename,
             path: backupPath,
             size: stats.size,
-            created_at: new Date()
+            created_at: stats.birthtime,
         };
-
     } catch (error) {
-
-        // Remove incomplete backup
-        try {
-            await fs.unlink(backupPath);
-        } catch {
-            // File may not exist
-        }
-
-        throw error;
+        await fs.unlink(backupPath).catch(() => {});
+        throw new Error(`Database backup failed: ${error.message}`);
     }
 };
 
 // ======================================================
-// GET BACKUP LIST
+// GET DATABASE BACKUPS
 // ======================================================
 
 export const getDatabaseBackups = async () => {
+    await fs.mkdir(BACKUP_DIR, { recursive: true });
 
-    await fs.mkdir(BACKUP_DIR, {
-        recursive: true
+    const files = await fs.readdir(BACKUP_DIR, {
+        withFileTypes: true,
     });
-
-    const files = await fs.readdir(
-        BACKUP_DIR
-    );
 
     const backups = [];
 
-    for (const filename of files) {
-
-        if (!filename.endsWith(".dump")) {
+    for (const entry of files) {
+        if (
+            !entry.isFile() ||
+            !entry.name.toLowerCase().endsWith(".dump")
+        ) {
             continue;
         }
 
-        const filePath = path.join(
-            BACKUP_DIR,
-            filename
-        );
-
-        const stats = await fs.stat(
-            filePath
-        );
+        const filePath = path.join(BACKUP_DIR, entry.name);
+        const stats = await fs.stat(filePath);
 
         backups.push({
-            filename,
+            filename: entry.name,
             size: stats.size,
-            created_at: stats.birthtime
+            created_at: stats.birthtime,
         });
     }
 
     backups.sort(
         (a, b) =>
-            new Date(b.created_at) -
-            new Date(a.created_at)
+            new Date(b.created_at).getTime() -
+            new Date(a.created_at).getTime()
     );
 
     return backups;
 };
 
-// ======================================================
-// RESTORE BACKUP
-// ======================================================
+export const getDatabaseBackupPath = async (filename) => {
+    const safeFilename = validateBackupFilename(filename);
+    const backupPath = path.join(BACKUP_DIR, safeFilename);
 
-export const restoreDatabaseBackup = async (
-    filename
-) => {
+    let stats;
 
-    if (!filename) {
-        throw new Error(
-            "Backup filename is required."
-        );
-    }
-
-    // Prevent path traversal
-    const safeFilename =
-        path.basename(filename);
-
-    if (safeFilename !== filename) {
-        throw new Error(
-            "Invalid backup filename."
-        );
-    }
-
-    // Only allow .dump files
-    if (!safeFilename.endsWith(".dump")) {
-        throw new Error(
-            "Only .dump backup files are allowed."
-        );
-    }
-
-    const backupPath = path.join(
-        BACKUP_DIR,
-        safeFilename
-    );
-
-    // Verify backup exists
     try {
+        stats = await fs.stat(backupPath);
+    } catch (error) {
+        if (error.code === "ENOENT") {
+            throw new Error("Backup file not found.");
+        }
 
-        await fs.access(
-            backupPath
-        );
-
-    } catch {
-
-        throw new Error(
-            "Backup file not found."
-        );
+        throw error;
     }
 
-    // ==================================================
-    // STEP 1
-    // Automatically backup CURRENT database
-    // ==================================================
+    if (!stats.isFile()) {
+        throw new Error("The selected backup is not a file.");
+    }
 
-    const preRestoreBackup =
-        await createDatabaseBackup({
-            prefix: "deped_pre_restore"
-        });
+    return backupPath;
+};
 
-    // ==================================================
-    // STEP 2
-    // Restore selected backup
-    // ==================================================
+// ======================================================
+// RESTORE DATABASE BACKUP
+// ======================================================
 
+export const restoreDatabaseBackup = async (filename) => {
+    const safeFilename = validateBackupFilename(filename);
+
+    await fs.mkdir(BACKUP_DIR, { recursive: true });
+
+    const backupPath = path.join(BACKUP_DIR, safeFilename);
+
+    let stats;
+
+    try {
+        stats = await fs.stat(backupPath);
+    } catch {
+        throw new Error("Backup file not found.");
+    }
+
+    if (!stats.isFile()) {
+        throw new Error("The selected backup is not a file.");
+    }
+
+    // STEP 1: Create a safety backup of the current database.
+    const preRestoreBackup = await createDatabaseBackup({
+        prefix: "deped_pre_restore",
+    });
+
+    // STEP 2: Restore the selected custom-format backup.
     const args = [
-        "-h",
-        DB_HOST,
-
-        "-p",
-        DB_PORT,
-
-        "-U",
-        DB_USER,
-
-        "-d",
-        DB_NAME,
-
+        "-h", DB_HOST,
+        "-p", DB_PORT,
+        "-U", DB_USER,
+        "-d", DB_NAME,
         "--clean",
-
         "--if-exists",
-
         "--exit-on-error",
-
-        backupPath
+        backupPath,
     ];
 
     try {
-
-        await execFileAsync(
-            PG_RESTORE,
-            args,
-            {
-                env: {
-                    ...process.env,
-                    PGPASSWORD: DB_PASSWORD
-                },
-
-                maxBuffer: 1024 * 1024 * 20
-            }
-        );
+        await execFileAsync(PG_RESTORE, args, {
+            env: getPostgresEnv(),
+            maxBuffer: 1024 * 1024 * 20,
+        });
 
         return {
             restored_backup: safeFilename,
-
-            pre_restore_backup:
-                preRestoreBackup.filename,
-
-            restored_at: new Date()
+            pre_restore_backup: preRestoreBackup.filename,
+            restored_at: new Date(),
         };
-
     } catch (error) {
-
         throw new Error(
-            `Restore failed. Your previous database was backed up as "${preRestoreBackup.filename}". ${error.message}`
+            `Restore failed. A safety backup was created as "${preRestoreBackup.filename}". ${error.message}`
         );
     }
 };

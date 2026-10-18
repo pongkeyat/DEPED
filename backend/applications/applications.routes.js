@@ -7,7 +7,7 @@ import {
   getFullApplicants, 
   getApplicantById, 
   updateApplicationStatus,
-    updateFullApplicant
+  updateFullApplicant
 } from './applications.controller.js';
 
 const router = express.Router();

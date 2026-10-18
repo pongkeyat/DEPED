@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import VacancyHeader from "../components/vacancies/PostVacancyHeader";
 import PostVacancyForm from "../components/vacancies/PostVacancyForm";
@@ -32,6 +33,7 @@ const initialFormState = {
         training_requirement: "",
         experience_requirement: "",
         eligibility_requirement: "",
+        prescribed_qualifications: "",
     },
 
     remarks: {
@@ -40,13 +42,23 @@ const initialFormState = {
 };
 
 const DRAFT_STORAGE_KEY = "post_vacancy_draft";
+const PLANTILLA_ITEM_PREFIX = "OSEC-DECSB-";
 
 // =====================================================
 // COMPONENT
 // =====================================================
 
 export default function PostVacancy({ onBack }) {
+    const navigate = useNavigate();
     const isBelowMinimum = false;
+    const handleBack = () => {
+        if (onBack) {
+            onBack();
+            return;
+        }
+
+        navigate("/vacancyPosting");
+    };
 
     // =====================================================
     // MODAL STATES
@@ -56,6 +68,8 @@ export default function PostVacancy({ onBack }) {
     const [modalState, setModalState] = useState("confirm");
     const [modalMessage, setModalMessage] = useState("");
     const [loading, setLoading] = useState(false);
+    const [showValidationErrors, setShowValidationErrors] =
+        useState(false);
 
     // =====================================================
     // MASTER FORM STATE (INITIALIZED FROM LOCALSTORAGE IF EXISTS)
@@ -192,6 +206,7 @@ export default function PostVacancy({ onBack }) {
                         training_requirement: "",
                         experience_requirement: "",
                         eligibility_requirement: "",
+                        prescribed_qualifications: "",
                     },
                 }));
 
@@ -237,6 +252,7 @@ export default function PostVacancy({ onBack }) {
                         training_requirement: "",
                         experience_requirement: "",
                         eligibility_requirement: "",
+                        prescribed_qualifications: "",
                     },
                 }));
 
@@ -277,6 +293,8 @@ export default function PostVacancy({ onBack }) {
                     eligibility_requirement:
                         selectedPosition.eligibility ||
                         "",
+
+                    prescribed_qualifications: "",
                 },
             }));
 
@@ -303,6 +321,7 @@ export default function PostVacancy({ onBack }) {
 
     const resetForm = () => {
         setMasterForm(initialFormState);
+        setShowValidationErrors(false);
         try {
             localStorage.removeItem(DRAFT_STORAGE_KEY);
         } catch (error) {
@@ -318,6 +337,7 @@ export default function PostVacancy({ onBack }) {
         e.preventDefault();
 
         if (loading) return;
+        setShowValidationErrors(true);
 
         const {
             position_id,
@@ -329,6 +349,17 @@ export default function PostVacancy({ onBack }) {
             category,
             place_of_assignment,
         } = masterForm.vacancy;
+        const plantillaItemParts =
+            String(plantilla_position || "").startsWith(
+                PLANTILLA_ITEM_PREFIX
+            )
+                ? String(plantilla_position)
+                      .slice(PLANTILLA_ITEM_PREFIX.length)
+                      .split("-")
+                : [];
+        const hasCompletePlantillaItemNumber =
+            plantillaItemParts.length === 3 &&
+            plantillaItemParts.every((part) => part.trim());
 
         // =================================================
         // VACANCY VALIDATION
@@ -336,13 +367,14 @@ export default function PostVacancy({ onBack }) {
 
         if (
             !position_id ||
-            !plantilla_position ||
+            !hasCompletePlantillaItemNumber ||
             !office_unit ||
             !number_of_vacancies ||
+            Number(number_of_vacancies) <= 0 ||
             !application_posted ||
             !application_deadline ||
             !category ||
-            !place_of_assignment
+            !place_of_assignment?.trim()
         ) {
             setModalState("error");
 
@@ -417,6 +449,7 @@ export default function PostVacancy({ onBack }) {
             training_requirement,
             experience_requirement,
             eligibility_requirement,
+            prescribed_qualifications,
         } = masterForm.qualifications;
 
         // =================================================
@@ -448,6 +481,8 @@ export default function PostVacancy({ onBack }) {
             experience_requirement,
 
             eligibility_requirement,
+
+            prescribed_qualifications,
 
             remark_text:
                 masterForm.remarks.remarks,
@@ -505,11 +540,8 @@ export default function PostVacancy({ onBack }) {
 
         setIsModalOpen(false);
 
-        if (
-            modalState === "success" &&
-            onBack
-        ) {
-            onBack();
+        if (modalState === "success") {
+            handleBack();
         }
     };
 
@@ -524,7 +556,7 @@ export default function PostVacancy({ onBack }) {
 
             <VacancyHeader
                 isPosting={true}
-                onBack={onBack}
+                onBack={handleBack}
             />
 
             {/* MAIN GRID */}
@@ -539,6 +571,7 @@ export default function PostVacancy({ onBack }) {
 
                     <PostVacancyForm
                         formData={masterForm.vacancy}
+                        showValidationErrors={showValidationErrors}
                         onChange={(e) =>
                             handleSectionChange(
                                 "vacancy",
@@ -563,6 +596,7 @@ export default function PostVacancy({ onBack }) {
 
                 <PostQualificationsForm
                     formData={masterForm.qualifications}
+                    showValidationErrors={showValidationErrors}
                     onChange={(e) => handleSectionChange("qualifications", e)}
                 />
 

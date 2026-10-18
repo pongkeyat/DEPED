@@ -124,7 +124,24 @@ export const getAuditLogs = async ({
     }
 
     if (action) {
-        addCondition("LOWER(action) = LOWER(?)", action);
+        addCondition(
+            `LOWER(
+                CASE
+                    WHEN module = 'DATABASE'
+                     AND (
+                        metadata->>'path' IN (
+                            '/api/database/restore',
+                            '/api/database/restore/upload'
+                        )
+                        OR description LIKE 'POST /api/database/restore returned HTTP %'
+                        OR description LIKE 'POST /api/database/restore/upload returned HTTP %'
+                    )
+                    THEN 'RESTORE'
+                    ELSE action
+                END
+            ) = LOWER(?)`,
+            action
+        );
     }
 
     if (module) {
@@ -141,14 +158,14 @@ export const getAuditLogs = async ({
 
     if (date_from) {
         addCondition(
-            "created_at >= ?::date",
+            "audit_logs.created_at >= ?::date",
             date_from
         );
     }
 
     if (date_to) {
         addCondition(
-            "created_at < (?::date + INTERVAL '1 day')",
+            "audit_logs.created_at < (?::date + INTERVAL '1 day')",
             date_to
         );
     }
@@ -185,10 +202,31 @@ export const getAuditLogs = async ({
     ];
 
     const dataQuery = `
-        SELECT *
+        SELECT
+            audit_logs.*,
+            CASE
+                WHEN audit_logs.module = 'DATABASE'
+                 AND (
+                    audit_logs.metadata->>'path' IN (
+                        '/api/database/restore',
+                        '/api/database/restore/upload'
+                    )
+                    OR audit_logs.description LIKE 'POST /api/database/restore returned HTTP %'
+                    OR audit_logs.description LIKE 'POST /api/database/restore/upload returned HTTP %'
+                 )
+                THEN 'RESTORE'
+                ELSE audit_logs.action
+            END AS display_action,
+            COALESCE(
+                NULLIF(BTRIM(CONCAT_WS(' ', users.first_name, users.last_name)), ''),
+                audit_logs.username
+            ) AS display_username,
+            COALESCE(users.role, audit_logs.user_role) AS display_user_role
         FROM audit_logs
+        LEFT JOIN users
+            ON users.id::text = audit_logs.user_id::text
         ${whereClause}
-        ORDER BY created_at DESC, audit_log_id DESC
+        ORDER BY audit_logs.created_at DESC, audit_logs.audit_log_id DESC
         LIMIT $${values.length + 1}
         OFFSET $${values.length + 2};
     `;
@@ -218,9 +256,30 @@ export const getAuditLogById = async (
     audit_log_id
 ) => {
     const query = `
-        SELECT *
+        SELECT
+            audit_logs.*,
+            CASE
+                WHEN audit_logs.module = 'DATABASE'
+                 AND (
+                    audit_logs.metadata->>'path' IN (
+                        '/api/database/restore',
+                        '/api/database/restore/upload'
+                    )
+                    OR audit_logs.description LIKE 'POST /api/database/restore returned HTTP %'
+                    OR audit_logs.description LIKE 'POST /api/database/restore/upload returned HTTP %'
+                 )
+                THEN 'RESTORE'
+                ELSE audit_logs.action
+            END AS display_action,
+            COALESCE(
+                NULLIF(BTRIM(CONCAT_WS(' ', users.first_name, users.last_name)), ''),
+                audit_logs.username
+            ) AS display_username,
+            COALESCE(users.role, audit_logs.user_role) AS display_user_role
         FROM audit_logs
-        WHERE audit_log_id = $1;
+        LEFT JOIN users
+            ON users.id::text = audit_logs.user_id::text
+        WHERE audit_logs.audit_log_id = $1;
     `;
 
     const result = await pool.query(

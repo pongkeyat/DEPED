@@ -9,7 +9,8 @@ import {
     updateUser,
     archiveUser ,
     forgotPassword,
-    resetPassword
+    resetPassword,
+    restoreUser
     
 } from './users.controllers.js';
 import { protect } from './users.middleware.js';
@@ -28,5 +29,6 @@ router.post("/reset-password", resetPassword);
 // Added routes for updating and archiving users
 router.put('/updateUsers/:id', protect, updateUser);
 router.patch('/archiveUsers/:id', protect, archiveUser);
+router.patch('/restoreUsers/:id', protect, restoreUser);
 
 export default router;

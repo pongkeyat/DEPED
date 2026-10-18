@@ -1,98 +1,93 @@
-import {
-    AlertTriangle,
-    X,
-    RotateCcw,
-    Loader2
-} from "lucide-react";
 
 const RestoreConfirmModal = ({
     backup,
     restoring,
     onCancel,
-    onConfirm
+    onConfirm,
 }) => {
+    if (!backup) return null;
+
+    const isUploadedFile = backup.source === "upload";
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-
-            <div className="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-2xl">
-
-                {/* HEADER */}
-
-                <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-
-                    <h2 className="font-semibold text-gray-800">
-                        Confirm Database Restore
-                    </h2>
-
-                    <button
-                        type="button"
-                        onClick={onCancel}
-                        disabled={restoring}
-                        className="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:cursor-not-allowed"
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onMouseDown={(event) => {
+                if (
+                    event.target === event.currentTarget &&
+                    !restoring
+                ) {
+                    onCancel();
+                }
+            }}
+        >
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="restore-modal-title"
+                className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+            >
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
+                    <svg
+                        className="h-6 w-6 text-amber-700"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        aria-hidden="true"
                     >
-                        <X size={20} />
-                    </button>
-
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M12 9v4m0 4h.01M10.3 3.9 2.8 17a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3l-7.5-13.1a2 2 0 0 0-3.4 0Z"
+                        />
+                    </svg>
                 </div>
 
-                {/* CONTENT */}
+                <h2
+                    id="restore-modal-title"
+                    className="text-xl font-bold text-gray-900"
+                >
+                    Confirm Database Restore
+                </h2>
 
-                <div className="px-6 py-5">
+                <p className="mt-3 text-sm leading-6 text-gray-600">
+                    Are you sure you want to restore this database backup?
+                    The operation may replace existing database objects
+                    and data.
+                </p>
 
-                    <div className="mb-4 flex items-start gap-3 rounded-lg border border-orange-200 bg-orange-50 p-4">
-
-                        <AlertTriangle
-                            size={21}
-                            className="mt-0.5 shrink-0 text-orange-600"
-                        />
-
-                        <div>
-
-                            <p className="font-medium text-orange-800">
-                                Warning
-                            </p>
-
-                            <p className="mt-1 text-sm leading-5 text-orange-700">
-                                Restoring this backup will replace the
-                                current database with the selected backup.
-                            </p>
-
-                        </div>
-
-                    </div>
-
-                    <p className="text-sm text-gray-600">
-                        You are about to restore:
+                <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                        {isUploadedFile
+                            ? "Selected Local File"
+                            : "Server Backup"}
                     </p>
 
-                    <div className="mt-2 rounded-lg bg-gray-50 px-4 py-3">
+                    <p className="mt-1 break-all text-sm font-semibold text-gray-800">
+                        {backup.filename}
+                    </p>
 
-                        <p className="break-all text-sm font-medium text-gray-800">
-                            {backup.filename}
+                    {backup.size != null && (
+                        <p className="mt-1 text-xs text-gray-500">
+                            {(backup.size / 1024 / 1024).toFixed(2)} MB
                         </p>
-
-                    </div>
-
-                    <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3">
-
-                        <p className="text-xs leading-5 text-green-700">
-                            A safety backup of the current database will
-                            automatically be created before restoration.
-                        </p>
-
-                    </div>
-
+                    )}
                 </div>
 
-                {/* FOOTER */}
+                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-sm text-amber-800">
+                        A safety backup of the current database will be
+                        attempted before restoration.
+                    </p>
+                </div>
 
-                <div className="flex justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
-
+                <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                     <button
                         type="button"
                         onClick={onCancel}
                         disabled={restoring}
-                        className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                     >
                         Cancel
                     </button>
@@ -101,32 +96,14 @@ const RestoreConfirmModal = ({
                         type="button"
                         onClick={onConfirm}
                         disabled={restoring}
-                        className="flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-
-                        {restoring ? (
-                            <>
-                                <Loader2
-                                    size={17}
-                                    className="animate-spin"
-                                />
-
-                                Restoring...
-                            </>
-                        ) : (
-                            <>
-                                <RotateCcw size={17} />
-
-                                Restore Database
-                            </>
-                        )}
-
+                        {restoring
+                            ? "Restoring Database..."
+                            : "Confirm Restore"}
                     </button>
-
                 </div>
-
             </div>
-
         </div>
     );
 };

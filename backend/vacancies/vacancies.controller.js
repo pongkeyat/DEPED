@@ -526,6 +526,9 @@ export const updateVacancy = async (req, res) => {
         const training_requirement = req.body.training_requirement ?? existingQuals.training_requirement;
         const experience_requirement = req.body.experience_requirement ?? existingQuals.experience_requirement;
         const eligibility_requirement = req.body.eligibility_requirement ?? existingQuals.eligibility_requirement;
+        const prescribed_qualifications =
+            req.body.prescribed_qualifications ??
+            existingQuals.prescribed_qualifications;
         
         const remark_text = req.body.remark_text ?? existingVacancy.remark_text;
 
@@ -562,7 +565,8 @@ export const updateVacancy = async (req, res) => {
                     education_requirement,
                     training_requirement,
                     experience_requirement,
-                    eligibility_requirement
+                    eligibility_requirement,
+                    prescribed_qualifications
                 },
                 remark_text
             }
@@ -1090,3 +1094,66 @@ cron.schedule(
         timezone: "Asia/Manila",
     }
 );
+
+
+
+
+export const restoreVacancy = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: "Vacancy ID is required."
+            });
+        }
+
+        const result = await pool.query(
+            `
+            UPDATE public.vacancies
+            SET is_archived = FALSE
+            WHERE vacancy_id = $1
+              AND is_archived = TRUE
+            RETURNING vacancy_id, status, is_archived
+            `,
+            [id]
+        );
+
+        if (result.rows.length === 0) {
+            const existing = await pool.query(
+                `
+                SELECT vacancy_id, status, is_archived
+                FROM public.vacancies
+                WHERE vacancy_id = $1
+                `,
+                [id]
+            );
+
+            if (existing.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Vacancy not found."
+                });
+            }
+
+            return res.status(400).json({
+                success: false,
+                message: "Vacancy is not archived."
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Vacancy restored successfully.",
+            vacancy: result.rows[0]
+        });
+    } catch (error) {
+        console.error("Restore vacancy error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to restore vacancy."
+        });
+    }
+};

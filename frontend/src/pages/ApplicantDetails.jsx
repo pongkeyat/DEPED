@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+
 import { useParams, useNavigate } from "react-router-dom";
 
 import {
@@ -15,17 +16,13 @@ import {
   MapPin,
   CheckCircle2,
   Eye,
-  Pencil,
 } from "lucide-react";
-
 import {
   getApplicationById,
   updateApplicationStatus,
 } from "../api/ApplicationApi";
-
 import ActionModal from "../components/ActionModal";
 import DocumentPreviewModal from "../components/applications/DocumentPreviewModal";
-import ApplicantEditModal from "../components/applications/ApplicantEditModal";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
@@ -33,34 +30,26 @@ const API_BASE_URL =
 // ============================================================
 // STATUS STYLES
 // ============================================================
-
 const getStatusStyles = (status) => {
   const normalized = (status || "").toLowerCase().trim();
-
   if (normalized === "complete") {
     return "bg-emerald-100 text-emerald-700 border-emerald-200";
   }
-
   if (normalized === "incomplete") {
     return "bg-red-100 text-red-700 border-red-200";
   }
-
   if (normalized === "under_review" || normalized === "under review") {
     return "bg-amber-100 text-amber-700 border-amber-200";
   }
-
   if (normalized === "initial screening") {
     return "bg-orange-100 text-orange-700 border-orange-200";
   }
-
   if (normalized === "for assessment") {
     return "bg-violet-100 text-violet-700 border-violet-200";
   }
-
   if (normalized === "ranked") {
     return "bg-teal-100 text-teal-700 border-teal-200";
   }
-
   return "bg-slate-100 text-slate-700 border-slate-200";
 };
 
@@ -68,7 +57,6 @@ const getStatusStyles = (status) => {
 // DOCUMENT REQUIREMENTS
 // IMPORTANT: these fields must match applicant_documents.
 // ============================================================
-
 const DOCUMENT_REQUIREMENTS = [
   { field: "has_application_letter", label: "Letter of Intent" },
   {
@@ -102,7 +90,6 @@ const DOCUMENT_REQUIREMENTS = [
 // ============================================================
 // RESOLVE FILE URL
 // ============================================================
-
 const resolveFileUrl = (urlOrPath) => {
   if (!urlOrPath) {
     return null;
@@ -111,13 +98,11 @@ const resolveFileUrl = (urlOrPath) => {
   // If the value is an array, return the first file.
   // Multiple files are handled separately in getDocumentFiles().
   const filePath = Array.isArray(urlOrPath) ? urlOrPath[0] : urlOrPath;
-
   if (!filePath || typeof filePath !== "string") {
     return null;
   }
 
   const normalizedPath = filePath.trim().replace(/\\/g, "/");
-
   if (!normalizedPath) {
     return null;
   }
@@ -136,26 +121,24 @@ const resolveFileUrl = (urlOrPath) => {
     : normalizedPath.startsWith("uploads/")
       ? `/${normalizedPath}`
       : `/uploads/${normalizedPath.replace(/^\/+/, "")}`;
-
   return `${API_BASE_URL.replace(/\/+$/, "")}${cleanPath}`;
 };
 
 // ============================================================
 // GET ALL FILES FOR A DOCUMENT
 // ============================================================
-
 const parsePostgresFileArray = (value) => {
   const contents = value.slice(1, -1);
+
   const values = [];
   let current = "";
   let quoted = false;
   let escaped = false;
-
   for (const character of contents) {
     if (escaped) {
       current += character;
       escaped = false;
-    } else if (character === "\\") {
+    } else if (character === "\\\\") {
       escaped = true;
     } else if (character === '"') {
       quoted = !quoted;
@@ -166,12 +149,10 @@ const parsePostgresFileArray = (value) => {
       current += character;
     }
   }
-
   if (escaped) {
-    current += "\\";
+    current += "\\\\";
   }
   values.push(current);
-
   return values.filter((filePath) => filePath && filePath !== "NULL");
 };
 
@@ -179,11 +160,9 @@ const normalizeDocumentPaths = (value) => {
   if (Array.isArray(value)) {
     return value.flatMap(normalizeDocumentPaths);
   }
-
   if (value && typeof value === "object") {
     return normalizeDocumentPaths(value.url || value.path || value.file_path);
   }
-
   if (typeof value !== "string") {
     return [];
   }
@@ -192,7 +171,6 @@ const normalizeDocumentPaths = (value) => {
   if (!normalizedValue) {
     return [];
   }
-
   if (normalizedValue.startsWith("[")) {
     try {
       const parsedValue = JSON.parse(normalizedValue);
@@ -203,11 +181,9 @@ const normalizeDocumentPaths = (value) => {
       // Treat non-JSON strings as a single file path.
     }
   }
-
   if (normalizedValue.startsWith("{") && normalizedValue.endsWith("}")) {
     return parsePostgresFileArray(normalizedValue);
   }
-
   return [normalizedValue];
 };
 
@@ -231,11 +207,9 @@ const getDocumentFiles = (applicant, field) => {
     possibleValues
       .map(normalizeDocumentPaths)
       .find((paths) => paths.length > 0) || [];
-
   if (values.length === 0) {
     return [];
   }
-
   return values
     .map((filePath) => ({
       url: resolveFileUrl(filePath),
@@ -247,18 +221,20 @@ const getDocumentFiles = (applicant, field) => {
 // ============================================================
 // MAIN COMPONENT
 // ============================================================
-
 export default function ApplicantDetails() {
   const { id } = useParams();
+
   const navigate = useNavigate();
 
   // ==========================================================
   // STATES
   // ==========================================================
-
   const [applicant, setApplicant] = useState(null);
+
   const [loading, setLoading] = useState(true);
+
   const [error, setError] = useState(null);
+
   const [updating, setUpdating] = useState(false);
 
   // Checked documents
@@ -266,7 +242,7 @@ export default function ApplicantDetails() {
 
   // Modals
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
+
   const [modalError, setModalError] = useState(null);
 
   // In-app document preview (replaces opening a new browser tab)
@@ -275,7 +251,6 @@ export default function ApplicantDetails() {
   // ==========================================================
   // FETCH APPLICANT
   // ==========================================================
-
   useEffect(() => {
     const fetchApplicantDetails = async () => {
       try {
@@ -285,28 +260,23 @@ export default function ApplicantDetails() {
         const response = await getApplicationById(id);
 
         const data = response && response.data ? response.data : response;
-
         setApplicant(data);
 
         // Initial checkbox state
         if (data) {
           const initialCheckedState = {};
-
           DOCUMENT_REQUIREMENTS.forEach((document) => {
             initialCheckedState[document.field] = Boolean(data[document.field]);
           });
-
           setCheckedDocs(initialCheckedState);
         }
       } catch (err) {
         console.error("Error fetching applicant details:", err);
-
         setError("Failed to load applicant details. Please try again.");
       } finally {
         setLoading(false);
       }
     };
-
     if (id) {
       fetchApplicantDetails();
     }
@@ -315,7 +285,6 @@ export default function ApplicantDetails() {
   // ============================================================
   // DOCUMENTS
   // ============================================================
-
   const documents = DOCUMENT_REQUIREMENTS.map((document) => ({
     ...document,
     files: getDocumentFiles(applicant, document.field),
@@ -324,7 +293,6 @@ export default function ApplicantDetails() {
   // ============================================================
   // CHECKBOX CHANGE
   // ============================================================
-
   const handleCheckboxChange = (fullKey) => {
     setCheckedDocs((prev) => ({
       ...prev,
@@ -335,7 +303,6 @@ export default function ApplicantDetails() {
   // ============================================================
   // DOCUMENT COUNTS
   // ============================================================
-
   const totalDocs = documents.length;
 
   const checkedDocsCount = Object.values(checkedDocs).filter(Boolean).length;
@@ -345,7 +312,6 @@ export default function ApplicantDetails() {
   // ============================================================
   // APPLICATION STATUS
   // ============================================================
-
   const rawStatus = applicant?.application_status || "";
 
   const normalizedStatus = rawStatus.toLowerCase().trim();
@@ -364,10 +330,8 @@ export default function ApplicantDetails() {
   // ============================================================
   // CONFIRM APPLICATION
   // ============================================================
-
   const handleConfirmApplication = async () => {
     setShowConfirmModal(false);
-
     try {
       setUpdating(true);
 
@@ -381,12 +345,10 @@ export default function ApplicantDetails() {
 
       const payload = {
         application_status: targetStatus,
-
         hr_remarks_notes: applicant.hr_remarks_notes
           ? `${applicant.hr_remarks_notes}\n[${remarksText}]`
           : remarksText,
       };
-
       await updateApplicationStatus(applicantId, payload);
 
       // Update local state
@@ -397,7 +359,6 @@ export default function ApplicantDetails() {
       }));
     } catch (err) {
       console.error("Error updating application status:", err);
-
       setModalError("Failed to update application status. Please try again.");
     } finally {
       setUpdating(false);
@@ -407,13 +368,11 @@ export default function ApplicantDetails() {
   // ============================================================
   // LOADING SCREEN
   // ============================================================
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1E3E74] mx-auto mb-4"></div>
-
           <p className="text-slate-600 font-medium">
             Loading applicant profile...
           </p>
@@ -425,21 +384,17 @@ export default function ApplicantDetails() {
   // ============================================================
   // ERROR SCREEN
   // ============================================================
-
   if (error || !applicant) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
         <div className="bg-white rounded-3xl p-8 shadow-md text-center max-w-md w-full">
           <AlertCircle className="text-red-500 w-12 h-12 mx-auto mb-3" />
-
           <h2 className="text-xl font-bold text-slate-800 mb-2">
             Profile Not Found
           </h2>
-
           <p className="text-slate-500 mb-6">
             {error || "Could not retrieve the requested applicant record."}
           </p>
-
           <button
             onClick={() => navigate(-1)}
             className="rounded-xl bg-[#1E3E74] px-6 py-2.5 font-semibold text-white hover:bg-[#17325e] transition-colors"
@@ -454,13 +409,11 @@ export default function ApplicantDetails() {
   // ============================================================
   // MAIN UI
   // ============================================================
-
   return (
     <div className="min-h-screen p-6 relative">
       {/* ======================================================
           TOP NAVIGATION
           ====================================================== */}
-
       <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <button
           onClick={() => navigate(-1)}
@@ -469,7 +422,6 @@ export default function ApplicantDetails() {
           <ArrowLeft size={18} />
           Back to Applications
         </button>
-
         <div className="flex items-center gap-3">
           {/* STATUS: only shown when NOT under_review */}
           {!isUnderReview && (
@@ -481,7 +433,6 @@ export default function ApplicantDetails() {
               {currentStatus || "N/A"}
             </span>
           )}
-
           {/* ACTION BUTTONS: only shown when under_review.
               HR can edit the applicant's details, but NOT the uploaded
               documents (the edit form treats documents as read-only). */}
@@ -500,33 +451,18 @@ export default function ApplicantDetails() {
               ) : (
                 <AlertCircle size={16} />
               )}
-
               {updating
                 ? "Processing..."
                 : `Mark as ${isAllChecked ? "Complete" : "Incomplete"}`}
             </button>
           )}
-
-          {isUnderReview && (
-            <button
-              type="button"
-              onClick={() => setShowEditModal(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#1E3E74] px-5 py-2 text-sm font-semibold text-white shadow transition-colors hover:bg-[#17325e]"
-            >
-              <Pencil size={16} />
-              Edit Applicant
-            </button>
-          )}
         </div>
       </div>
-
       {/* ======================================================
           APPLICANT HEADER
           ====================================================== */}
-
       <div className="relative mb-8 flex min-h-[88px] flex-col items-start justify-between gap-6 overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm md:flex-row md:items-center">
         <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1E3E74]" />
-
         {/* APPLICANT NAME */}
         <div className="flex items-center gap-5">
           <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-blue-50 text-[#1E3E74] font-bold text-2xl shadow-inner">
@@ -536,13 +472,11 @@ export default function ApplicantDetails() {
               <User size={36} />
             )}
           </div>
-
           <div>
             <h1 className="text-3xl font-bold text-[#1E3E74]">
               {applicant.last_name}, {applicant.first_name}{" "}
               {applicant.middle_name || ""} {applicant.suffix || ""}
             </h1>
-
             <p className="text-slate-600 font-medium text-lg mt-0.5">
               Applying for:{" "}
               <span className="text-[#1E3E74] font-semibold">
@@ -550,7 +484,6 @@ export default function ApplicantDetails() {
               </span>{" "}
               ({applicant.office_unit || "N/A"})
             </p>
-
             <div className="flex flex-wrap gap-4 mt-3 text-sm text-slate-500">
               {applicant.contact_number && (
                 <span className="flex items-center gap-1.5">
@@ -558,14 +491,12 @@ export default function ApplicantDetails() {
                   {applicant.contact_number}
                 </span>
               )}
-
               {applicant.email_address && (
                 <span className="flex items-center gap-1.5">
                   <Mail size={15} />
                   {applicant.email_address}
                 </span>
               )}
-
               {applicant.residential_address && (
                 <span className="flex items-center gap-1.5">
                   <MapPin size={15} />
@@ -575,36 +506,29 @@ export default function ApplicantDetails() {
             </div>
           </div>
         </div>
-
         {/* APPLICATION DETAILS */}
         <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 min-w-[220px]">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
             Application Details
           </p>
-
           <p className="text-sm font-medium text-slate-700">
             <strong>Vacancy ID:</strong> {applicant.vacancy_id || "N/A"}
           </p>
-
           <p className="text-sm font-medium text-slate-700">
             <strong>Date Received:</strong> {applicant.date_received || "N/A"}
           </p>
-
           <p className="text-sm font-medium text-slate-700">
             <strong>Submission:</strong> {applicant.submission_type || "N/A"}
           </p>
         </div>
       </div>
-
       {/* ======================================================
           MAIN GRID
           ====================================================== */}
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* ====================================================
             LEFT COLUMN
             ==================================================== */}
-
         <div className="lg:col-span-2 space-y-8">
           {/* EDUCATION */}
           <div className="rounded-3xl bg-white shadow p-6">
@@ -612,7 +536,6 @@ export default function ApplicantDetails() {
               <GraduationCap size={22} />
               Education Background
             </h2>
-
             {applicant.education_list && applicant.education_list.length > 0 ? (
               <div className="space-y-3">
                 {applicant.education_list.map((edu, idx) => (
@@ -627,17 +550,14 @@ export default function ApplicantDetails() {
                             edu.education_level ||
                             "Education"}
                         </h3>
-
                         <p className="text-slate-600 text-sm">
                           {edu.school_name || "N/A"}
                         </p>
                       </div>
-
                       <span className="text-xs px-3 py-1 bg-blue-100 text-[#1E3E74] rounded-full font-semibold">
                         {edu.education_level || "N/A"}
                       </span>
                     </div>
-
                     {edu.honors_awards && (
                       <p className="text-xs text-emerald-600 mt-2 font-medium">
                         Honors/Awards: {edu.honors_awards}
@@ -652,14 +572,12 @@ export default function ApplicantDetails() {
               </p>
             )}
           </div>
-
           {/* WORK EXPERIENCE */}
           <div className="rounded-3xl bg-white shadow p-6">
             <h2 className="text-xl font-bold text-[#1E3E74] flex items-center gap-2 mb-4">
               <Briefcase size={22} />
               Work Experience
             </h2>
-
             {applicant.work_experience_list &&
             applicant.work_experience_list.length > 0 ? (
               <div className="space-y-3">
@@ -673,16 +591,13 @@ export default function ApplicantDetails() {
                         <h3 className="font-bold text-slate-800">
                           {work.position_title || "Position N/A"}
                         </h3>
-
                         <p className="text-slate-600 text-sm">
                           {work.company_office || "Company/Office N/A"}
                         </p>
-
                         <p className="text-slate-500 text-xs mt-1">
                           {work.appointment_status || "Status N/A"}
                         </p>
                       </div>
-
                       <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
                         <Calendar size={13} />
                         {work.experience_date_from || work.date_from || "N/A"}
@@ -690,10 +605,8 @@ export default function ApplicantDetails() {
                         {work.experience_date_to || work.date_to || "Present"}
                       </span>
                     </div>
-
                     <div className="flex gap-4 mt-2 text-xs text-slate-500">
                       <span>Salary: ₱{work.monthly_salary || "0.00"}</span>
-
                       <span>
                         Govt Service: {work.is_govt_service ? "Yes" : "No"}
                       </span>
@@ -707,14 +620,12 @@ export default function ApplicantDetails() {
               </p>
             )}
           </div>
-
           {/* TRAININGS */}
           <div className="rounded-3xl bg-white shadow p-6">
             <h2 className="text-xl font-bold text-[#1E3E74] flex items-center gap-2 mb-4">
               <Award size={22} />
               Relevant Trainings & Seminars
             </h2>
-
             {applicant.trainings_list && applicant.trainings_list.length > 0 ? (
               <div className="space-y-3">
                 {applicant.trainings_list.map((train, idx) => (
@@ -725,7 +636,6 @@ export default function ApplicantDetails() {
                     <h3 className="font-bold text-slate-800">
                       {train.training_title || "Training"}
                     </h3>
-
                     <p className="text-slate-600 text-sm">
                       Conducted by: {train.conducted_by || "N/A"} (
                       {train.hours_attended || 0} hours)
@@ -740,18 +650,15 @@ export default function ApplicantDetails() {
             )}
           </div>
         </div>
-
         {/* ====================================================
             RIGHT COLUMN
             ==================================================== */}
-
         <div className="space-y-8">
           {/* ELIGIBILITY */}
           <div className="rounded-3xl bg-white shadow p-6">
             <h2 className="text-xl font-bold text-[#1E3E74] mb-4">
               Civil Service Eligibility
             </h2>
-
             {applicant.eligibility_list &&
             applicant.eligibility_list.length > 0 ? (
               <div className="space-y-3">
@@ -763,13 +670,11 @@ export default function ApplicantDetails() {
                     <h3 className="font-bold text-slate-800">
                       {elig.eligibility_type || "Eligibility"}
                     </h3>
-
                     <p className="text-xs text-slate-600 mt-1">
                       Rating: {elig.rating || "N/A"}
                       {" | "}
                       License: {elig.license_number || "N/A"}
                     </p>
-
                     <p className="text-xs text-slate-500 mt-0.5">
                       Exam Date: {elig.date_of_exam || "N/A"}
                     </p>
@@ -782,7 +687,6 @@ export default function ApplicantDetails() {
               </p>
             )}
           </div>
-
           {/* DOCUMENT VERIFICATION */}
           <div className="rounded-3xl bg-white shadow p-6">
             {/* HEADER */}
@@ -791,7 +695,6 @@ export default function ApplicantDetails() {
                 <FileText size={22} />
                 Document Verification
               </h2>
-
               <span
                 className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${
                   isAllChecked
@@ -802,13 +705,11 @@ export default function ApplicantDetails() {
                 {checkedDocsCount} / {totalDocs} Checked
               </span>
             </div>
-
             {/* DOCUMENT LIST */}
             {documents.length > 0 ? (
               <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1">
                 {documents.map((doc, idx) => {
                   const isChecked = !!checkedDocs[doc.field];
-
                   return (
                     <div
                       key={doc.field}
@@ -828,7 +729,6 @@ export default function ApplicantDetails() {
                             onChange={() => handleCheckboxChange(doc.field)}
                             className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#1E3E74] focus:ring-[#1E3E74] cursor-pointer disabled:cursor-not-allowed"
                           />
-
                           <div className="min-w-0">
                             <span
                               className={`text-sm font-medium ${
@@ -840,10 +740,8 @@ export default function ApplicantDetails() {
                               <span className="text-slate-400 mr-1">
                                 {String.fromCharCode(97 + idx)}.
                               </span>
-
                               {doc.label}
                             </span>
-
                             {/* FILE COUNT */}
                             {doc.files.length > 0 && (
                               <p className="text-xs text-green-600 mt-1">
@@ -854,7 +752,6 @@ export default function ApplicantDetails() {
                             )}
                           </div>
                         </label>
-
                         {/* FILE BUTTONS: open the in-app preview, not a new tab */}
                         <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
                           {doc.files.length > 0 ? (
@@ -875,7 +772,6 @@ export default function ApplicantDetails() {
                                 title={file.name}
                               >
                                 <Eye size={13} />
-
                                 {doc.files.length > 1
                                   ? `View ${fileIndex + 1}`
                                   : "View"}
@@ -902,14 +798,12 @@ export default function ApplicantDetails() {
               </p>
             )}
           </div>
-
           {/* HR REMARKS */}
           {applicant.hr_remarks_notes && (
             <div className="rounded-3xl bg-blue-50/50 border border-blue-100 shadow p-6">
               <h2 className="text-lg font-bold text-[#1E3E74] mb-2">
                 HR Remarks & Notes
               </h2>
-
               <p className="text-slate-600 text-sm whitespace-pre-wrap">
                 {applicant.hr_remarks_notes}
               </p>
@@ -917,11 +811,9 @@ export default function ApplicantDetails() {
           )}
         </div>
       </div>
-
       {/* ======================================================
           CONFIRMATION MODAL
           ====================================================== */}
-
       {canUpdateStatus && (
         <ActionModal
           isOpen={showConfirmModal}
@@ -938,11 +830,9 @@ export default function ApplicantDetails() {
           onConfirm={handleConfirmApplication}
         />
       )}
-
       {/* ======================================================
           ERROR MODAL
           ====================================================== */}
-
       <ActionModal
         isOpen={Boolean(modalError)}
         type="error"
@@ -950,36 +840,9 @@ export default function ApplicantDetails() {
         message={modalError}
         onClose={() => setModalError(null)}
       />
-
-      {/* ======================================================
-          EDIT APPLICANT MODAL (details only, documents are read-only)
-          ====================================================== */}
-
-      <ApplicantEditModal
-        isOpen={showEditModal}
-        applicant={applicant}
-        applicantId={
-          applicant?.job_applications_id || applicant?.applicant_id || id
-        }
-        onClose={() => setShowEditModal(false)}
-        onUpdated={async () => {
-          try {
-            const response = await getApplicationById(id);
-            const data = response?.data ?? response;
-            setApplicant(data);
-          } catch (err) {
-            console.error("Failed to refresh applicant after update:", err);
-            setError(
-              "Applicant was updated, but refreshing the details failed. Please reload the page."
-            );
-          }
-        }}
-      />
-
       {/* ======================================================
           IN-APP DOCUMENT PREVIEW
           ====================================================== */}
-
       <DocumentPreviewModal
         file={previewFile}
         onClose={() => setPreviewFile(null)}

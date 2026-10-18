@@ -207,3 +207,13 @@ export const updateVacancyStatus = async (vacancy_id, statusOrData, memo = "") =
         throw error;
     }
 };
+
+
+
+export const restoreVacancy = async (id) => {
+    const response = await axios.patch(
+        `${import.meta.env.VITE_VACANCIES_RESTORE}/${encodeURIComponent(id)}/restore`
+    );
+
+    return response.data;
+};

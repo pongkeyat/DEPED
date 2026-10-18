@@ -2,7 +2,11 @@
  * 7. WORK_EXPERIENCE SERVICE
  */
 
-export const insertApplicantsWorkExperience = async (client, applicantId, data) => {
+export const insertApplicantsWorkExperience = async (
+    client,
+    applicantId,
+    data
+) => {
     const experienceData = data?.work_experience || data;
 
     const {
@@ -12,17 +16,45 @@ export const insertApplicantsWorkExperience = async (client, applicantId, data) 
         date_to,
         monthly_salary,
         appointment_status,
-        is_govt_service
+        is_govt_service,
+        is_internal,
     } = experienceData;
 
-    const cleanPositionTitle = position_title && position_title.trim() !== "" ? position_title.trim().toUpperCase() : null;
-    const cleanCompanyOffice = company_office && company_office.trim() !== "" ? company_office.trim().toUpperCase() : null;
-    const cleanAppointmentStatus = appointment_status && appointment_status.trim() !== "" ? appointment_status.trim().toUpperCase() : null;
+    const cleanPositionTitle =
+        position_title?.trim()
+            ? position_title.trim().toUpperCase()
+            : null;
+
+    const cleanCompanyOffice =
+        company_office?.trim()
+            ? company_office.trim().toUpperCase()
+            : null;
+
+    const cleanAppointmentStatus =
+        appointment_status?.trim()
+            ? appointment_status.trim().toUpperCase()
+            : null;
 
     const cleanDateFrom = date_from || null;
-    const cleanDateTo = (date_to && date_to.toString().trim().toUpperCase() !== "PRESENT" && date_to.toString().trim() !== "") ? date_to : null;
+
+    const cleanDateTo =
+        date_to &&
+        date_to.toString().trim().toUpperCase() !== "PRESENT" &&
+        date_to.toString().trim() !== ""
+            ? date_to
+            : null;
+
     const cleanMonthlySalary = monthly_salary || null;
-    const cleanIsGovtService = typeof is_govt_service === 'boolean' ? is_govt_service : null;
+
+    const cleanIsGovtService =
+        typeof is_govt_service === "boolean"
+            ? is_govt_service
+            : null;
+
+    const cleanIsInternal =
+        typeof is_internal === "boolean"
+            ? is_internal
+            : false;
 
     const result = await client.query(
         `INSERT INTO work_experience (
@@ -33,8 +65,9 @@ export const insertApplicantsWorkExperience = async (client, applicantId, data) 
             date_to,
             monthly_salary,
             appointment_status,
-            is_govt_service
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            is_govt_service,
+            is_internal
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *`,
         [
             applicantId,
@@ -44,7 +77,8 @@ export const insertApplicantsWorkExperience = async (client, applicantId, data) 
             cleanDateTo,
             cleanMonthlySalary,
             cleanAppointmentStatus,
-            cleanIsGovtService
+            cleanIsGovtService,
+            cleanIsInternal,
         ]
     );
 

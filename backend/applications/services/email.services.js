@@ -119,3 +119,143 @@ export const sendApplicationReceivedEmail = async (
         mailOptions
     );
 };
+
+
+
+export const sendApplicationReviewEmail = async ({
+    hrEmails,
+    applicantName,
+    applicationCode,
+    positionTitle,
+    category,
+}) => {
+    try {
+        const recipients = Array.isArray(hrEmails)
+            ? hrEmails.filter(Boolean)
+            : [hrEmails].filter(Boolean);
+
+        if (recipients.length === 0) {
+            console.warn(
+                "Application review email skipped: no HR email provided."
+            );
+            return null;
+        }
+
+        const escapeHtml = (value) =>
+            String(value ?? "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+
+        const frontendUrl = (
+            process.env.FRONTEND_URL || "http://localhost:5173"
+        ).replace(/\/+$/, "");
+
+        const mailOptions = {
+            from: `"DepEd Recruitment Management System" <${process.env.EMAIL}>`,
+            to: recipients,
+            subject: `Application Review Required - ${applicantName}`,
+            html: `
+                <div style="
+                    font-family: Arial, sans-serif;
+                    max-width: 600px;
+                    margin: auto;
+                    padding: 24px;
+                    color: #333;
+                    border: 1px solid #ddd;
+                    border-radius: 8px;
+                ">
+                    <h2 style="color: #174a36;">
+                        Application Review Required
+                    </h2>
+
+                    <p>Dear Human Resource Personnel,</p>
+
+                    <p>
+                        A new application has been submitted and requires
+                        your review.
+                    </p>
+
+                    <table style="
+                        width: 100%;
+                        border-collapse: collapse;
+                    ">
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd;">
+                                <strong>Applicant Name</strong>
+                            </td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">
+                                ${escapeHtml(applicantName)}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd;">
+                                <strong>Application Code</strong>
+                            </td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">
+                                ${escapeHtml(applicationCode || "Pending")}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd;">
+                                <strong>Position</strong>
+                            </td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">
+                                ${escapeHtml(positionTitle)}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd;">
+                                <strong>Category</strong>
+                            </td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">
+                                ${escapeHtml(category)}
+                            </td>
+                        </tr>
+                    </table>
+
+                    <p style="margin-top: 24px;">
+                        Please sign in to the Recruitment Management System
+                        to review the applicant's information and documents.
+                    </p>
+
+                    <p style="text-align: center; margin: 28px 0;">
+                        <a href="${escapeHtml(frontendUrl)}"
+                           style="
+                               background: #174a36;
+                               color: white;
+                               padding: 12px 22px;
+                               text-decoration: none;
+                               border-radius: 5px;
+                               display: inline-block;
+                           ">
+                            Open Recruitment System
+                        </a>
+                    </p>
+
+                    <p>
+                        Thank you,<br>
+                        <strong>DepEd Recruitment Management System</strong>
+                    </p>
+                </div>
+            `,
+        };
+
+        const result = await transporter.sendMail(mailOptions);
+
+        console.log(
+            `Application review notification sent for ${applicantName}.`
+        );
+
+        return result;
+    } catch (error) {
+        console.error(
+            "Error sending application review email:",
+            error
+        );
+
+        throw error;
+    }
+};

@@ -82,6 +82,8 @@ const createInitialFormData = (selectedJob) => ({
         school_name: "",
         degree_course: "",
         honors_awards: "",
+        units: "",
+        graduation_status: "",
       },
     ],
   },
@@ -91,7 +93,18 @@ const createInitialFormData = (selectedJob) => ({
   },
 
   eligibilityData: [],
-  workExperienceData: [],
+  workExperienceData: [
+    {
+      position_title: "",
+      company_office: "",
+      date_from: "",
+      date_to: "",
+      monthly_salary: "",
+      appointment_status: "",
+      is_govt_service: null,
+      is_internal: null,
+    },
+  ],
 
   documentData: {
     has_application_letter: false,
@@ -142,7 +155,8 @@ const normalizeWorkExperience = (data) => {
         e.monthly_salary,
         e.appointment_status,
       ].some((v) => String(v ?? "").trim() !== "") ||
-        typeof e.is_govt_service === "boolean")
+        typeof e.is_govt_service === "boolean" ||
+        typeof e.is_internal === "boolean")
   );
 };
 
@@ -174,6 +188,13 @@ export default function LandingPageApplication({
 }) {
   const location = useLocation();
   const selectedJob = location.state?.job ?? selectedJobProp;
+  const selectedJobCategory = String(
+    selectedJob?.category ??
+      selectedJob?.position_category ??
+      selectedJob?.vacancy_category ??
+      selectedJob?.position?.category ??
+      ""
+  ).trim();
   const formRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
@@ -713,6 +734,7 @@ export default function LandingPageApplication({
           <WorkExperienceForm
             data={formData.workExperienceData}
             onChange={handleWorkExperienceChange}
+            category={selectedJobCategory}
           />
         );
 

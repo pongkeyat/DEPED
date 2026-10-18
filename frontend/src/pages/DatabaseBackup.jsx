@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
     createDatabaseBackup,
+    downloadDatabaseBackup,
     getDatabaseBackups,
-    restoreDatabaseBackup
+    restoreDatabaseBackup,
+    restoreUploadedDatabaseBackup,
 } from "../api/databaseApi";
 
 import BackupHeader from "../components/databaseBackup/BackupHeader";
@@ -11,6 +13,7 @@ import RestoreConfirmModal from "../components/databaseBackup/RestoreConfirmModa
 
 const DatabaseBackup = () => {
     const [backups, setBackups] = useState([]);
+    const restoreFileInput = useRef(null);
 
     const [loading, setLoading] = useState(true);
     const [creating, setCreating] = useState(false);
@@ -27,17 +30,20 @@ const DatabaseBackup = () => {
     // LOAD BACKUPS
     // ======================================================
 
-    const loadBackups = async () => {
+    const loadBackups = async ({ clearMessage = true } = {}) => {
         try {
             setLoading(true);
-            setMessage({
-                type: "",
-                text: ""
-            });
+            if (clearMessage) {
+                setMessage({
+                    type: "",
+                    text: ""
+                });
+            }
 
             const result = await getDatabaseBackups();
 
             setBackups(result.backups || []);
+            return true;
         } catch (error) {
             setMessage({
                 type: "error",
@@ -45,6 +51,7 @@ const DatabaseBackup = () => {
                     error.response?.data?.message ||
                     "Failed to load database backups."
             });
+            return false;
         } finally {
             setLoading(false);
         }
@@ -55,7 +62,33 @@ const DatabaseBackup = () => {
     // ======================================================
 
     useEffect(() => {
-        loadBackups();
+        let isCurrent = true;
+
+        getDatabaseBackups()
+            .then((result) => {
+                if (isCurrent) {
+                    setBackups(result.backups || []);
+                }
+            })
+            .catch((error) => {
+                if (isCurrent) {
+                    setMessage({
+                        type: "error",
+                        text:
+                            error.response?.data?.message ||
+                            "Failed to load database backups."
+                    });
+                }
+            })
+            .finally(() => {
+                if (isCurrent) {
+                    setLoading(false);
+                }
+            });
+
+        return () => {
+            isCurrent = false;
+        };
     }, []);
 
     // ======================================================
@@ -63,30 +96,71 @@ const DatabaseBackup = () => {
     // ======================================================
 
     const handleCreateBackup = async () => {
+        let createdFilename = "";
+
         try {
             setCreating(true);
-
             setMessage({
                 type: "",
                 text: ""
             });
 
+            let saveFileHandle = null;
+            if (typeof window.showSaveFilePicker === "function") {
+                saveFileHandle = await window.showSaveFilePicker({
+                    suggestedName: "deped_database_backup.dump",
+                    types: [
+                        {
+                            description: "PostgreSQL database backup",
+                            accept: {
+                                "application/octet-stream": [".dump"],
+                            },
+                        },
+                    ],
+                });
+            }
+
             const result = await createDatabaseBackup();
+            createdFilename = result.backup?.filename;
+            if (!createdFilename) {
+                throw new Error(
+                    "The backup was created, but the server did not return its filename."
+                );
+            }
 
-            setMessage({
-                type: "success",
-                text:
-                    result.message ||
-                    "Database backup created successfully."
-            });
+            const backupBlob = await downloadDatabaseBackup(createdFilename);
+            if (saveFileHandle) {
+                const writable = await saveFileHandle.createWritable();
+                await writable.write(backupBlob);
+                await writable.close();
+            } else {
+                const objectUrl = URL.createObjectURL(backupBlob);
+                const downloadLink = document.createElement("a");
+                downloadLink.href = objectUrl;
+                downloadLink.download = createdFilename;
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                downloadLink.remove();
+                window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+            }
 
-            await loadBackups();
+            const refreshed = await loadBackups({ clearMessage: false });
+            if (refreshed) {
+                setMessage({
+                    type: "success",
+                    text: `${result.message || "Database backup created successfully."} The backup was saved to your selected location.`
+                });
+            }
         } catch (error) {
+            if (error.name === "AbortError") return;
+
             setMessage({
-                type: "error",
-                text:
-                    error.response?.data?.message ||
-                    "Failed to create database backup."
+                type: createdFilename ? "warning" : "error",
+                text: createdFilename
+                    ? `Backup ${createdFilename} was created on the server, but could not be saved to your device. ${error.response?.data?.message || error.message}`
+                    : error.response?.data?.message ||
+                        error.message ||
+                        "Failed to create database backup."
             });
         } finally {
             setCreating(false);
@@ -121,20 +195,18 @@ const DatabaseBackup = () => {
                 text: ""
             });
 
-            const result = await restoreDatabaseBackup(
-                selectedBackup.filename
-            );
-
-            setMessage({
-                type: "success",
-                text:
-                    result.message ||
-                    "Database restored successfully."
-            });
+            const result = selectedBackup.source === "upload"
+                ? await restoreUploadedDatabaseBackup(selectedBackup.file)
+                : await restoreDatabaseBackup(selectedBackup.filename);
 
             setSelectedBackup(null);
-
-            await loadBackups();
+            const refreshed = await loadBackups({ clearMessage: false });
+            setMessage({
+                type: refreshed ? "success" : "warning",
+                text: refreshed
+                    ? result.message || "Database restored successfully."
+                    : `${result.message || "Database restored successfully."} The backup list could not be refreshed.`
+            });
         } catch (error) {
             setMessage({
                 type: "error",
@@ -144,6 +216,81 @@ const DatabaseBackup = () => {
             });
         } finally {
             setRestoring(false);
+        }
+    };
+
+    // ======================================================
+    // RESTORE FROM FILE EXPLORER
+    // ======================================================
+
+    const handleRestoreFileSelected = (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+
+        if (!file) return;
+
+        if (!file.name.toLowerCase().endsWith(".dump")) {
+            setMessage({
+                type: "error",
+                text: "Select a PostgreSQL .dump backup file."
+            });
+            return;
+        }
+
+        setMessage({
+            type: "",
+            text: ""
+        });
+        setSelectedBackup({
+            source: "upload",
+            filename: file.name,
+            size: file.size,
+            file
+        });
+    };
+
+    const handleDownloadBackup = async (backup) => {
+        try {
+            const saveFileHandle =
+                typeof window.showSaveFilePicker === "function"
+                    ? await window.showSaveFilePicker({
+                        suggestedName: backup.filename,
+                        types: [
+                            {
+                                description: "PostgreSQL database backup",
+                                accept: {
+                                    "application/octet-stream": [".dump"],
+                                },
+                            },
+                        ],
+                    })
+                    : null;
+
+            const backupBlob = await downloadDatabaseBackup(backup.filename);
+            if (saveFileHandle) {
+                const writable = await saveFileHandle.createWritable();
+                await writable.write(backupBlob);
+                await writable.close();
+            } else {
+                const objectUrl = URL.createObjectURL(backupBlob);
+                const downloadLink = document.createElement("a");
+                downloadLink.href = objectUrl;
+                downloadLink.download = backup.filename;
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                downloadLink.remove();
+                window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+            }
+        } catch (error) {
+            if (error.name === "AbortError") return;
+
+            setMessage({
+                type: "error",
+                text:
+                    error.response?.data?.message ||
+                    error.message ||
+                    "Failed to download database backup."
+            });
         }
     };
 
@@ -182,22 +329,32 @@ const DatabaseBackup = () => {
 
     return (
         <div className="min-h-screen p-6">
-
-            <div className="mx-auto max-w-7xl">
+            <div className="mx-auto max-w-7xl space-y-6">
 
                 {/* HEADER */}
                 <BackupHeader
                     onCreateBackup={handleCreateBackup}
+                    onBrowseRestore={() => restoreFileInput.current?.click()}
                     creating={creating}
+                    restoring={restoring}
+                />
+                <input
+                    ref={restoreFileInput}
+                    type="file"
+                    accept=".dump,application/octet-stream"
+                    className="hidden"
+                    onChange={handleRestoreFileSelected}
                 />
 
                 {/* MESSAGE */}
                 {message.text && (
                     <div
-                        className={`mb-5 rounded-lg border px-4 py-3 text-sm ${
+                        className={`rounded-xl border px-4 py-3 text-sm ${
                             message.type === "success"
                                 ? "border-green-200 bg-green-50 text-green-700"
-                                : "border-red-200 bg-red-50 text-red-700"
+                                : message.type === "warning"
+                                    ? "border-amber-200 bg-amber-50 text-amber-800"
+                                    : "border-red-200 bg-red-50 text-red-700"
                         }`}
                     >
                         {message.text}
@@ -209,6 +366,7 @@ const DatabaseBackup = () => {
                     backups={backups}
                     loading={loading}
                     onRestore={handleRestoreClick}
+                    onDownload={handleDownloadBackup}
                     formatFileSize={formatFileSize}
                     formatDate={formatDate}
                 />

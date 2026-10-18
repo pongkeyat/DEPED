@@ -10,10 +10,12 @@ import {
     Pencil,
     X,
     Eye,
+    RotateCcw,
 } from "lucide-react";
 import {
     getVacancies,
     archiveVacancy,
+    restoreVacancy,
     updateVacancyStatus,
 } from "../../api/VacancyApi";
 import EditVacancyModal from "./EditVacancyModal";
@@ -25,6 +27,12 @@ export default function GetVacancies({ onPostVacancy }) {
     const [showArchiveModal, setShowArchiveModal] = useState(false);
     const [archiving, setArchiving] = useState(false);
     const [archiveError, setArchiveError] = useState("");
+
+    // Restore confirmation modal
+    const [selectedRestoreVacancy, setSelectedRestoreVacancy] = useState(null);
+    const [showRestoreModal, setShowRestoreModal] = useState(false);
+    const [restoring, setRestoring] = useState(false);
+    const [restoreError, setRestoreError] = useState("");
 
     // Termination memo view modal
     const [selectedMemoVacancy, setSelectedMemoVacancy] = useState(null);
@@ -260,6 +268,64 @@ export default function GetVacancies({ onPostVacancy }) {
             setArchiving(false);
         }
     };
+    // =====================================================
+    // RESTORE ARCHIVED VACANCY
+    // =====================================================
+    const handleRestoreClick = (vacancy) => {
+        if (vacancy.is_archived !== true) return;
+
+        setSelectedRestoreVacancy(vacancy);
+        setRestoreError("");
+        setShowRestoreModal(true);
+    };
+
+    const handleCloseRestoreModal = () => {
+        if (restoring) return;
+
+        setShowRestoreModal(false);
+        setSelectedRestoreVacancy(null);
+        setRestoreError("");
+    };
+
+    const handleConfirmRestore = async () => {
+        if (!selectedRestoreVacancy) return;
+
+        const vacancyId =
+            selectedRestoreVacancy.vacancy_id ||
+            selectedRestoreVacancy.id;
+
+        if (!vacancyId) {
+            setRestoreError("Vacancy ID is missing.");
+            return;
+        }
+
+        if (selectedRestoreVacancy.is_archived !== true) {
+            setRestoreError("Only archived vacancies can be restored.");
+            return;
+        }
+
+        try {
+            setRestoring(true);
+            setRestoreError("");
+
+            await restoreVacancy(vacancyId);
+
+            setShowRestoreModal(false);
+            setSelectedRestoreVacancy(null);
+            setCurrentPage(1);
+            setRefreshKey((prev) => prev + 1);
+        } catch (err) {
+            console.error("Restore vacancy error:", err);
+            setRestoreError(
+                err.response?.data?.message ||
+                err.response?.data?.error ||
+                "Failed to restore vacancy. Please try again."
+            );
+        } finally {
+            setRestoring(false);
+        }
+    };
+
     // =====================================================
     // =====================================================
     // TERMINATE VACANCY -> TERMINATED
@@ -558,68 +624,83 @@ export default function GetVacancies({ onPostVacancy }) {
                                                     {item.status || "Open"}
                                                 </span>
                                             </td>
-                                            {/* EDIT AND ARCHIVE ACTIONS */}
+                                            {/* ACTIONS: RESTORE ONLY FOR ARCHIVED VACANCIES */}
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center justify-center gap-2">
-                                                    {item.status === "Open" && (
+                                                    {item.is_archived === true ? (
                                                         <button
                                                             type="button"
-                                                            onClick={() => handleEditClick(item)}
-                                                            className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
-                                                            title="Edit vacancy"
+                                                            onClick={() => handleRestoreClick(item)}
+                                                            className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-semibold text-green-700 transition hover:bg-green-100"
+                                                            title="Restore archived vacancy"
                                                         >
-                                                            <Pencil size={15} />
-                                                            Extend
+                                                            <RotateCcw size={15} />
+                                                            Restore
                                                         </button>
-                                                    )}
-                                                    {item.status === "Open" && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleTerminateClick(item)}
-                                                            className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100"
-                                                        >
-                                                            <XCircle size={15} />
-                                                            Terminate
-                                                        </button>
-                                                    )}
-                                                    {item.status === "Terminated" && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setSelectedMemoVacancy(item);
-                                                            setShowMemoModal(true);
-                                                        }}
-                                                        className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:bg-gray-100"
-                                                        title="View termination memo"
-                                                    >
-                                                        <Eye size={15} />
-                                                        View Memo
-                                                    </button>
-                                                )}
+                                                    ) : (
+                                                        <>
+                                                            {item.status === "Open" && (
+                                                                <>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleEditClick(item)}
+                                                                        className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                                                                        title="Edit vacancy"
+                                                                    >
+                                                                        <Pencil size={15} />
+                                                                        Extend
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleTerminateClick(item)}
+                                                                        className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+                                                                    >
+                                                                        <XCircle size={15} />
+                                                                        Terminate
+                                                                    </button>
+                                                                </>
+                                                            )}
 
-                                                {["Evaluation", "Assessment"].includes(item.status) && (
-                                                    <button
-                                                        type="button"
-                                                        disabled
-                                                        className="inline-flex cursor-not-allowed items-center gap-2 whitespace-nowrap rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-400 opacity-70"
-                                                        title="Archive is disabled until the vacancy is Closed"
-                                                    >
-                                                        <Archive size={15} />
-                                                        Archive
-                                                    </button>
-                                                )}
+                                                            {item.status === "Terminated" && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setSelectedMemoVacancy(item);
+                                                                        setShowMemoModal(true);
+                                                                    }}
+                                                                    className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:bg-gray-100"
+                                                                    title="View termination memo"
+                                                                >
+                                                                    <Eye size={15} />
+                                                                    View Memo
+                                                                </button>
+                                                            )}
 
-                                                {item.status === "Closed" && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleArchiveClick(item)}
-                                                        className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100"
-                                                        title="Archive closed vacancy"
-                                                    >
-                                                        <Archive size={15} />
-                                                        Archive
-                                                    </button>
-                                                )}
+                                                            {["Evaluation", "Assessment"].includes(item.status) && (
+                                                                <button
+                                                                    type="button"
+                                                                    disabled
+                                                                    className="inline-flex cursor-not-allowed items-center gap-2 whitespace-nowrap rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-400 opacity-70"
+                                                                    title="Archive is disabled until the vacancy is Closed"
+                                                                >
+                                                                    <Archive size={15} />
+                                                                    Archive
+                                                                </button>
+                                                            )}
+
+                                                            {item.status === "Closed" && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleArchiveClick(item)}
+                                                                    className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100"
+                                                                    title="Archive closed vacancy"
+                                                                >
+                                                                    <Archive size={15} />
+                                                                    Archive
+                                                                </button>
+                                                            )}
+                                                        </>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -803,6 +884,101 @@ export default function GetVacancies({ onPostVacancy }) {
                     </div>
                 </div>
             )}
+            {/* ============================================= */}
+            {/* RESTORE CONFIRMATION MODAL */}
+            {/* ============================================= */}
+            {showRestoreModal && selectedRestoreVacancy && (
+                <div
+                    className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
+                    onClick={handleCloseRestoreModal}
+                >
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="restore-vacancy-title"
+                        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="mb-5 flex items-start justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+                                    <RotateCcw size={24} className="text-green-700" />
+                                </div>
+                                <div>
+                                    <h2 id="restore-vacancy-title" className="text-lg font-bold text-gray-900">
+                                        Restore Vacancy
+                                    </h2>
+                                    <p className="text-sm text-gray-500">
+                                        Confirm before restoring.
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleCloseRestoreModal}
+                                disabled={restoring}
+                                aria-label="Close restore modal"
+                                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 disabled:opacity-50"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <p className="mb-4 text-sm leading-6 text-gray-600">
+                            Are you sure you want to restore this archived vacancy?
+                        </p>
+
+                        <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                                Vacancy ID
+                            </p>
+                            <p className="mb-3 font-mono text-sm font-semibold text-gray-800">
+                                {selectedRestoreVacancy.vacancy_id || selectedRestoreVacancy.id || "N/A"}
+                            </p>
+                            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                                Position
+                            </p>
+                            <p className="font-semibold text-gray-900">
+                                {selectedRestoreVacancy.position_title || selectedRestoreVacancy.plantilla_position || "N/A"}
+                            </p>
+                            <p className="mt-1 text-sm text-gray-500">
+                                {selectedRestoreVacancy.office_unit || "No office specified"}
+                            </p>
+                        </div>
+
+                        <p className="mb-5 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+                            The vacancy will return to the active vacancy listings while keeping its existing status.
+                        </p>
+
+                        {restoreError && (
+                            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                                {restoreError}
+                            </div>
+                        )}
+
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={handleCloseRestoreModal}
+                                disabled={restoring}
+                                className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmRestore}
+                                disabled={restoring}
+                                className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <RotateCcw size={16} />
+                                {restoring ? "Restoring..." : "Confirm Restore"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* ============================================= */}
             {/* TERMINATION MEMO MODAL */}
             {/* ============================================= */}

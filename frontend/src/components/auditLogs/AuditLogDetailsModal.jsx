@@ -4,12 +4,11 @@ import {
     ClipboardList,
     User,
     Clock,
-    Globe,
-    FileText,
     Database,
     ShieldCheck,
     Loader2
 } from "lucide-react";
+import { formatAuditDescription } from "./formatAuditDescription";
 
 const AuditLogDetailsModal = ({
     log,
@@ -17,26 +16,6 @@ const AuditLogDetailsModal = ({
     error,
     onClose
 }) => {
-    const formatDate = (date) => {
-        if (!date) return "—";
-
-        const parsedDate = new Date(date);
-
-        if (Number.isNaN(parsedDate.getTime())) {
-            return "—";
-        }
-
-        return parsedDate.toLocaleString("en-PH", {
-            year: "numeric",
-            month: "long",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: true
-        });
-    };
-
     const detailItem = (label, value) => (
         <div className="space-y-1">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
@@ -135,12 +114,12 @@ const AuditLogDetailsModal = ({
                                 </div>
 
                                 <p className="text-sm leading-6 text-gray-700">
-                                    {log.description || "No description provided."}
+                                    {formatAuditDescription(log)}
                                 </p>
 
                                 <div className="mt-4 flex flex-wrap gap-2">
                                     <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                                        {log.action || "UNKNOWN"}
+                                        {log.display_action || log.action || "UNKNOWN"}
                                     </span>
 
                                     <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700">
@@ -175,7 +154,11 @@ const AuditLogDetailsModal = ({
                                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                                     {detailItem(
                                         "Username",
-                                        log.username
+                                        log.display_username ||
+                                            (log.username &&
+                                            log.username !== "PUBLIC"
+                                                ? log.username
+                                                : "User not captured")
                                     )}
 
                                     {detailItem(
@@ -185,7 +168,9 @@ const AuditLogDetailsModal = ({
 
                                     {detailItem(
                                         "Role",
-                                        log.user_role
+                                        log.display_user_role ||
+                                            log.user_role ||
+                                            (log.user_id ? "Unknown" : "Unknown user")
                                     )}
                                 </div>
                             </section>

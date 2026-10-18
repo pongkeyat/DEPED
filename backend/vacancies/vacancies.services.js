@@ -1,7 +1,10 @@
+
 import pool from "../config/db.js";
 
-// Service 1: Vacancy Logic
-// Service 1: Vacancy Logic
+// ======================================================
+// SERVICE 1: CREATE VACANCY
+// ======================================================
+
 export const createVacancyService = async (client, data) => {
     const {
         vacancy_id,
@@ -11,7 +14,7 @@ export const createVacancyService = async (client, data) => {
         place_of_assignment,
         number_of_vacancies,
         application_posted,
-        application_deadline
+        application_deadline,
     } = data;
 
     // Get position information
@@ -28,10 +31,7 @@ export const createVacancyService = async (client, data) => {
         throw new Error("POSITION_NOT_FOUND");
     }
 
-    const {
-        position_title,
-        salary_grade
-    } = positionQuery.rows[0];
+    const { position_title, salary_grade } = positionQuery.rows[0];
 
     // Insert vacancy
     const vacancyQuery = await client.query(
@@ -50,17 +50,8 @@ export const createVacancyService = async (client, data) => {
             status
         )
         VALUES (
-            $1,
-            $2,
-            $3,
-            $4,
-            $5,
-            $6,
-            $7,
-            $8,
-            $9,
-            $10,
-            'Open'
+            $1, $2, $3, $4, $5, $6,
+            $7, $8, $9, $10, 'Open'
         )
         RETURNING *
         `,
@@ -74,46 +65,97 @@ export const createVacancyService = async (client, data) => {
             place_of_assignment,
             number_of_vacancies,
             application_posted,
-            application_deadline
+            application_deadline,
         ]
     );
 
     return vacancyQuery.rows[0];
 };
 
-// Service 2: Qualifications Logic
-export const createQualificationService = async (client, vacancy_id, data) => {
-    const { education_requirement, training_requirement, experience_requirement, eligibility_requirement } = data;
+// ======================================================
+// SERVICE 2: CREATE VACANCY QUALIFICATIONS
+// ======================================================
+
+export const createQualificationService = async (
+    client,
+    vacancy_id,
+    data
+) => {
+    const {
+        education_requirement,
+        training_requirement,
+        experience_requirement,
+        eligibility_requirement,
+        prescribed_qualifications = null,
+    } = data;
 
     const qualQuery = await client.query(
-        `INSERT INTO vacancy_specific_qualifications (vacancy_id, education_requirement, training_requirement, experience_requirement, eligibility_requirement)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [vacancy_id, education_requirement, training_requirement, experience_requirement, eligibility_requirement]
+        `
+        INSERT INTO vacancy_specific_qualifications (
+            vacancy_id,
+            education_requirement,
+            training_requirement,
+            experience_requirement,
+            eligibility_requirement,
+            prescribed_qualifications
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *
+        `,
+        [
+            vacancy_id,
+            education_requirement,
+            training_requirement,
+            experience_requirement,
+            eligibility_requirement,
+            prescribed_qualifications,
+        ]
     );
 
     return qualQuery.rows[0];
 };
 
-// Service 3: Remarks Logic
-export const createRemarkService = async (client, vacancy_id, remark_text) => {
+// ======================================================
+// SERVICE 3: CREATE VACANCY REMARK
+// ======================================================
+
+export const createRemarkService = async (
+    client,
+    vacancy_id,
+    remark_text
+) => {
     if (!remark_text) return null;
 
     const remarkQuery = await client.query(
-        `INSERT INTO vacancies_remarks (vacancy_id, remark_text)
-         VALUES ($1, $2) RETURNING *`,
+        `
+        INSERT INTO vacancies_remarks (
+            vacancy_id,
+            remark_text
+        )
+        VALUES ($1, $2)
+        RETURNING *
+        `,
         [vacancy_id, remark_text]
     );
 
     return remarkQuery.rows[0];
 };
 
-// Service 4: Get All Vacancies with Search, Status Filter, and Pagination
-export const getAllVacanciesService = async ({ search = '', status = '', page = 1, limit = 10 }) => {
+// ======================================================
+// SERVICE 4: GET ALL VACANCIES
+// Search, status filter, pagination
+// ======================================================
+
+export const getAllVacanciesService = async ({
+    search = "",
+    status = "",
+    page = 1,
+    limit = 10,
+}) => {
     const offset = (page - 1) * limit;
-    
-    // Automatically evaluates status as 'Closed' if current date has passed application_deadline
+
     const query = `
-        SELECT 
+        SELECT
             vacancies.vacancy_id,
             vacancies.position_id,
             positions.position_title,
@@ -124,58 +166,115 @@ export const getAllVacanciesService = async ({ search = '', status = '', page = 
             vacancies.number_of_vacancies,
             vacancies.application_posted,
             vacancies.application_deadline,
-            CASE 
-                WHEN vacancies.application_deadline < CURRENT_DATE THEN 'Closed'
-                ELSE vacancies.status 
+            CASE
+                WHEN vacancies.application_deadline < CURRENT_DATE
+                    THEN 'Closed'
+                ELSE vacancies.status
             END AS status,
-            CASE 
-                WHEN vacancy_specific_qualifications.qualification_id IS NOT NULL THEN json_build_object(
-                    'qualification_id', vacancy_specific_qualifications.qualification_id,
-                    'education_requirement', vacancy_specific_qualifications.education_requirement,
-                    'training_requirement', vacancy_specific_qualifications.training_requirement,
-                    'experience_requirement', vacancy_specific_qualifications.experience_requirement,
-                    'eligibility_requirement', vacancy_specific_qualifications.eligibility_requirement
+
+            CASE
+                WHEN vacancy_specific_qualifications.qualification_id
+                    IS NOT NULL
+                THEN json_build_object(
+                    'qualification_id',
+                    vacancy_specific_qualifications.qualification_id,
+                    'education_requirement',
+                    vacancy_specific_qualifications.education_requirement,
+                    'training_requirement',
+                    vacancy_specific_qualifications.training_requirement,
+                    'experience_requirement',
+                    vacancy_specific_qualifications.experience_requirement,
+                    'eligibility_requirement',
+                    vacancy_specific_qualifications.eligibility_requirement,
+                    'prescribed_qualifications',
+                    vacancy_specific_qualifications.prescribed_qualifications
                 )
-                ELSE NULL 
+                ELSE NULL
             END AS qualifications,
+
+            vacancy_specific_qualifications.prescribed_qualifications,
             vacancies_remarks.remark_text
+
         FROM vacancies
-        JOIN positions ON vacancies.position_id = positions.position_id
-        LEFT JOIN vacancy_specific_qualifications ON vacancies.vacancy_id = vacancy_specific_qualifications.vacancy_id
-        LEFT JOIN vacancies_remarks ON vacancies.vacancy_id = vacancies_remarks.vacancy_id
-        WHERE 
-            (positions.position_title ILIKE $1 OR vacancies.vacancy_id ILIKE $1 OR vacancies.office_unit ILIKE $1)
-            AND ($2 = '' OR (
-                CASE 
-                    WHEN vacancies.application_deadline < CURRENT_DATE THEN 'Closed'
-                    ELSE vacancies.status 
-                END
-            ) = $2)
-        ORDER BY vacancies.application_posted DESC, vacancies.vacancy_id DESC
+
+        JOIN positions
+            ON vacancies.position_id = positions.position_id
+
+        LEFT JOIN vacancy_specific_qualifications
+            ON vacancies.vacancy_id =
+               vacancy_specific_qualifications.vacancy_id
+
+        LEFT JOIN vacancies_remarks
+            ON vacancies.vacancy_id = vacancies_remarks.vacancy_id
+
+        WHERE
+            (
+                positions.position_title ILIKE $1
+                OR vacancies.vacancy_id ILIKE $1
+                OR vacancies.office_unit ILIKE $1
+            )
+            AND (
+                $2 = ''
+                OR (
+                    CASE
+                        WHEN vacancies.application_deadline < CURRENT_DATE
+                            THEN 'Closed'
+                        ELSE vacancies.status
+                    END
+                ) = $2
+            )
+
+        ORDER BY
+            vacancies.application_posted DESC,
+            vacancies.vacancy_id DESC
+
         LIMIT $3 OFFSET $4;
     `;
 
     const countQuery = `
-        SELECT COUNT(*) 
+        SELECT COUNT(*)
         FROM vacancies
-        JOIN positions ON vacancies.position_id = positions.position_id
-        WHERE 
-            (positions.position_title ILIKE $1 OR vacancies.vacancy_id ILIKE $1 OR vacancies.office_unit ILIKE $1)
-            AND ($2 = '' OR (
-                CASE 
-                    WHEN vacancies.application_deadline < CURRENT_DATE THEN 'Closed'
-                    ELSE vacancies.status 
-                END
-            ) = $2);
+
+        JOIN positions
+            ON vacancies.position_id = positions.position_id
+
+        WHERE
+            (
+                positions.position_title ILIKE $1
+                OR vacancies.vacancy_id ILIKE $1
+                OR vacancies.office_unit ILIKE $1
+            )
+            AND (
+                $2 = ''
+                OR (
+                    CASE
+                        WHEN vacancies.application_deadline < CURRENT_DATE
+                            THEN 'Closed'
+                        ELSE vacancies.status
+                    END
+                ) = $2
+            );
     `;
 
     const searchTerm = `%${search}%`;
+
     const [dataResult, countResult] = await Promise.all([
-        pool.query(query, [searchTerm, status, limit, offset]),
-        pool.query(countQuery, [searchTerm, status])
+        pool.query(query, [
+            searchTerm,
+            status,
+            limit,
+            offset,
+        ]),
+        pool.query(countQuery, [
+            searchTerm,
+            status,
+        ]),
     ]);
 
-    const totalItems = parseInt(countResult.rows[0].count, 10);
+    const totalItems = parseInt(
+        countResult.rows[0].count,
+        10
+    );
 
     return {
         vacancies: dataResult.rows,
@@ -183,15 +282,18 @@ export const getAllVacanciesService = async ({ search = '', status = '', page = 
             totalItems,
             currentPage: Number(page),
             totalPages: Math.ceil(totalItems / limit),
-            limit: Number(limit)
-        }
+            limit: Number(limit),
+        },
     };
 };
 
-// Service 5: Get Single Vacancy by vacancy_id
+// ======================================================
+// SERVICE 5: GET SINGLE VACANCY
+// ======================================================
+
 export const getVacancyByIdService = async (vacancy_id) => {
     const query = `
-        SELECT 
+        SELECT
             vacancies.vacancy_id,
             vacancies.position_id,
             positions.position_title,
@@ -202,42 +304,69 @@ export const getVacancyByIdService = async (vacancy_id) => {
             vacancies.place_of_assignment,
             vacancies.application_posted,
             vacancies.application_deadline,
-            CASE 
-                WHEN vacancies.application_deadline < CURRENT_DATE THEN 'Closed'
-                ELSE vacancies.status 
+            CASE
+                WHEN vacancies.application_deadline < CURRENT_DATE
+                    THEN 'Closed'
+                ELSE vacancies.status
             END AS status,
-            CASE 
-                WHEN vacancy_specific_qualifications.qualification_id IS NOT NULL THEN json_build_object(
-                    'qualification_id', vacancy_specific_qualifications.qualification_id,
-                    'education_requirement', vacancy_specific_qualifications.education_requirement,
-                    'training_requirement', vacancy_specific_qualifications.training_requirement,
-                    'experience_requirement', vacancy_specific_qualifications.experience_requirement,
-                    'eligibility_requirement', vacancy_specific_qualifications.eligibility_requirement
+
+            CASE
+                WHEN vacancy_specific_qualifications.qualification_id
+                    IS NOT NULL
+                THEN json_build_object(
+                    'qualification_id',
+                    vacancy_specific_qualifications.qualification_id,
+                    'education_requirement',
+                    vacancy_specific_qualifications.education_requirement,
+                    'training_requirement',
+                    vacancy_specific_qualifications.training_requirement,
+                    'experience_requirement',
+                    vacancy_specific_qualifications.experience_requirement,
+                    'eligibility_requirement',
+                    vacancy_specific_qualifications.eligibility_requirement,
+                    'prescribed_qualifications',
+                    vacancy_specific_qualifications.prescribed_qualifications
                 )
-                ELSE NULL 
+                ELSE NULL
             END AS qualifications,
+
+            vacancy_specific_qualifications.prescribed_qualifications,
             vacancies_remarks.remark_text
+
         FROM vacancies
-        JOIN positions ON vacancies.position_id = positions.position_id
-        LEFT JOIN vacancy_specific_qualifications ON vacancies.vacancy_id = vacancy_specific_qualifications.vacancy_id
-        LEFT JOIN vacancies_remarks ON vacancies.vacancy_id = vacancies_remarks.vacancy_id
+
+        JOIN positions
+            ON vacancies.position_id = positions.position_id
+
+        LEFT JOIN vacancy_specific_qualifications
+            ON vacancies.vacancy_id =
+               vacancy_specific_qualifications.vacancy_id
+
+        LEFT JOIN vacancies_remarks
+            ON vacancies.vacancy_id = vacancies_remarks.vacancy_id
+
         WHERE vacancies.vacancy_id = $1;
     `;
 
     const result = await pool.query(query, [vacancy_id]);
+
     return result.rows[0] || null;
 };
 
-// Service 6: Update Vacancy Status Manually (e.g., Close early or Reopen)
-export const updateVacancyStatusService = async (vacancy_id, status) => {
+// ======================================================
+// SERVICE 6: UPDATE VACANCY STATUS
+// ======================================================
+
+export const updateVacancyStatusService = async (
+    vacancy_id,
+    status
+) => {
     const client = await pool.connect();
 
     try {
         await client.query("BEGIN");
 
-        // ======================================================
-        // 1. Update vacancy status
-        // ======================================================
+        // Update vacancy status
         const vacancyQuery = `
             UPDATE vacancies
             SET status = $1
@@ -254,19 +383,17 @@ export const updateVacancyStatusService = async (vacancy_id, status) => {
             throw new Error("VACANCY_NOT_FOUND");
         }
 
-        // ======================================================
-        // 2. If vacancy is CLOSED
-        //    Change COMPLETE applicants to INITIAL SCREENING
-        // ======================================================
+        // If vacancy is closed, reset complete applicants
+        // to initial screening.
         let applicantsReset = 0;
 
         if (String(status).toLowerCase() === "closed") {
-
             const applicantStatusQuery = `
                 UPDATE hr_remarks_final_notes hr
                 SET application_status = 'initial screening'
 
                 FROM applicant_information ai
+
                 JOIN job_applications ja
                     ON ja.job_applications_id =
                        ai.job_applications_id
@@ -288,21 +415,13 @@ export const updateVacancyStatusService = async (vacancy_id, status) => {
             applicantsReset = applicantResult.rowCount;
         }
 
-        // ======================================================
-        // 3. Commit both changes
-        // ======================================================
         await client.query("COMMIT");
 
         return {
             ...vacancyResult.rows[0],
-            applicants_reset: applicantsReset
+            applicants_reset: applicantsReset,
         };
-
     } catch (error) {
-
-        // ======================================================
-        // Rollback if anything fails
-        // ======================================================
         await client.query("ROLLBACK");
 
         console.error(
@@ -311,15 +430,19 @@ export const updateVacancyStatusService = async (vacancy_id, status) => {
         );
 
         throw error;
-
     } finally {
         client.release();
     }
 };
 
+// ======================================================
+// SERVICE 7: UPDATE VACANCY, QUALIFICATIONS, REMARKS
+// ======================================================
 
-// Service 7: Edit Vacancy and its Qualifications/Remarks
-export const updateVacancyService = async (vacancy_id, data) => {
+export const updateVacancyService = async (
+    vacancy_id,
+    data
+) => {
     const client = await pool.connect();
 
     try {
@@ -334,14 +457,16 @@ export const updateVacancyService = async (vacancy_id, data) => {
             application_posted,
             application_deadline,
             qualifications,
-            remark_text
+            remark_text,
         } = data;
 
-        // 1. Validate position
+        // Validate position
         const positionResult = await client.query(
-            `SELECT position_title, salary_grade
-             FROM positions
-             WHERE position_id = $1`,
+            `
+            SELECT position_title, salary_grade
+            FROM positions
+            WHERE position_id = $1
+            `,
             [position_id]
         );
 
@@ -349,13 +474,18 @@ export const updateVacancyService = async (vacancy_id, data) => {
             throw new Error("POSITION_NOT_FOUND");
         }
 
-        const { position_title, salary_grade } =
-            positionResult.rows[0];
+        const {
+            position_title,
+            salary_grade,
+        } = positionResult.rows[0];
 
-        // 2. Update vacancy details
+        // Update vacancy details.
+        // If the field is omitted, retain its current value.
+        // If explicitly null, clear the column.
         const vacancyResult = await client.query(
-            `UPDATE vacancies
-             SET
+            `
+            UPDATE vacancies
+            SET
                 position_id = $1,
                 plantilla_position = $2,
                 position_title = $3,
@@ -365,8 +495,9 @@ export const updateVacancyService = async (vacancy_id, data) => {
                 number_of_vacancies = $7,
                 application_posted = $8,
                 application_deadline = $9
-             WHERE vacancy_id = $10
-             RETURNING *`,
+            WHERE vacancy_id = $10
+            RETURNING *
+            `,
             [
                 position_id,
                 plantilla_position,
@@ -377,7 +508,7 @@ export const updateVacancyService = async (vacancy_id, data) => {
                 number_of_vacancies,
                 application_posted,
                 application_deadline,
-                vacancy_id
+                vacancy_id,
             ]
         );
 
@@ -385,89 +516,111 @@ export const updateVacancyService = async (vacancy_id, data) => {
             throw new Error("VACANCY_NOT_FOUND");
         }
 
-        // 3. Update or insert qualifications
-        if (qualifications !== undefined && qualifications !== null) {
+        // Update or insert the existing qualification record.
+        if (
+            qualifications !== undefined &&
+            qualifications !== null
+        ) {
             const {
                 education_requirement,
                 training_requirement,
                 experience_requirement,
-                eligibility_requirement
+                eligibility_requirement,
+                prescribed_qualifications,
             } = qualifications;
 
             const existingQualification = await client.query(
-                `SELECT qualification_id
-                 FROM vacancy_specific_qualifications
-                 WHERE vacancy_id = $1`,
+                `
+                SELECT qualification_id
+                FROM vacancy_specific_qualifications
+                WHERE vacancy_id = $1
+                `,
                 [vacancy_id]
             );
 
             if (existingQualification.rowCount > 0) {
                 await client.query(
-                    `UPDATE vacancy_specific_qualifications
-                     SET
+                    `
+                    UPDATE vacancy_specific_qualifications
+                    SET
                         education_requirement = $1,
                         training_requirement = $2,
                         experience_requirement = $3,
-                        eligibility_requirement = $4
-                     WHERE vacancy_id = $5`,
+                        eligibility_requirement = $4,
+                        prescribed_qualifications = $5
+                    WHERE vacancy_id = $6
+                    `,
                     [
                         education_requirement,
                         training_requirement,
                         experience_requirement,
                         eligibility_requirement,
-                        vacancy_id
+                        prescribed_qualifications,
+                        vacancy_id,
                     ]
                 );
             } else {
                 await client.query(
-                    `INSERT INTO vacancy_specific_qualifications (
+                    `
+                    INSERT INTO vacancy_specific_qualifications (
                         vacancy_id,
                         education_requirement,
                         training_requirement,
                         experience_requirement,
-                        eligibility_requirement
+                        eligibility_requirement,
+                        prescribed_qualifications
                     )
-                    VALUES ($1, $2, $3, $4, $5)`,
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    `,
                     [
                         vacancy_id,
                         education_requirement,
                         training_requirement,
                         experience_requirement,
-                        eligibility_requirement
+                        eligibility_requirement,
+                        prescribed_qualifications,
                     ]
                 );
             }
         }
 
-        // 4. Update, insert, or remove remarks
+        // Update, insert, or remove remarks.
         if (remark_text !== undefined) {
             const existingRemark = await client.query(
-                `SELECT vacancy_id
-                 FROM vacancies_remarks
-                 WHERE vacancy_id = $1`,
+                `
+                SELECT vacancy_id
+                FROM vacancies_remarks
+                WHERE vacancy_id = $1
+                `,
                 [vacancy_id]
             );
 
             if (String(remark_text ?? "").trim() === "") {
                 await client.query(
-                    `DELETE FROM vacancies_remarks
-                     WHERE vacancy_id = $1`,
+                    `
+                    DELETE FROM vacancies_remarks
+                    WHERE vacancy_id = $1
+                    `,
                     [vacancy_id]
                 );
             } else if (existingRemark.rowCount > 0) {
                 await client.query(
-                    `UPDATE vacancies_remarks
-                     SET remark_text = $1
-                     WHERE vacancy_id = $2`,
+                    `
+                    UPDATE vacancies_remarks
+                    SET remark_text = $1
+                    WHERE vacancy_id = $2
+                    `,
                     [remark_text, vacancy_id]
                 );
             } else {
                 await client.query(
-                    `INSERT INTO vacancies_remarks (
+                    `
+                    INSERT INTO vacancies_remarks (
                         vacancy_id,
                         remark_text
                     )
-                    VALUES ($1, $2)`,
+                    VALUES ($1, $2)
+                    `,
                     [vacancy_id, remark_text]
                 );
             }
@@ -476,18 +629,21 @@ export const updateVacancyService = async (vacancy_id, data) => {
         await client.query("COMMIT");
 
         return await getVacancyByIdService(vacancy_id);
-
     } catch (error) {
         await client.query("ROLLBACK");
+
         console.error("Update vacancy error:", error);
+
         throw error;
     } finally {
         client.release();
     }
 };
 
+// ======================================================
+// SERVICE 8: ARCHIVE VACANCY
+// ======================================================
 
-// Service 8: Archive Vacancy
 export const archiveVacancyService = async (vacancy_id) => {
     const client = await pool.connect();
 
@@ -495,11 +651,14 @@ export const archiveVacancyService = async (vacancy_id) => {
         await client.query("BEGIN");
 
         const result = await client.query(
-            `UPDATE vacancies
-             SET status = 'Archive',
-                 is_archived = TRUE
-             WHERE vacancy_id = $1
-             RETURNING *;`,
+            `
+            UPDATE vacancies
+            SET
+                status = 'Archive',
+                is_archived = TRUE
+            WHERE vacancy_id = $1
+            RETURNING *;
+            `,
             [vacancy_id]
         );
 
@@ -510,13 +669,12 @@ export const archiveVacancyService = async (vacancy_id) => {
         await client.query("COMMIT");
 
         return result.rows[0];
-
     } catch (error) {
         await client.query("ROLLBACK");
 
         console.error("Archive vacancy error:", error);
-        throw error;
 
+        throw error;
     } finally {
         client.release();
     }

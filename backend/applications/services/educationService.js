@@ -3,7 +3,6 @@ export const insertApplicantsEducation = async (
     applicantId,
     educationInput
 ) => {
-
     // ============================================================
     // NORMALIZE EDUCATION INPUT
     // ============================================================
@@ -11,9 +10,8 @@ export const insertApplicantsEducation = async (
     const educationList = Array.isArray(educationInput)
         ? educationInput
         : Array.isArray(educationInput?.educationList)
-            ? educationInput.educationList
-            : [];
-
+          ? educationInput.educationList
+          : [];
 
     // ============================================================
     // NO EDUCATION DATA
@@ -28,64 +26,60 @@ export const insertApplicantsEducation = async (
         return [];
     }
 
-
     const insertedEducation = [];
-
 
     // ============================================================
     // INSERT EACH EDUCATION RECORD
     // ============================================================
 
     for (const edu of educationList) {
-
         const educationLevel =
             edu.level ||
             edu.education_level ||
             null;
 
-
         const schoolName =
             edu.school_name?.trim() ||
             null;
-
 
         const degreeCourse =
             edu.degree_course?.trim() ||
             null;
 
-
         const honorsAwards =
             edu.honors_awards?.trim() ||
             null;
 
+        // ========================================================
+        // GRADUATION STATUS
+        // ========================================================
+
+        const rawGraduationStatus =
+            edu.graduation_status?.trim()?.toLowerCase() ||
+            null;
+
+        const graduationStatusMap = {
+            ongoing: "Ongoing",
+            graduated: "Graduated",
+        };
+
+        const graduationStatus =
+            graduationStatusMap[rawGraduationStatus] || null;
 
         // ========================================================
         // UNITS
+        // Only applicable to Master's and Doctorate degrees
         // ========================================================
-        //
-        // Only applicable to:
-        // MASTER'S DEGREE
-        // DOCTORATE DEGREE
-        //
-        // Otherwise store NULL.
-        //
 
         const normalizedEducationLevel =
-            educationLevel
-                ?.trim()
-                .toUpperCase();
-
+            educationLevel?.trim().toUpperCase();
 
         let units = null;
 
-
         if (
-            normalizedEducationLevel ===
-                "MASTER'S DEGREE" ||
-            normalizedEducationLevel ===
-                "DOCTORATE DEGREE"
+            normalizedEducationLevel === "MASTER'S DEGREE" ||
+            normalizedEducationLevel === "DOCTORATE DEGREE"
         ) {
-
             units =
                 edu.units !== undefined &&
                 edu.units !== null &&
@@ -93,7 +87,6 @@ export const insertApplicantsEducation = async (
                     ? Number(edu.units)
                     : null;
         }
-
 
         // ========================================================
         // SKIP COMPLETELY EMPTY RECORD
@@ -104,28 +97,29 @@ export const insertApplicantsEducation = async (
             !schoolName &&
             !degreeCourse &&
             !honorsAwards &&
-            units === null
+            units === null &&
+            !graduationStatus
         ) {
             continue;
         }
 
-
         // ========================================================
-        // INSERT
+        // INSERT EDUCATION RECORD
         // ========================================================
 
         const result = await client.query(
             `
-            INSERT INTO education (
-                applicant_id,
-                education_level,
-                school_name,
-                degree_course,
-                honors_awards,
-                units
-            )
-            VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING *
+                INSERT INTO education (
+                    applicant_id,
+                    education_level,
+                    school_name,
+                    degree_course,
+                    honors_awards,
+                    units,
+                    graduation_status
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                RETURNING *
             `,
             [
                 applicantId,
@@ -133,22 +127,18 @@ export const insertApplicantsEducation = async (
                 schoolName,
                 degreeCourse,
                 honorsAwards,
-                units
+                units,
+                graduationStatus,
             ]
         );
 
-
-        insertedEducation.push(
-            result.rows[0]
-        );
+        insertedEducation.push(result.rows[0]);
     }
-
 
     console.log(
         "Inserted education records:",
         insertedEducation
     );
-
 
     return insertedEducation;
 };

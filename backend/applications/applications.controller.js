@@ -11,17 +11,33 @@ import { insertApplicantsWorkExperience } from './services/workExperienceService
 import { insertApplicantsTraining } from './services/trainingService.js';
 import { insertApplicantsCivilServiceEligibility } from './services/eligibilityService.js';
 import { insertHRRemarks } from './services/hrRemarksService.js';
-import { sendApplicationReceivedEmail } from "../applications/services/email.services.js";
+import {
+    sendApplicationReceivedEmail,
+    sendApplicationReviewEmail,
+} from "../applications/services/email.services.js";
+
+
+// Keep graduation status available when saving education records.
+// Accepted values are "Graduated" and "Ongoing"; other/missing values become null.
+const normalizeEducationList = (educationList) => {
+    if (!Array.isArray(educationList)) return [];
+
+    return educationList.map((education) => ({
+        ...education,
+        graduation_status:
+            education?.graduation_status === "Graduated" ||
+            education?.graduation_status === "Ongoing"
+                ? education.graduation_status
+                : null,
+    }));
+};
 
 
 export const submitFullApplication = async (req, res) => {
-
-
     const client = await pool.connect();
 
     try {
-
-        await client.query('BEGIN');
+        await client.query("BEGIN");
 
         const body = req.body || {};
 
@@ -31,50 +47,39 @@ export const submitFullApplication = async (req, res) => {
 
         const uploadedFilePaths = (req.files || []).reduce(
             (files, file) => {
-
                 const documentField = file.fieldname.replace(
                     /_file$/,
-                    ''
+                    ""
                 );
 
                 const documentName = documentField.replace(
                     /^has_/,
-                    ''
+                    ""
                 );
 
                 const normalizedDocumentName = {
-                    oath_of_office: 'latest_appointment',
-                    birth_certificate: 'omnibus_sworn_statement',
-                    tin_id_or_verification: 'prc_license_id'
+                    oath_of_office: "latest_appointment",
+                    birth_certificate: "omnibus_sworn_statement",
+                    tin_id_or_verification: "prc_license_id",
                 }[documentName] || documentName;
 
                 const pathValue = `/uploads/${file.filename}`;
+                const pathKey = `${normalizedDocumentName}_path`;
 
-                const pathKey =
-                    `${normalizedDocumentName}_path`;
-
-
-                if (documentName === 'training_certificates') {
-
+                if (documentName === "training_certificates") {
                     if (!Array.isArray(files[pathKey])) {
                         files[pathKey] = [];
                     }
 
                     files[pathKey].push(pathValue);
-
                 } else {
-
                     files[pathKey] = pathValue;
-
                 }
 
-
                 return files;
-
             },
             {}
         );
-
 
         uploadedFilePaths.diploma_path ||=
             uploadedFilePaths.transcript_of_records_path;
@@ -84,54 +89,65 @@ export const submitFullApplication = async (req, res) => {
 
         const {
             job_application = parsedBody.job_applications,
-
             applicant_info,
-
             equal_opportunity,
-
             document_checklist,
-
             uploaded_files = uploadedFilePaths,
-
             education_list = [],
-
             work_experience_list = [],
-
             trainings_list = [],
-
             eligibility_list = [],
-
-            hr_remarks
-
+            hr_remarks,
         } = parsedBody;
 
         if (!job_application || !applicant_info) {
+            await client.query("ROLLBACK");
 
             return res.status(400).json({
                 success: false,
                 message:
-                    'job_application and applicant_info are required.'
+                    "job_application and applicant_info are required.",
             });
-
         }
 
         if (
             !job_application.vacancy_id ||
-            String(job_application.vacancy_id).trim() === ''
+            String(job_application.vacancy_id).trim() === ""
         ) {
-            await client.query('ROLLBACK');
+            await client.query("ROLLBACK");
 
             return res.status(400).json({
                 success: false,
-                message: 'A vacancy must be selected before submitting an application.'
+                message:
+                    "A vacancy must be selected before submitting an application.",
             });
         }
 
-        const jobApplicationId =
-            await insertJobApplication(
-                client,
-                job_application
-            );
+        // ================================================
+        // INSERT JOB APPLICATION
+        // ================================================
+
+        const jobApplicationId = await insertJobApplication(
+            client,
+            job_application
+        );
+
+        // Retrieve the vacancy information for the HR email.
+        // Adjust the category column if your schema stores it elsewhere.
+        const vacancyResult = await client.query(
+            `
+                SELECT
+                    v.position_title,
+                    p.category
+                FROM vacancies v
+                LEFT JOIN positions p
+                    ON p.position_id = v.position_id
+                WHERE v.vacancy_id = $1
+            `,
+            [job_application.vacancy_id]
+        );
+
+        const vacancy = vacancyResult.rows[0];
 
         const applicantInfoRecord =
             await insertApplicantInformation(
@@ -140,119 +156,101 @@ export const submitFullApplication = async (req, res) => {
                 applicant_info
             );
 
-        const applicantId =
-            applicantInfoRecord.applicant_id;
-
-        const ticket =
-             applicantInfoRecord.ticket;
+        const applicantId = applicantInfoRecord.applicant_id;
+        const ticket = applicantInfoRecord.ticket;
 
         if (!ticket) {
-            throw new Error('Application ticket was not generated.');
+            throw new Error(
+                "Application ticket was not generated."
+            );
         }
 
-        if (equal_opportunity) {
+        // ================================================
+        // SAVE APPLICANT INFORMATION
+        // ================================================
 
+        if (equal_opportunity) {
             await insertEqualOpportunityDeclarations(
                 client,
                 applicantId,
                 equal_opportunity
             );
-
         }
 
         if (document_checklist) {
-
             await insertApplicantDocuments(
                 client,
                 applicantId,
                 document_checklist
             );
-
         }
 
         if (uploaded_files) {
-
             await insertApplicantUploadedFiles(
                 client,
                 applicantId,
                 uploaded_files
             );
-
         }
 
+        const normalizedEducationList =
+            normalizeEducationList(education_list);
 
-        if (
-            Array.isArray(education_list) &&
-            education_list.length > 0
-        ) {
-
+        if (normalizedEducationList.length > 0) {
             await insertApplicantsEducation(
                 client,
                 applicantId,
-                education_list
+                normalizedEducationList
             );
-
         }
 
         if (
             Array.isArray(work_experience_list) &&
             work_experience_list.length > 0
         ) {
-
             for (const workItem of work_experience_list) {
-
                 await insertApplicantsWorkExperience(
                     client,
                     applicantId,
                     workItem
                 );
-
             }
-
         }
 
         if (
             Array.isArray(trainings_list) &&
             trainings_list.length > 0
         ) {
-
             for (const trainingItem of trainings_list) {
-
                 await insertApplicantsTraining(
                     client,
                     applicantId,
                     trainingItem
                 );
-
             }
-
         }
 
         if (
             Array.isArray(eligibility_list) &&
             eligibility_list.length > 0
         ) {
-
             for (const eligibilityItem of eligibility_list) {
-
                 await insertApplicantsCivilServiceEligibility(
                     client,
                     applicantId,
                     eligibilityItem
                 );
-
             }
-
         }
 
+        // ================================================
+        // INITIAL HR REMARKS
+        // ================================================
+
         const initialStatusData = hr_remarks || {
-
-            application_status: 'Initial Screening',
-
-            hr_remarks_notes: 'Initial submission'
-
+            application_status: "Initial Screening",
+            hr_remarks_notes: "Initial submission",
         };
-
 
         await insertHRRemarks(
             client,
@@ -260,13 +258,19 @@ export const submitFullApplication = async (req, res) => {
             initialStatusData
         );
 
-        await client.query('COMMIT');
+        // ================================================
+        // COMMIT APPLICATION
+        // ================================================
 
+        await client.query("COMMIT");
 
+        // ================================================
+        // EMAIL NOTIFICATIONS
+        // ================================================
+
+        // 1. Notify the applicant that the application was received.
         if (applicant_info?.email_address) {
-
             try {
-
                 await sendApplicationReceivedEmail(
                     applicant_info.email_address,
                     applicant_info.first_name,
@@ -275,62 +279,120 @@ export const submitFullApplication = async (req, res) => {
                 );
 
                 console.log(
-                    `✅ Application received email sent to ${applicant_info.email_address}`
+                    `Application received email sent to ${applicant_info.email_address}`
                 );
-
             } catch (emailError) {
-
                 console.error(
-                    '⚠️ Application saved, but email could not be sent:',
+                    "Application saved, but applicant confirmation email failed:",
                     emailError
                 );
-
             }
-
         } else {
-
             console.warn(
-                '⚠️ Application submitted without an email address.'
+                "Application submitted without an applicant email address."
             );
-
         }
 
+        // 2. Notify HR only when an application is submitted online.
+        const isOnlineApplication =
+            String(job_application.submission_type ?? "")
+                .trim()
+                .toLowerCase() === "online";
 
+        if (isOnlineApplication) {
+            try {
+                const hroUsersResult = await client.query(
+                    `
+                        SELECT email
+                        FROM users
+                        WHERE LOWER(TRIM(role)) = 'hro'
+                          AND is_archived = FALSE
+                          AND email IS NOT NULL
+                          AND BTRIM(email) <> ''
+                        ORDER BY id
+                    `
+                );
+                const hrEmails = hroUsersResult.rows.map(
+                    (user) => user.email
+                );
+
+                if (hrEmails.length === 0) {
+                    console.warn(
+                        "HR notification skipped: no active HRO users with email addresses were found."
+                    );
+                } else {
+                    const applicantName = [
+                        applicant_info.first_name,
+                        applicant_info.middle_name,
+                        applicant_info.last_name,
+                        applicant_info.extension_name,
+                    ]
+                        .filter(Boolean)
+                        .join(" ");
+
+                    await sendApplicationReviewEmail({
+                        hrEmails,
+                        applicantName,
+                        applicationCode: ticket,
+                        positionTitle:
+                            vacancy?.position_title ||
+                            job_application.position_title ||
+                            "Not specified",
+                        category:
+                            vacancy?.category ||
+                            job_application.category ||
+                            "Not specified",
+                    });
+
+                    console.log(
+                        `HR application review notification sent to ${hrEmails.length} HRO user(s) for ${applicantName}. Ticket: ${ticket}`
+                    );
+                }
+            } catch (emailError) {
+                console.error(
+                    "Application saved, but HR notification email failed:",
+                    emailError
+                );
+            }
+        }
+
+        // ================================================
+        // RESPONSE
+        // ================================================
 
         return res.status(201).json({
             success: true,
-            message:
-                'Application successfully submitted.',
+            message: "Application successfully submitted.",
             data: {
-                job_applications_id:
-                    jobApplicationId,
-                applicant_id:
-                    applicantId,
-                ticket
-            }
+                job_applications_id: jobApplicationId,
+                applicant_id: applicantId,
+                ticket,
+            },
         });
-
     } catch (error) {
-        await client.query('ROLLBACK');
+        try {
+            await client.query("ROLLBACK");
+        } catch (rollbackError) {
+            console.error(
+                "Transaction rollback failed:",
+                rollbackError
+            );
+        }
+
         console.error(
-            'Transaction Failed. Rolling back changes...',
+            "Transaction failed while submitting application:",
             error
         );
-
 
         return res.status(500).json({
             success: false,
             message:
-                'Failed to process job application transaction.',
-            error: error.message
-
+                "Failed to process job application transaction.",
+            error: error.message,
         });
-
-
     } finally {
         client.release();
     }
-
 };
 
 
@@ -1571,17 +1633,24 @@ export const updateFullApplicant = async (req, res) => {
             );
         }
 
-        // 6. Replace submitted applicant detail lists
+        // 6. Replace submitted applicant detail lists.
+        // Preserve graduation_status for Master's/Doctorate education records.
         if (Array.isArray(education_list)) {
+            const normalizedEducationList =
+                normalizeEducationList(education_list);
+
             await client.query(
                 "DELETE FROM education WHERE applicant_id = $1",
                 [applicant_id]
             );
-            await insertApplicantsEducation(
-                client,
-                applicant_id,
-                education_list
-            );
+
+            if (normalizedEducationList.length > 0) {
+                await insertApplicantsEducation(
+                    client,
+                    applicant_id,
+                    normalizedEducationList
+                );
+            }
         }
 
         if (Array.isArray(work_experience_list)) {

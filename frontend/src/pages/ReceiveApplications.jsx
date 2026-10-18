@@ -18,6 +18,7 @@ import { postApplications } from "../api/ApplicationApi";
 import useFormDraft, { mergeDraft } from "../hooks/useFormDraft";
 import { getSubmissionError } from "../utils/submissionError";
 import { stripGroupIds } from "../utils/groupRows";
+import { getVacancies } from "../api/VacancyApi";
 
 // ============================================================
 // WIZARD STEPS (one card per step)
@@ -79,6 +80,7 @@ const createInitialFormData = () => ({
         degree_course: "",
         honors_awards: "",
         units: "",
+        graduation_status: "",
       },
     ],
   },
@@ -95,6 +97,7 @@ const createInitialFormData = () => ({
     monthly_salary: "",
     appointment_status: "",
     is_govt_service: null,
+    is_internal: null,
   },
 
   documentData: {
@@ -158,7 +161,8 @@ const normalizeWorkExperience = (data) => {
         e.monthly_salary,
         e.appointment_status,
       ].some((v) => String(v ?? "").trim() !== "") ||
-        typeof e.is_govt_service === "boolean")
+        typeof e.is_govt_service === "boolean" ||
+        typeof e.is_internal === "boolean")
   );
 };
 
@@ -181,6 +185,7 @@ export default function ReceiveApplications() {
 
   // In-app document preview (replaces opening a new browser tab)
   const [previewFile, setPreviewFile] = useState(null);
+  const [vacancies, setVacancies] = useState([]);
 
   // ============================================================
   // DRAFT (autosaved; cleared after a successful submit)
@@ -224,6 +229,63 @@ export default function ReceiveApplications() {
     setFormData(createInitialFormData());
     setCurrentStep(0);
   };
+
+  // ============================================================
+  // LOAD VACANCIES AND RESOLVE THE SELECTED VACANCY CATEGORY
+  // ============================================================
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadVacancies = async () => {
+      try {
+        const response = await getVacancies();
+
+        // Support the common API response shapes: array, { data: [] },
+        // { vacancies: [] }, and Axios responses wrapping those shapes.
+        const body = response?.data ?? response;
+        const list = Array.isArray(body)
+          ? body
+          : Array.isArray(body?.vacancies)
+          ? body.vacancies
+          : Array.isArray(body?.data)
+          ? body.data
+          : Array.isArray(body?.rows)
+          ? body.rows
+          : [];
+
+        if (!cancelled) setVacancies(list);
+      } catch (error) {
+        console.error("Error loading vacancies for application form:", error);
+        if (!cancelled) setVacancies([]);
+      }
+    };
+
+    loadVacancies();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectedVacancy = vacancies.find((vacancy) => {
+    const id =
+      vacancy?.vacancy_id ??
+      vacancy?.id ??
+      vacancy?.vacancyId ??
+      vacancy?.vacancy_code;
+
+    return String(id ?? "") === String(formData.applicationData.vacancy_id ?? "");
+  });
+
+  const selectedVacancyCategory = String(
+    selectedVacancy?.category ??
+      selectedVacancy?.position_category ??
+      selectedVacancy?.vacancy_category ??
+      selectedVacancy?.position?.category ??
+      selectedVacancy?.position?.position_category ??
+      ""
+  ).trim();
 
   // ============================================================
   // CHANGE HANDLERS
@@ -348,7 +410,13 @@ export default function ReceiveApplications() {
 
     const submittedWorkExperience = normalizeWorkExperience(
       formData.workExperienceData
-    );
+    ).map((experience) => ({
+      ...experience,
+      is_internal:
+        typeof experience.is_internal === "boolean"
+          ? experience.is_internal
+          : null,
+    }));
 
     const payload = {
       job_applications: {
@@ -374,7 +442,12 @@ export default function ReceiveApplications() {
 
       document_checklist: documentChecklist,
       equal_opportunity: formData.equalOpportunityData,
-      education_list: stripGroupIds(formData.educationData.educationList),
+      education_list: stripGroupIds(
+        formData.educationData.educationList.map((education) => ({
+          ...education,
+          graduation_status: education.graduation_status || null,
+        }))
+      ),
       // group_id is only used by the form to group rows under one "Conducted By"
       trainings_list: formData.trainingData.trainings.map(
         ({ group_id, ...training }) => training
@@ -468,6 +541,7 @@ export default function ReceiveApplications() {
           <WorkExperienceForm
             data={formData.workExperienceData}
             onChange={handleWorkExperienceChange}
+            category={selectedVacancyCategory}
           />
         );
 

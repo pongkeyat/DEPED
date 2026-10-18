@@ -3,13 +3,15 @@ import {
     X,
     Pencil,
     Archive,
+    RotateCcw,
     Save,
     UserRound
 } from "lucide-react";
 import {
     getAllUsers,
     updateUser,
-    archiveUser
+    archiveUser,
+    restoreUser
 } from "../../api/AuthApi";
 
 const ROLES = [
@@ -45,6 +47,10 @@ const UserManagementTable = () => {
 
     const [archiving, setArchiving] = useState(false);
 
+    // RESTORE USER CONFIRMATION
+    const [confirmRestoreUser, setConfirmRestoreUser] = useState(null);
+    const [restoring, setRestoring] = useState(false);
+
     // =========================================================
     // GET ALL ACTIVE USERS
     // =========================================================
@@ -63,9 +69,9 @@ const UserManagementTable = () => {
                         ? response.users
                         : [];
 
-            setUsers(
-                userList.filter(user => !user.is_archived)
-            );
+            // Keep active and archived users in this table.
+            // Archived rows will show Restore only.
+            setUsers(userList);
         } catch (err) {
             console.error("Error fetching users:", err);
 
@@ -96,6 +102,12 @@ const UserManagementTable = () => {
 
         return matchedRole?.label || role;
     };
+
+    // Handle boolean values returned as booleans, strings, or numbers.
+    const isArchived = (user) =>
+        user?.is_archived === true ||
+        user?.is_archived === 1 ||
+        String(user?.is_archived).toLowerCase() === "true";
 
     // =========================================================
     // OPEN EDIT MODAL
@@ -292,6 +304,41 @@ const UserManagementTable = () => {
     };
 
     // =========================================================
+    // OPEN RESTORE CONFIRMATION
+    // =========================================================
+    const handleRestoreClick = (user) => {
+        if (!isArchived(user)) return;
+        setConfirmRestoreUser(user);
+    };
+
+    // =========================================================
+    // CONFIRM RESTORE
+    // =========================================================
+    const handleRestore = async () => {
+        if (!confirmRestoreUser?.id || !isArchived(confirmRestoreUser)) return;
+
+        try {
+            setRestoring(true);
+            setError("");
+
+            await restoreUser(confirmRestoreUser.id);
+
+            // Refresh from the server so the archived status is current.
+            setConfirmRestoreUser(null);
+            await fetchUsers();
+        } catch (err) {
+            console.error("Failed to restore user:", err);
+            setError(
+                err.response?.data?.error ||
+                err.response?.data?.message ||
+                "Failed to restore user."
+            );
+        } finally {
+            setRestoring(false);
+        }
+    };
+
+    // =========================================================
     // LOADING STATE
     // =========================================================
     if (loading) {
@@ -350,6 +397,7 @@ const UserManagementTable = () => {
                                     "Email",
                                     "Role",
                                     "Password Status",
+                                    "Status",
                                     "Actions"
                                 ].map(header => (
                                     <th
@@ -375,7 +423,7 @@ const UserManagementTable = () => {
                                 <tr>
 
                                     <td
-                                        colSpan="6"
+                                        colSpan="7"
                                         className="px-6 py-10 text-center text-sm text-gray-500"
                                     >
                                         No active users found.
@@ -436,32 +484,56 @@ const UserManagementTable = () => {
 
                                         </td>
 
+                                        {/* ACCOUNT STATUS */}
+                                        <td className="px-6 py-4">
+                                            <span
+                                                className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                                                    isArchived(user)
+                                                        ? "bg-red-100 text-red-700"
+                                                        : "bg-green-100 text-green-700"
+                                                }`}
+                                            >
+                                                {isArchived(user) ? "Archived" : "Active"}
+                                            </span>
+                                        </td>
+
                                         {/* ACTIONS */}
                                         <td className="space-x-3 whitespace-nowrap px-6 py-4 text-right">
 
-                                            {/* EDIT */}
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    handleEdit(user)
-                                                }
-                                                className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-900"
-                                                title="Edit User"
-                                            >
-                                                <Pencil size={14} />
-                                            </button>
+                                            {isArchived(user) ? (
+                                                // Archived users can only be restored.
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRestoreClick(user)}
+                                                    className="inline-flex items-center gap-1 text-sm font-medium text-green-600 hover:text-green-800"
+                                                    title="Restore User"
+                                                >
+                                                    <RotateCcw size={14} />
+                                                    <span>Restore</span>
+                                                </button>
+                                            ) : (
+                                                <>
+                                                    {/* EDIT */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleEdit(user)}
+                                                        className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-900"
+                                                        title="Edit User"
+                                                    >
+                                                        <Pencil size={14} />
+                                                    </button>
 
-                                            {/* ARCHIVE */}
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    handleArchiveClick(user)
-                                                }
-                                                className="inline-flex items-center gap-1 text-sm font-medium text-red-600 hover:text-red-900"
-                                                title="Archive User"
-                                            >
-                                                <Archive size={14} />
-                                            </button>
+                                                    {/* ARCHIVE */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleArchiveClick(user)}
+                                                        className="inline-flex items-center gap-1 text-sm font-medium text-red-600 hover:text-red-900"
+                                                        title="Archive User"
+                                                    >
+                                                        <Archive size={14} />
+                                                    </button>
+                                                </>
+                                            )}
 
                                         </td>
 
@@ -868,6 +940,71 @@ const UserManagementTable = () => {
 
                 </div>
 
+            )}
+
+            {/* =====================================================
+                RESTORE CONFIRMATION MODAL
+            ====================================================== */}
+            {confirmRestoreUser && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4">
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="restore-user-title"
+                        className="w-full max-w-sm overflow-hidden rounded-xl bg-white shadow-xl"
+                    >
+                        <div className="p-5">
+                            <div className="mb-4 flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-50 text-green-600">
+                                    <RotateCcw size={20} />
+                                </div>
+                                <div>
+                                    <h2
+                                        id="restore-user-title"
+                                        className="text-lg font-semibold text-gray-900"
+                                    >
+                                        Restore User
+                                    </h2>
+                                    <p className="text-xs text-gray-500">
+                                        Confirm before restoring this account.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <p className="text-sm leading-6 text-gray-600">
+                                Are you sure you want to restore{" "}
+                                <span className="font-semibold text-gray-900">
+                                    {confirmRestoreUser.first_name}{" "}
+                                    {confirmRestoreUser.last_name}
+                                </span>
+                                ?
+                            </p>
+                            <p className="mt-2 text-xs text-gray-500">
+                                This user will be marked active again.
+                            </p>
+                        </div>
+
+                        <div className="flex justify-end gap-3 border-t border-gray-200 bg-gray-50 px-5 py-4">
+                            <button
+                                type="button"
+                                onClick={() => setConfirmRestoreUser(null)}
+                                disabled={restoring}
+                                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleRestore}
+                                disabled={restoring}
+                                className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <RotateCcw size={16} />
+                                {restoring ? "Restoring..." : "Confirm Restore"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
         </div>

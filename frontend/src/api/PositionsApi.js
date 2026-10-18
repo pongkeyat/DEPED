@@ -4,6 +4,7 @@ const GET_POSITIONS = import.meta.env.VITE_POSITIONS_GET;
 const CREATE_POSITION = import.meta.env.VITE_POSITIONS_CREATE;
 const UPDATE_POSITION = import.meta.env.VITE_POSITIONS_UPDATE;
 const ARCHIVE_POSITION = import.meta.env.VITE_POSITIONS_ARCHIVE;
+const RESTORE_POSITION = import.meta.env.VITE_POSITIONS_RESTORE;
 
 // ======================================================
 // GET ALL POSITIONS
@@ -64,6 +65,17 @@ export const updatePosition = async (
 export const archivePosition = async (position_id) => {
     const response = await axios.patch(
         `${ARCHIVE_POSITION}/${encodeURIComponent(position_id)}/archive`
+    );
+
+    return response.data;
+};
+
+// ======================================================
+// RESTORE POSITION
+// ======================================================
+export const restorePosition = async (position_id) => {
+    const response = await axios.patch(
+        `${RESTORE_POSITION}/${encodeURIComponent(position_id)}`
     );
 
     return response.data;

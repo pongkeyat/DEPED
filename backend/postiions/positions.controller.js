@@ -664,3 +664,61 @@ export const archivePosition = async (req, res) => {
         });
     }
 };
+
+export const restorePosition = async (req, res) => {
+    try {
+        const { position_id } = req.params;
+
+        const result = await pool.query(
+            `
+            UPDATE positions
+            SET status = 'Active'
+            WHERE position_id = $1
+              AND LOWER(TRIM(status)) = 'archived'
+            RETURNING
+                position_id,
+                position_title,
+                salary_grade,
+                category,
+                status
+            `,
+            [position_id]
+        );
+
+        if (result.rowCount === 0) {
+            const existing = await pool.query(
+                `
+                SELECT position_id, status
+                FROM positions
+                WHERE position_id = $1
+                `,
+                [position_id]
+            );
+
+            if (existing.rowCount === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Position not found.",
+                });
+            }
+
+            return res.status(400).json({
+                success: false,
+                message: "This position is not archived.",
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Position restored successfully.",
+            data: result.rows[0],
+        });
+    } catch (error) {
+        console.error("Error restoring position:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to restore position.",
+        });
+    }
+};

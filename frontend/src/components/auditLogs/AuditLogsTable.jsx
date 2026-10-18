@@ -7,6 +7,7 @@ import {
     ChevronRight,
     Clock
 } from "lucide-react";
+import { formatAuditDescription } from "./formatAuditDescription";
 
 const AuditLogsTable = ({
     logs,
@@ -185,20 +186,26 @@ const AuditLogsTable = ({
                                     {/* USER */}
                                     <td className="px-5 py-4">
                                         <p className="font-medium text-gray-800">
-                                            {log.username || "System"}
+                                            {log.display_username ||
+                                                (log.username &&
+                                                log.username !== "PUBLIC"
+                                                    ? log.username
+                                                    : "User not captured")}
                                         </p>
 
                                         <p className="mt-1 text-xs text-gray-500">
-                                            {log.user_role || "—"}
+                                            {log.display_user_role ||
+                                                log.user_role ||
+                                                (log.user_id ? "Unknown" : "Unknown user")}
                                         </p>
                                     </td>
 
                                     {/* ACTION */}
                                     <td className="px-5 py-4">
                                         <span
-                                            className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${getActionStyle(log.action)}`}
+                                            className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${getActionStyle(log.display_action || log.action)}`}
                                         >
-                                            {log.action || "—"}
+                                            {log.display_action || log.action || "—"}
                                         </span>
                                     </td>
 
@@ -212,7 +219,7 @@ const AuditLogsTable = ({
                                     {/* DESCRIPTION */}
                                     <td className="max-w-[300px] px-5 py-4">
                                         <p className="line-clamp-2 text-gray-600">
-                                            {log.description || "No description"}
+                                            {formatAuditDescription(log)}
                                         </p>
 
                                         {log.entity_id && (

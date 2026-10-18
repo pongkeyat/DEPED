@@ -1150,3 +1150,98 @@ export const resetPassword = async (req, res) => {
         });
     }
 };
+
+
+
+
+
+export const restoreUser = async (req, res) => {
+    const { id } = req.params;
+
+    if (!id) {
+        return res.status(400).json({
+            success: false,
+            error: "User ID is required.",
+        });
+    }
+
+    try {
+        // Check whether the user exists and is archived
+        const result = await pool.query(
+            `UPDATE users
+             SET is_archived = FALSE
+             WHERE id = $1
+               AND is_archived = TRUE
+             RETURNING
+                id,
+                first_name,
+                last_name,
+                email,
+                role,
+                is_archived,
+                is_password_changed`,
+            [id]
+        );
+
+        if (result.rows.length === 0) {
+            const existingUser = await pool.query(
+                `SELECT id, is_archived
+                 FROM users
+                 WHERE id = $1`,
+                [id]
+            );
+
+            if (existingUser.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: "User not found.",
+                });
+            }
+
+            return res.status(409).json({
+                success: false,
+                error: "User is not archived.",
+            });
+        }
+
+        const restoredUser = result.rows[0];
+
+        // Create audit log
+        try {
+            await createAuditLog({
+                ...getAuditContext(req, restoredUser),
+                action: "RESTORE",
+                module: "USER_MANAGEMENT",
+                description: "User account restored successfully.",
+                entity_type: "users",
+                entity_id: restoredUser.id,
+                metadata: {
+                    first_name: restoredUser.first_name,
+                    last_name: restoredUser.last_name,
+                    email: restoredUser.email,
+                    role: restoredUser.role,
+                    is_archived: false,
+                },
+                status: "SUCCESS",
+            });
+        } catch (auditError) {
+            console.error(
+                "Failed to save user-restore audit log:",
+                auditError
+            );
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "User restored successfully.",
+            data: restoredUser,
+        });
+    } catch (error) {
+        console.error("Error restoring user:", error);
+
+        return res.status(500).json({
+            success: false,
+            error: "Internal server error.",
+        });
+    }
+};

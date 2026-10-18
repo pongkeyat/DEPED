@@ -6,6 +6,7 @@ import {
     updateVacancyStatus,
     updateVacancy,
     archiveVacancy,
+    restoreVacancy
 } from './vacancies.controller.js';
 
 const router = express.Router();
@@ -16,5 +17,6 @@ router.get('/:id', getVacancyById);
 router.put('/:id', updateVacancy);
 router.patch('/:id/archive', archiveVacancy);
 router.patch('/:id/status', updateVacancyStatus);
+router.patch("/:id/restore", restoreVacancy);
 
 export default router;
