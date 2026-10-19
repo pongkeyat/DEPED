@@ -7,12 +7,23 @@ import pool from "../config/db.js";
  */
 
 const normalizeText = (value) => {
-    return String(value || "")
-        .trim()
-        .replace(/\s+/g, " ")
-        .toUpperCase();
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
 };
 
+const getApplicantEducationRuleLevel = (educationLevel) => {
+  const normalizedLevel = normalizeText(educationLevel);
+  const aliases = {
+    SECONDARY: "SENIOR HIGH SCHOOL",
+    "HIGH SCHOOL": "SENIOR HIGH SCHOOL",
+    "HIGH SCHOOL GRADUATE": "SENIOR HIGH SCHOOL",
+    "SECONDARY / HIGH SCHOOL": "SENIOR HIGH SCHOOL",
+  };
+
+  return aliases[normalizedLevel] || normalizedLevel;
+};
 
 /**
  * ============================================================
@@ -21,12 +32,11 @@ const normalizeText = (value) => {
  */
 
 export const getSchoolAdministrationVacancyRequirements = async (
-    client,
-    vacancyId
+  client,
+  vacancyId,
 ) => {
-
-    const result = await client.query(
-        `
+  const result = await client.query(
+    `
         SELECT
             v.vacancy_id,
             v.position_id,
@@ -46,22 +56,21 @@ export const getSchoolAdministrationVacancyRequirements = async (
         WHERE v.vacancy_id = $1
         LIMIT 1
         `,
-        [vacancyId]
-    );
+    [vacancyId],
+  );
 
-    if (result.rows.length === 0) {
-        throw new Error("VACANCY_NOT_FOUND");
-    }
+  if (result.rows.length === 0) {
+    throw new Error("VACANCY_NOT_FOUND");
+  }
 
-    const vacancy = result.rows[0];
+  const vacancy = result.rows[0];
 
-    if (!vacancy.education_requirement) {
-        throw new Error("EDUCATION_REQUIREMENT_NOT_FOUND");
-    }
+  if (!vacancy.education_requirement) {
+    throw new Error("EDUCATION_REQUIREMENT_NOT_FOUND");
+  }
 
-    return vacancy;
+  return vacancy;
 };
-
 
 /**
  * ============================================================
@@ -80,176 +89,126 @@ export const getSchoolAdministrationVacancyRequirements = async (
  *   description
  */
 
-const getMinimumEducationIncrement = async (
-    client,
-    requirement
-) => {
+const getMinimumEducationIncrement = async (client, requirement) => {
+  const value = normalizeText(requirement);
 
-    const value = normalizeText(requirement);
+  if (
+    !value ||
+    value.includes("NONE REQUIRED") ||
+    value.includes("NOT REQUIRED")
+  ) {
+    return 1;
+  }
+
+  let educationLevel = null;
+
+  // ----------------------------------------------------------
+  // DOCTORATE
+  // ----------------------------------------------------------
+
+  if (value.includes("DOCTORATE")) {
+    const unitMatch = value.match(/(\d+)\s*(?:UNITS?|UNIT)/);
+
+    if (unitMatch) {
+      const units = Number(unitMatch[1]);
+
+      const allowedUnits = [
+        3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42,
+      ];
+
+      const validUnits = allowedUnits
+        .filter((unit) => unit <= units)
+        .sort((a, b) => b - a)[0];
+
+      if (validUnits) {
+        educationLevel = `DOCTORATE ${validUnits} UNITS`;
+      }
+    }
+
+    if (value.includes("COMPLETE ACADEMIC") || value.includes("CAR")) {
+      educationLevel = "DOCTORATE CAR";
+    }
+
+    if (value.includes("DOCTORATE DEGREE") || value === "DOCTORATE") {
+      educationLevel = "DOCTORATE DEGREE";
+    }
+  }
+
+  // ----------------------------------------------------------
+  // MASTER'S
+  // ----------------------------------------------------------
+
+  if (!educationLevel && value.includes("MASTER")) {
+    const unitMatch = value.match(/(\d+)\s*(?:UNITS?|UNIT)/);
+
+    if (unitMatch) {
+      const units = Number(unitMatch[1]);
+
+      const allowedUnits = [6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42];
+
+      const validUnits = allowedUnits
+        .filter((unit) => unit <= units)
+        .sort((a, b) => b - a)[0];
+
+      if (validUnits) {
+        educationLevel = `MASTER'S ${validUnits} UNITS`;
+      }
+    }
+
+    if (value.includes("COMPLETE ACADEMIC") || value.includes("CAR")) {
+      educationLevel = "MASTER'S CAR";
+    }
 
     if (
-        !value ||
-        value.includes("NONE REQUIRED") ||
-        value.includes("NOT REQUIRED")
+      !educationLevel &&
+      (value.includes("MASTER'S DEGREE") ||
+        value.includes("MASTERS DEGREE") ||
+        value === "MASTER'S")
     ) {
-        return 1;
+      educationLevel = "MASTER'S DEGREE";
     }
+  }
 
-    let educationLevel = null;
+  // ----------------------------------------------------------
+  // BACHELOR'S
+  // ----------------------------------------------------------
 
-    // ----------------------------------------------------------
-    // DOCTORATE
-    // ----------------------------------------------------------
+  if (
+    !educationLevel &&
+    (value.includes("BACHELOR") || value.includes("BACHELOR'S"))
+  ) {
+    educationLevel = "BACHELOR'S DEGREE";
+  }
 
-    if (value.includes("DOCTORATE")) {
+  // ----------------------------------------------------------
+  // COLLEGE
+  // ----------------------------------------------------------
 
-        const unitMatch = value.match(
-            /(\d+)\s*(?:UNITS?|UNIT)/
-        );
+  if (!educationLevel && value.includes("2 YEARS")) {
+    educationLevel = "2 YEARS COLLEGE";
+  }
 
-        if (unitMatch) {
+  if (!educationLevel && value.includes("COLLEGE")) {
+    educationLevel = "2 YEARS COLLEGE";
+  }
 
-            const units = Number(unitMatch[1]);
+  // ----------------------------------------------------------
+  // HIGH SCHOOL
+  // ----------------------------------------------------------
 
-            const allowedUnits = [
-                3, 6, 9, 12, 15, 18,
-                21, 24, 27, 30, 33,
-                36, 39, 42
-            ];
+  if (
+    !educationLevel &&
+    (value.includes("SENIOR HIGH") || value.includes("HIGH SCHOOL"))
+  ) {
+    educationLevel = "SENIOR HIGH SCHOOL";
+  }
 
-            const validUnits = allowedUnits
-                .filter(unit => unit <= units)
-                .sort((a, b) => b - a)[0];
+  if (!educationLevel) {
+    throw new Error(`UNSUPPORTED_EDUCATION_REQUIREMENT: ${requirement}`);
+  }
 
-            if (validUnits) {
-                educationLevel = `DOCTORATE ${validUnits} UNITS`;
-            }
-        }
-
-        if (
-            value.includes("COMPLETE ACADEMIC") ||
-            value.includes("CAR")
-        ) {
-            educationLevel = "DOCTORATE CAR";
-        }
-
-        if (
-            value.includes("DOCTORATE DEGREE") ||
-            value === "DOCTORATE"
-        ) {
-            educationLevel = "DOCTORATE DEGREE";
-        }
-    }
-
-
-    // ----------------------------------------------------------
-    // MASTER'S
-    // ----------------------------------------------------------
-
-    if (!educationLevel && value.includes("MASTER")) {
-
-        const unitMatch = value.match(
-            /(\d+)\s*(?:UNITS?|UNIT)/
-        );
-
-        if (unitMatch) {
-
-            const units = Number(unitMatch[1]);
-
-            const allowedUnits = [
-                6, 9, 12, 15, 18,
-                21, 24, 27, 30,
-                33, 36, 39, 42
-            ];
-
-            const validUnits = allowedUnits
-                .filter(unit => unit <= units)
-                .sort((a, b) => b - a)[0];
-
-            if (validUnits) {
-                educationLevel = `MASTER'S ${validUnits} UNITS`;
-            }
-        }
-
-        if (
-            value.includes("COMPLETE ACADEMIC") ||
-            value.includes("CAR")
-        ) {
-            educationLevel = "MASTER'S CAR";
-        }
-
-        if (
-            !educationLevel &&
-            (
-                value.includes("MASTER'S DEGREE") ||
-                value.includes("MASTERS DEGREE") ||
-                value === "MASTER'S"
-            )
-        ) {
-            educationLevel = "MASTER'S DEGREE";
-        }
-    }
-
-
-    // ----------------------------------------------------------
-    // BACHELOR'S
-    // ----------------------------------------------------------
-
-    if (
-        !educationLevel &&
-        (
-            value.includes("BACHELOR") ||
-            value.includes("BACHELOR'S")
-        )
-    ) {
-        educationLevel = "BACHELOR'S DEGREE";
-    }
-
-
-    // ----------------------------------------------------------
-    // COLLEGE
-    // ----------------------------------------------------------
-
-    if (
-        !educationLevel &&
-        value.includes("2 YEARS")
-    ) {
-        educationLevel = "2 YEARS COLLEGE";
-    }
-
-
-    if (
-        !educationLevel &&
-        value.includes("COLLEGE")
-    ) {
-        educationLevel = "2 YEARS COLLEGE";
-    }
-
-
-    // ----------------------------------------------------------
-    // HIGH SCHOOL
-    // ----------------------------------------------------------
-
-    if (
-        !educationLevel &&
-        (
-            value.includes("SENIOR HIGH") ||
-            value.includes("HIGH SCHOOL")
-        )
-    ) {
-        educationLevel = "HIGH SCHOOL GRADUATE";
-    }
-
-
-    if (!educationLevel) {
-        throw new Error(
-            `UNSUPPORTED_EDUCATION_REQUIREMENT: ${requirement}`
-        );
-    }
-
-
-    const ruleResult = await client.query(
-        `
+  const ruleResult = await client.query(
+    `
         SELECT
             education_level,
             increment_level,
@@ -258,22 +217,15 @@ const getMinimumEducationIncrement = async (
         WHERE UPPER(education_level) = $1
         LIMIT 1
         `,
-        [educationLevel]
-    );
+    [getApplicantEducationRuleLevel(educationLevel)],
+  );
 
+  if (ruleResult.rows.length === 0) {
+    throw new Error(`SCHOOL_ADMIN_EDUCATION_RULE_NOT_FOUND: ${educationLevel}`);
+  }
 
-    if (ruleResult.rows.length === 0) {
-        throw new Error(
-            `SCHOOL_ADMIN_EDUCATION_RULE_NOT_FOUND: ${educationLevel}`
-        );
-    }
-
-
-    return Number(
-        ruleResult.rows[0].increment_level
-    );
+  return Number(ruleResult.rows[0].increment_level);
 };
-
 
 /**
  * ============================================================
@@ -281,33 +233,27 @@ const getMinimumEducationIncrement = async (
  * ============================================================
  */
 
-const getMinimumTrainingIncrement = async (
-    client,
-    requirement
-) => {
+const getMinimumTrainingIncrement = async (client, requirement) => {
+  const value = normalizeText(requirement);
 
-    const value = normalizeText(requirement);
+  if (
+    !value ||
+    value.includes("NONE REQUIRED") ||
+    value.includes("NOT REQUIRED")
+  ) {
+    return 1;
+  }
 
-    if (
-        !value ||
-        value.includes("NONE REQUIRED") ||
-        value.includes("NOT REQUIRED")
-    ) {
-        return 1;
-    }
+  const match = value.match(/(\d+(?:\.\d+)?)\s*(?:HOURS?|HOUR)/);
 
-    const match = value.match(
-        /(\d+(?:\.\d+)?)\s*(?:HOURS?|HOUR)/
-    );
+  if (!match) {
+    return 1;
+  }
 
-    if (!match) {
-        return 1;
-    }
+  const minimumHours = Number(match[1]);
 
-    const minimumHours = Number(match[1]);
-
-    const ruleResult = await client.query(
-        `
+  const ruleResult = await client.query(
+    `
         SELECT
             increment_level
         FROM school_admin_training_increment_rules
@@ -319,20 +265,15 @@ const getMinimumTrainingIncrement = async (
         ORDER BY increment_level DESC
         LIMIT 1
         `,
-        [minimumHours]
-    );
+    [minimumHours],
+  );
 
+  if (ruleResult.rows.length === 0) {
+    return 1;
+  }
 
-    if (ruleResult.rows.length === 0) {
-        return 1;
-    }
-
-
-    return Number(
-        ruleResult.rows[0].increment_level
-    );
+  return Number(ruleResult.rows[0].increment_level);
 };
-
 
 /**
  * ============================================================
@@ -340,59 +281,45 @@ const getMinimumTrainingIncrement = async (
  * ============================================================
  */
 
-const getMinimumExperienceIncrement = async (
-    client,
-    requirement
-) => {
+const getMinimumExperienceIncrement = async (client, requirement) => {
+  const value = normalizeText(requirement);
 
-    const value = normalizeText(requirement);
+  if (
+    !value ||
+    value.includes("NONE REQUIRED") ||
+    value.includes("NOT REQUIRED")
+  ) {
+    return 1;
+  }
 
-    if (
-        !value ||
-        value.includes("NONE REQUIRED") ||
-        value.includes("NOT REQUIRED")
-    ) {
-        return 1;
-    }
+  let totalMonths = 0;
 
-    let totalMonths = 0;
+  // ----------------------------------------------------------
+  // YEARS
+  // ----------------------------------------------------------
 
+  const yearMatch = value.match(/(\d+(?:\.\d+)?)\s*(?:YEARS?|YEAR)/);
 
-    // ----------------------------------------------------------
-    // YEARS
-    // ----------------------------------------------------------
+  if (yearMatch) {
+    totalMonths += Number(yearMatch[1]) * 12;
+  }
 
-    const yearMatch = value.match(
-        /(\d+(?:\.\d+)?)\s*(?:YEARS?|YEAR)/
-    );
+  // ----------------------------------------------------------
+  // MONTHS
+  // ----------------------------------------------------------
 
-    if (yearMatch) {
-        totalMonths +=
-            Number(yearMatch[1]) * 12;
-    }
+  const monthMatch = value.match(/(\d+(?:\.\d+)?)\s*(?:MONTHS?|MONTH)/);
 
+  if (monthMatch) {
+    totalMonths += Number(monthMatch[1]);
+  }
 
-    // ----------------------------------------------------------
-    // MONTHS
-    // ----------------------------------------------------------
+  if (totalMonths === 0) {
+    return 1;
+  }
 
-    const monthMatch = value.match(
-        /(\d+(?:\.\d+)?)\s*(?:MONTHS?|MONTH)/
-    );
-
-    if (monthMatch) {
-        totalMonths +=
-            Number(monthMatch[1]);
-    }
-
-
-    if (totalMonths === 0) {
-        return 1;
-    }
-
-
-    const ruleResult = await client.query(
-        `
+  const ruleResult = await client.query(
+    `
         SELECT
             increment_level
         FROM school_admin_experience_increment_rules
@@ -404,20 +331,15 @@ const getMinimumExperienceIncrement = async (
         ORDER BY increment_level DESC
         LIMIT 1
         `,
-        [totalMonths]
-    );
+    [totalMonths],
+  );
 
+  if (ruleResult.rows.length === 0) {
+    return 1;
+  }
 
-    if (ruleResult.rows.length === 0) {
-        return 1;
-    }
-
-
-    return Number(
-        ruleResult.rows[0].increment_level
-    );
+  return Number(ruleResult.rows[0].increment_level);
 };
-
 
 /**
  * ============================================================
@@ -425,13 +347,9 @@ const getMinimumExperienceIncrement = async (
  * ============================================================
  */
 
-const getEducationPoints = async (
-    client,
-    increment
-) => {
-
-    const result = await client.query(
-        `
+const getEducationPoints = async (client, increment) => {
+  const result = await client.query(
+    `
         SELECT points
         FROM school_admin_education_point_rules
         WHERE increment_from <= $1
@@ -442,23 +360,15 @@ const getEducationPoints = async (
         ORDER BY increment_from DESC
         LIMIT 1
         `,
-        [increment]
-    );
+    [increment],
+  );
 
-
-    return result.rows.length > 0
-        ? Number(result.rows[0].points || 0)
-        : 0;
+  return result.rows.length > 0 ? Number(result.rows[0].points || 0) : 0;
 };
 
-
-const getTrainingPoints = async (
-    client,
-    increment
-) => {
-
-    const result = await client.query(
-        `
+const getTrainingPoints = async (client, increment) => {
+  const result = await client.query(
+    `
         SELECT points
         FROM school_admin_training_point_rules
         WHERE increment_from <= $1
@@ -469,23 +379,15 @@ const getTrainingPoints = async (
         ORDER BY increment_from DESC
         LIMIT 1
         `,
-        [increment]
-    );
+    [increment],
+  );
 
-
-    return result.rows.length > 0
-        ? Number(result.rows[0].points || 0)
-        : 0;
+  return result.rows.length > 0 ? Number(result.rows[0].points || 0) : 0;
 };
 
-
-const getExperiencePoints = async (
-    client,
-    increment
-) => {
-
-    const result = await client.query(
-        `
+const getExperiencePoints = async (client, increment) => {
+  const result = await client.query(
+    `
         SELECT points
         FROM school_admin_experience_point_rules
         WHERE increment_from <= $1
@@ -496,15 +398,11 @@ const getExperiencePoints = async (
         ORDER BY increment_from DESC
         LIMIT 1
         `,
-        [increment]
-    );
+    [increment],
+  );
 
-
-    return result.rows.length > 0
-        ? Number(result.rows[0].points || 0)
-        : 0;
+  return result.rows.length > 0 ? Number(result.rows[0].points || 0) : 0;
 };
-
 
 /**
  * ============================================================
@@ -515,362 +413,250 @@ const getExperiencePoints = async (
  */
 
 export const calculateSchoolAdministrationEducation = async (
-    client,
-    applicantId,
-    minimumEducationIncrement
+  client,
+  applicantId,
+  minimumEducationIncrement,
 ) => {
+  const educationResult = await client.query(
+    `
+      SELECT
+        education_id,
+        education_level,
+        school_name,
+        degree_course,
+        honors_awards,
+        units
+      FROM education
+      WHERE applicant_id = $1
+      ORDER BY education_id ASC
+    `,
+    [applicantId],
+  );
 
-    const educationResult = await client.query(
-        `
-        SELECT
-            education_id,
-            education_level,
-            school_name,
-            degree_course,
-            honors_awards,
-            units
-        FROM education
-        WHERE applicant_id = $1
-        ORDER BY education_id ASC
-        `,
-        [applicantId]
-    );
+  const educationList = educationResult.rows;
 
+  if (educationList.length === 0) {
+    return {
+      value: null,
+      applicantIncrement: 0,
+      minimumIncrement: minimumEducationIncrement,
+      incrementsAboveMinimum: 0,
+      points: 0,
+      educationLevel: null,
+      units: null,
+      qualified: false,
+    };
+  }
 
-    const educationList =
-        educationResult.rows;
+  let highestIncrement = 0;
+  let selectedEducation = null;
 
-
-    if (educationList.length === 0) {
-
-        return {
-            value: null,
-            applicantIncrement: 0,
-            minimumIncrement:
-                minimumEducationIncrement,
-            incrementsAboveMinimum: 0,
-            points: 0,
-            educationLevel: null,
-            units: null,
-            qualified: false
-        };
-    }
-
-
-    let highestIncrement = 0;
-    let selectedEducation = null;
-
+  for (const education of educationList) {
+    const educationLevel = normalizeText(education.education_level);
+    let incrementLevel = null;
 
     // ----------------------------------------------------------
-    // CHECK EACH EDUCATION RECORD
+    // MASTER'S DEGREE WITH COMPLETED UNITS
     // ----------------------------------------------------------
-
-    for (const education of educationList) {
-
-        let educationLevel =
-            normalizeText(
-                education.education_level
-            );
-
-        let incrementLevel = null;
-
-
-        // ------------------------------------------------------
-        // MASTER'S WITH UNITS
-        // ------------------------------------------------------
-
-        if (
-            educationLevel === "MASTER'S DEGREE" ||
-            educationLevel === "MASTERS DEGREE"
-        ) {
-
-            const units =
-                Number(education.units);
-
-            if (
-                !Number.isNaN(units) &&
-                units >= 6
-            ) {
-
-                const allowedUnits = [
-                    6, 9, 12, 15,
-                    18, 21, 24,
-                    27, 30, 33,
-                    36, 39, 42
-                ];
-
-                const matchedUnits =
-                    allowedUnits
-                        .filter(unit => unit <= units)
-                        .sort((a, b) => b - a)[0];
-
-
-                if (matchedUnits) {
-
-                    const ruleResult =
-                        await client.query(
-                            `
-                            SELECT increment_level
-                            FROM school_admin_education_increment_rules
-                            WHERE UPPER(education_level) = $1
-                            LIMIT 1
-                            `,
-                            [
-                                `MASTER'S ${matchedUnits} UNITS`
-                            ]
-                        );
-
-
-                    if (
-                        ruleResult.rows.length > 0
-                    ) {
-
-                        incrementLevel =
-                            Number(
-                                ruleResult.rows[0]
-                                    .increment_level
-                            );
-                    }
-                }
-            }
-
-
-            // Master's degree itself
-
-            if (incrementLevel === null) {
-
-                const ruleResult =
-                    await client.query(
-                        `
-                        SELECT increment_level
-                        FROM school_admin_education_increment_rules
-                        WHERE UPPER(education_level)
-                            = 'MASTER''S DEGREE'
-                        LIMIT 1
-                        `
-                    );
-
-
-                if (
-                    ruleResult.rows.length > 0
-                ) {
-
-                    incrementLevel =
-                        Number(
-                            ruleResult.rows[0]
-                                .increment_level
-                        );
-                }
-            }
-        }
-
-
-        // ------------------------------------------------------
-        // DOCTORATE
-        // ------------------------------------------------------
-
-        else if (
-            educationLevel === "DOCTORATE DEGREE" ||
-            educationLevel === "DOCTORATE"
-        ) {
-
-            const units =
-                Number(education.units);
-
-            if (
-                !Number.isNaN(units) &&
-                units >= 3
-            ) {
-
-                const allowedUnits = [
-                    3, 6, 9, 12,
-                    15, 18, 21,
-                    24, 27, 30,
-                    33, 36, 39,
-                    42
-                ];
-
-                const matchedUnits =
-                    allowedUnits
-                        .filter(unit => unit <= units)
-                        .sort((a, b) => b - a)[0];
-
-
-                if (matchedUnits) {
-
-                    const ruleResult =
-                        await client.query(
-                            `
-                            SELECT increment_level
-                            FROM school_admin_education_increment_rules
-                            WHERE UPPER(education_level) = $1
-                            LIMIT 1
-                            `,
-                            [
-                                `DOCTORATE ${matchedUnits} UNITS`
-                            ]
-                        );
-
-
-                    if (
-                        ruleResult.rows.length > 0
-                    ) {
-
-                        incrementLevel =
-                            Number(
-                                ruleResult.rows[0]
-                                    .increment_level
-                            );
-                    }
-                }
-            }
-
-
-            if (incrementLevel === null) {
-
-                const ruleResult =
-                    await client.query(
-                        `
-                        SELECT increment_level
-                        FROM school_admin_education_increment_rules
-                        WHERE UPPER(education_level)
-                            = 'DOCTORATE DEGREE'
-                        LIMIT 1
-                        `
-                    );
-
-
-                if (
-                    ruleResult.rows.length > 0
-                ) {
-
-                    incrementLevel =
-                        Number(
-                            ruleResult.rows[0]
-                                .increment_level
-                        );
-                }
-            }
-        }
-
-
-        // ------------------------------------------------------
-        // OTHER EDUCATION LEVELS
-        // ------------------------------------------------------
-
-        else {
-
-            const ruleResult =
-                await client.query(
-                    `
-                    SELECT increment_level
-                    FROM school_admin_education_increment_rules
-                    WHERE UPPER(education_level) = $1
-                    LIMIT 1
-                    `,
-                    [educationLevel]
-                );
-
-
-            if (
-                ruleResult.rows.length > 0
-            ) {
-
-                incrementLevel =
-                    Number(
-                        ruleResult.rows[0]
-                            .increment_level
-                    );
-            }
-        }
-
-
-        // ------------------------------------------------------
-        // KEEP HIGHEST EDUCATION
-        // ------------------------------------------------------
-
-        if (
-            incrementLevel !== null &&
-            incrementLevel > highestIncrement
-        ) {
-
-            highestIncrement =
-                incrementLevel;
-
-            selectedEducation =
-                education;
-        }
-    }
-
 
     if (
-        !selectedEducation ||
-        highestIncrement === 0
+      educationLevel === "MASTER'S DEGREE" ||
+      educationLevel === "MASTERS DEGREE"
     ) {
+      const units = Number(education.units);
 
-        return {
-            value: null,
-            applicantIncrement: 0,
-            minimumIncrement:
-                minimumEducationIncrement,
-            incrementsAboveMinimum: 0,
-            points: 0,
-            educationLevel: null,
-            units: null,
-            qualified: false
-        };
+      if (Number.isFinite(units) && units >= 6) {
+        const allowedUnits = [
+          6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42,
+        ];
+
+        const matchedUnits = allowedUnits
+          .filter((unit) => unit <= units)
+          .sort((a, b) => b - a)[0];
+
+        if (matchedUnits) {
+          const ruleName = `MASTER'S ${matchedUnits} UNITS`;
+
+          // First, use School Administration rules.
+          let ruleResult = await client.query(
+            `
+              SELECT increment_level
+              FROM school_admin_education_increment_rules
+              WHERE UPPER(TRIM(education_level)) = $1
+              LIMIT 1
+            `,
+            [ruleName],
+          );
+
+          // If no School Administration rule exists,
+          // fall back to the existing Teacher I unit rules.
+          if (ruleResult.rows.length === 0) {
+            ruleResult = await client.query(
+              `
+                SELECT increment_level
+                FROM teacher_i_education_rules
+                WHERE UPPER(TRIM(education_type)) = 'MASTER''S DEGREE'
+                  AND units = $1
+                LIMIT 1
+              `,
+              [matchedUnits],
+            );
+          }
+
+          if (ruleResult.rows.length > 0) {
+            incrementLevel = Number(
+              ruleResult.rows[0].increment_level,
+            );
+          }
+        }
+      }
+
+      // If no unit-specific rule matched, try the general
+      // Master's Degree rule in School Administration.
+      if (incrementLevel === null) {
+        const ruleResult = await client.query(
+          `
+            SELECT increment_level
+            FROM school_admin_education_increment_rules
+            WHERE UPPER(TRIM(education_level)) = 'MASTER''S DEGREE'
+            LIMIT 1
+          `,
+        );
+
+        if (ruleResult.rows.length > 0) {
+          incrementLevel = Number(
+            ruleResult.rows[0].increment_level,
+          );
+        }
+      }
     }
 
-
     // ----------------------------------------------------------
-    // INCREMENTS ABOVE MINIMUM QS
+    // DOCTORATE DEGREE
     // ----------------------------------------------------------
 
-    const incrementsAboveMinimum =
-        Math.max(
-            0,
-            highestIncrement -
-                minimumEducationIncrement
+    else if (
+      educationLevel === "DOCTORATE DEGREE" ||
+      educationLevel === "DOCTORATE"
+    ) {
+      const units = Number(education.units);
+
+      if (Number.isFinite(units) && units >= 3) {
+        const allowedUnits = [
+          3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42,
+        ];
+
+        const matchedUnits = allowedUnits
+          .filter((unit) => unit <= units)
+          .sort((a, b) => b - a)[0];
+
+        if (matchedUnits) {
+          const ruleResult = await client.query(
+            `
+              SELECT increment_level
+              FROM school_admin_education_increment_rules
+              WHERE UPPER(TRIM(education_level)) = $1
+              LIMIT 1
+            `,
+            [`DOCTORATE ${matchedUnits} UNITS`],
+          );
+
+          if (ruleResult.rows.length > 0) {
+            incrementLevel = Number(
+              ruleResult.rows[0].increment_level,
+            );
+          }
+        }
+      }
+
+      if (incrementLevel === null) {
+        const ruleResult = await client.query(
+          `
+            SELECT increment_level
+            FROM school_admin_education_increment_rules
+            WHERE UPPER(TRIM(education_level)) = 'DOCTORATE DEGREE'
+            LIMIT 1
+          `,
         );
 
+        if (ruleResult.rows.length > 0) {
+          incrementLevel = Number(
+            ruleResult.rows[0].increment_level,
+          );
+        }
+      }
+    }
 
     // ----------------------------------------------------------
-    // POINTS
+    // OTHER EDUCATION LEVELS
     // ----------------------------------------------------------
 
-    const points =
-        await getEducationPoints(
-            client,
-            incrementsAboveMinimum
+    else {
+      const ruleResult = await client.query(
+        `
+          SELECT increment_level
+          FROM school_admin_education_increment_rules
+          WHERE UPPER(TRIM(education_level)) = $1
+          LIMIT 1
+        `,
+        [getApplicantEducationRuleLevel(educationLevel)],
+      );
+
+      if (ruleResult.rows.length > 0) {
+        incrementLevel = Number(
+          ruleResult.rows[0].increment_level,
         );
+      }
+    }
 
+    // ----------------------------------------------------------
+    // KEEP THE HIGHEST MATCHED EDUCATION INCREMENT
+    // ----------------------------------------------------------
 
+    if (
+      incrementLevel !== null &&
+      Number.isFinite(incrementLevel) &&
+      incrementLevel > highestIncrement
+    ) {
+      highestIncrement = incrementLevel;
+      selectedEducation = education;
+    }
+  }
+
+  if (!selectedEducation || highestIncrement === 0) {
     return {
-
-        value:
-            selectedEducation.education_level,
-
-        applicantIncrement:
-            highestIncrement,
-
-        minimumIncrement:
-            minimumEducationIncrement,
-
-        incrementsAboveMinimum,
-
-        points:
-            Math.min(points, 10),
-
-        educationLevel:
-            selectedEducation.education_level,
-
-        units:
-            selectedEducation.units ?? null,
-
-        qualified:
-            highestIncrement >=
-            minimumEducationIncrement
+      value: null,
+      applicantIncrement: 0,
+      minimumIncrement: minimumEducationIncrement,
+      incrementsAboveMinimum: 0,
+      points: 0,
+      educationLevel: null,
+      units: null,
+      qualified: false,
     };
+  }
+
+  const incrementsAboveMinimum = Math.max(
+    0,
+    highestIncrement - minimumEducationIncrement,
+  );
+
+  // Use the applicant's absolute increment for the points lookup.
+  const points = await getEducationPoints(
+    client,
+    highestIncrement,
+  );
+
+  return {
+    value: selectedEducation.education_level,
+    applicantIncrement: highestIncrement,
+    minimumIncrement: minimumEducationIncrement,
+    incrementsAboveMinimum,
+    points: Math.min(points, 10),
+    educationLevel: selectedEducation.education_level,
+    units: selectedEducation.units ?? null,
+    qualified: highestIncrement >= minimumEducationIncrement,
+  };
 };
 
 
@@ -883,14 +669,12 @@ export const calculateSchoolAdministrationEducation = async (
  */
 
 export const calculateSchoolAdministrationTraining = async (
-    client,
-    applicantId,
-    minimumTrainingIncrement
+  client,
+  applicantId,
+  minimumTrainingIncrement,
 ) => {
-
-    const trainingResult =
-        await client.query(
-            `
+  const trainingResult = await client.query(
+    `
             SELECT
                 COALESCE(
                     SUM(
@@ -901,24 +685,19 @@ export const calculateSchoolAdministrationTraining = async (
             FROM relevant_trainings
             WHERE applicant_id = $1
             `,
-            [applicantId]
-        );
+    [applicantId],
+  );
 
+  const totalTrainingHours = Number(
+    trainingResult.rows[0]?.total_training_hours || 0,
+  );
 
-    const totalTrainingHours =
-        Number(
-            trainingResult.rows[0]
-                ?.total_training_hours || 0
-        );
+  // ----------------------------------------------------------
+  // APPLICANT TRAINING INCREMENT
+  // ----------------------------------------------------------
 
-
-    // ----------------------------------------------------------
-    // APPLICANT TRAINING INCREMENT
-    // ----------------------------------------------------------
-
-    const incrementResult =
-        await client.query(
-            `
+  const incrementResult = await client.query(
+    `
             SELECT
                 increment_level,
                 hours_from,
@@ -933,63 +712,43 @@ export const calculateSchoolAdministrationTraining = async (
             ORDER BY increment_level DESC
             LIMIT 1
             `,
-            [totalTrainingHours]
-        );
+    [totalTrainingHours],
+  );
 
+  const applicantIncrement =
+    incrementResult.rows.length > 0
+      ? Number(incrementResult.rows[0].increment_level)
+      : 1;
 
-    const applicantIncrement =
-        incrementResult.rows.length > 0
-            ? Number(
-                incrementResult.rows[0]
-                    .increment_level
-            )
-            : 1;
+  // ----------------------------------------------------------
+  // INCREMENTS ABOVE MINIMUM QS
+  // ----------------------------------------------------------
 
+  const incrementsAboveMinimum = Math.max(
+    0,
+    applicantIncrement - minimumTrainingIncrement,
+  );
 
-    // ----------------------------------------------------------
-    // INCREMENTS ABOVE MINIMUM QS
-    // ----------------------------------------------------------
+  // ----------------------------------------------------------
+  // POINTS
+  // ----------------------------------------------------------
 
-    const incrementsAboveMinimum =
-        Math.max(
-            0,
-            applicantIncrement -
-                minimumTrainingIncrement
-        );
+  const points = await getTrainingPoints(client, incrementsAboveMinimum);
 
+  return {
+    hours: totalTrainingHours,
 
-    // ----------------------------------------------------------
-    // POINTS
-    // ----------------------------------------------------------
+    applicantIncrement,
 
-    const points =
-        await getTrainingPoints(
-            client,
-            incrementsAboveMinimum
-        );
+    minimumIncrement: minimumTrainingIncrement,
 
+    incrementsAboveMinimum,
 
-    return {
+    points: Math.min(points, 10),
 
-        hours:
-            totalTrainingHours,
-
-        applicantIncrement,
-
-        minimumIncrement:
-            minimumTrainingIncrement,
-
-        incrementsAboveMinimum,
-
-        points:
-            Math.min(points, 10),
-
-        qualified:
-            applicantIncrement >=
-            minimumTrainingIncrement
-    };
+    qualified: applicantIncrement >= minimumTrainingIncrement,
+  };
 };
-
 
 /**
  * ============================================================
@@ -1000,14 +759,12 @@ export const calculateSchoolAdministrationTraining = async (
  */
 
 export const calculateSchoolAdministrationExperience = async (
-    client,
-    applicantId,
-    minimumExperienceIncrement
+  client,
+  applicantId,
+  minimumExperienceIncrement,
 ) => {
-
-    const experienceResult =
-        await client.query(
-            `
+  const experienceResult = await client.query(
+    `
             SELECT
                 work_experience_id,
                 date_from,
@@ -1020,220 +777,134 @@ export const calculateSchoolAdministrationExperience = async (
               AND date_from IS NOT NULL
             ORDER BY date_from ASC
             `,
-            [applicantId]
-        );
+    [applicantId],
+  );
 
+  const experienceList = experienceResult.rows;
 
-    const experienceList =
-        experienceResult.rows;
+  if (experienceList.length === 0) {
+    return {
+      months: 0,
+      applicantIncrement: 1,
+      minimumIncrement: minimumExperienceIncrement,
+      incrementsAboveMinimum: 0,
+      points: 0,
+      records: [],
+      mergedPeriods: [],
+      qualified: 1 >= minimumExperienceIncrement,
+    };
+  }
 
+  // ----------------------------------------------------------
+  // PREPARE EXPERIENCE PERIODS
+  // ----------------------------------------------------------
 
-    if (experienceList.length === 0) {
+  const periods = experienceList
+    .map((experience) => {
+      const start = new Date(experience.date_from);
 
-        return {
-            months: 0,
-            applicantIncrement: 1,
-            minimumIncrement:
-                minimumExperienceIncrement,
-            incrementsAboveMinimum: 0,
-            points: 0,
-            records: [],
-            mergedPeriods: [],
-            qualified:
-                1 >= minimumExperienceIncrement
-        };
+      const end = experience.date_to
+        ? new Date(experience.date_to)
+        : new Date();
+
+      return {
+        start,
+        end,
+
+        workExperienceId: experience.work_experience_id,
+
+        companyOffice: experience.company_office,
+
+        appointmentStatus: experience.appointment_status,
+
+        isGovtService: experience.is_govt_service,
+      };
+    })
+    .filter(
+      (period) =>
+        !Number.isNaN(period.start.getTime()) &&
+        !Number.isNaN(period.end.getTime()) &&
+        period.end >= period.start,
+    )
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  if (periods.length === 0) {
+    return {
+      months: 0,
+      applicantIncrement: 1,
+      minimumIncrement: minimumExperienceIncrement,
+      incrementsAboveMinimum: 0,
+      points: 0,
+      records: experienceList,
+      mergedPeriods: [],
+      qualified: 1 >= minimumExperienceIncrement,
+    };
+  }
+
+  // ----------------------------------------------------------
+  // MERGE OVERLAPPING / CONTINUOUS PERIODS
+  // ----------------------------------------------------------
+
+  const mergedPeriods = [];
+
+  for (const period of periods) {
+    if (mergedPeriods.length === 0) {
+      mergedPeriods.push({
+        start: period.start,
+        end: period.end,
+        records: [period],
+      });
+
+      continue;
     }
 
+    const last = mergedPeriods[mergedPeriods.length - 1];
 
-    // ----------------------------------------------------------
-    // PREPARE EXPERIENCE PERIODS
-    // ----------------------------------------------------------
+    const dayAfterLast = new Date(last.end);
 
-    const periods =
-        experienceList
-            .map(experience => {
+    dayAfterLast.setDate(dayAfterLast.getDate() + 1);
 
-                const start =
-                    new Date(
-                        experience.date_from
-                    );
+    if (period.start <= dayAfterLast) {
+      if (period.end > last.end) {
+        last.end = period.end;
+      }
 
-                const end =
-                    experience.date_to
-                        ? new Date(
-                            experience.date_to
-                        )
-                        : new Date();
-
-
-                return {
-
-                    start,
-                    end,
-
-                    workExperienceId:
-                        experience.work_experience_id,
-
-                    companyOffice:
-                        experience.company_office,
-
-                    appointmentStatus:
-                        experience.appointment_status,
-
-                    isGovtService:
-                        experience.is_govt_service
-                };
-            })
-            .filter(period =>
-                !Number.isNaN(
-                    period.start.getTime()
-                ) &&
-                !Number.isNaN(
-                    period.end.getTime()
-                ) &&
-                period.end >= period.start
-            )
-            .sort(
-                (a, b) =>
-                    a.start.getTime() -
-                    b.start.getTime()
-            );
-
-
-    if (periods.length === 0) {
-
-        return {
-            months: 0,
-            applicantIncrement: 1,
-            minimumIncrement:
-                minimumExperienceIncrement,
-            incrementsAboveMinimum: 0,
-            points: 0,
-            records: experienceList,
-            mergedPeriods: [],
-            qualified:
-                1 >= minimumExperienceIncrement
-        };
+      last.records.push(period);
+    } else {
+      mergedPeriods.push({
+        start: period.start,
+        end: period.end,
+        records: [period],
+      });
     }
+  }
 
+  // ----------------------------------------------------------
+  // TOTAL EXPERIENCE DAYS
+  // ----------------------------------------------------------
 
-    // ----------------------------------------------------------
-    // MERGE OVERLAPPING / CONTINUOUS PERIODS
-    // ----------------------------------------------------------
+  let totalDays = 0;
 
-    const mergedPeriods = [];
+  for (const period of mergedPeriods) {
+    const difference = period.end.getTime() - period.start.getTime();
 
+    const days = Math.floor(difference / (1000 * 60 * 60 * 24)) + 1;
 
-    for (const period of periods) {
+    totalDays += days;
+  }
 
-        if (
-            mergedPeriods.length === 0
-        ) {
+  // ----------------------------------------------------------
+  // CONVERT DAYS TO MONTHS
+  // ----------------------------------------------------------
 
-            mergedPeriods.push({
-                start: period.start,
-                end: period.end,
-                records: [period]
-            });
+  const totalMonths = Math.floor(totalDays / 30.4375);
 
-            continue;
-        }
+  // ----------------------------------------------------------
+  // APPLICANT EXPERIENCE INCREMENT
+  // ----------------------------------------------------------
 
-
-        const last =
-            mergedPeriods[
-                mergedPeriods.length - 1
-            ];
-
-
-        const dayAfterLast =
-            new Date(last.end);
-
-
-        dayAfterLast.setDate(
-            dayAfterLast.getDate() + 1
-        );
-
-
-        if (
-            period.start <=
-            dayAfterLast
-        ) {
-
-            if (
-                period.end >
-                last.end
-            ) {
-
-                last.end =
-                    period.end;
-            }
-
-
-            last.records.push(
-                period
-            );
-
-        } else {
-
-            mergedPeriods.push({
-                start: period.start,
-                end: period.end,
-                records: [period]
-            });
-        }
-    }
-
-
-    // ----------------------------------------------------------
-    // TOTAL EXPERIENCE DAYS
-    // ----------------------------------------------------------
-
-    let totalDays = 0;
-
-
-    for (
-        const period of mergedPeriods
-    ) {
-
-        const difference =
-            period.end.getTime() -
-            period.start.getTime();
-
-
-        const days =
-            Math.floor(
-                difference /
-                (
-                    1000 *
-                    60 *
-                    60 *
-                    24
-                )
-            ) + 1;
-
-
-        totalDays += days;
-    }
-
-
-    // ----------------------------------------------------------
-    // CONVERT DAYS TO MONTHS
-    // ----------------------------------------------------------
-
-    const totalMonths =
-        Math.floor(
-            totalDays / 30.4375
-        );
-
-
-    // ----------------------------------------------------------
-    // APPLICANT EXPERIENCE INCREMENT
-    // ----------------------------------------------------------
-
-    const incrementResult =
-        await client.query(
-            `
+  const incrementResult = await client.query(
+    `
             SELECT
                 increment_level,
                 months_from,
@@ -1248,70 +919,47 @@ export const calculateSchoolAdministrationExperience = async (
             ORDER BY increment_level DESC
             LIMIT 1
             `,
-            [totalMonths]
-        );
+    [totalMonths],
+  );
 
+  const applicantIncrement =
+    incrementResult.rows.length > 0
+      ? Number(incrementResult.rows[0].increment_level)
+      : 1;
 
-    const applicantIncrement =
-        incrementResult.rows.length > 0
-            ? Number(
-                incrementResult.rows[0]
-                    .increment_level
-            )
-            : 1;
+  // ----------------------------------------------------------
+  // INCREMENTS ABOVE MINIMUM QS
+  // ----------------------------------------------------------
 
+  const incrementsAboveMinimum = Math.max(
+    0,
+    applicantIncrement - minimumExperienceIncrement,
+  );
 
-    // ----------------------------------------------------------
-    // INCREMENTS ABOVE MINIMUM QS
-    // ----------------------------------------------------------
+  // ----------------------------------------------------------
+  // POINTS
+  // ----------------------------------------------------------
 
-    const incrementsAboveMinimum =
-        Math.max(
-            0,
-            applicantIncrement -
-                minimumExperienceIncrement
-        );
+  const points = await getExperiencePoints(client, incrementsAboveMinimum);
 
+  return {
+    months: Number(totalMonths.toFixed(2)),
 
-    // ----------------------------------------------------------
-    // POINTS
-    // ----------------------------------------------------------
+    applicantIncrement,
 
-    const points =
-        await getExperiencePoints(
-            client,
-            incrementsAboveMinimum
-        );
+    minimumIncrement: minimumExperienceIncrement,
 
+    incrementsAboveMinimum,
 
-    return {
+    points: Math.min(points, 10),
 
-        months:
-            Number(
-                totalMonths.toFixed(2)
-            ),
+    records: experienceList,
 
-        applicantIncrement,
+    mergedPeriods,
 
-        minimumIncrement:
-            minimumExperienceIncrement,
-
-        incrementsAboveMinimum,
-
-        points:
-            Math.min(points, 10),
-
-        records:
-            experienceList,
-
-        mergedPeriods,
-
-        qualified:
-            applicantIncrement >=
-            minimumExperienceIncrement
-    };
+    qualified: applicantIncrement >= minimumExperienceIncrement,
+  };
 };
-
 
 /**
  * ============================================================
@@ -1327,162 +975,125 @@ export const calculateSchoolAdministrationExperience = async (
  */
 
 export const calculateSchoolAdministrationInitialScreening = async (
+  client,
+  applicantId,
+  vacancyId,
+) => {
+  // ----------------------------------------------------------
+  // 1. GET VACANCY REQUIREMENTS
+  // ----------------------------------------------------------
+
+  const vacancy = await getSchoolAdministrationVacancyRequirements(
+    client,
+    vacancyId,
+  );
+
+  // ----------------------------------------------------------
+  // 2. DETERMINE MINIMUM QS LEVELS
+  // ----------------------------------------------------------
+
+  const minimumEducationIncrement = await getMinimumEducationIncrement(
+    client,
+    vacancy.education_requirement,
+  );
+
+  const minimumTrainingIncrement = await getMinimumTrainingIncrement(
+    client,
+    vacancy.training_requirement,
+  );
+
+  const minimumExperienceIncrement = await getMinimumExperienceIncrement(
+    client,
+    vacancy.experience_requirement,
+  );
+
+  // ----------------------------------------------------------
+  // 3. EDUCATION
+  // ----------------------------------------------------------
+
+  const education = await calculateSchoolAdministrationEducation(
     client,
     applicantId,
-    vacancyId
-) => {
+    minimumEducationIncrement,
+  );
 
-    // ----------------------------------------------------------
-    // 1. GET VACANCY REQUIREMENTS
-    // ----------------------------------------------------------
+  // ----------------------------------------------------------
+  // 4. TRAINING
+  // ----------------------------------------------------------
 
-    const vacancy =
-        await getSchoolAdministrationVacancyRequirements(
-            client,
-            vacancyId
-        );
+  const training = await calculateSchoolAdministrationTraining(
+    client,
+    applicantId,
+    minimumTrainingIncrement,
+  );
 
+  // ----------------------------------------------------------
+  // 5. EXPERIENCE
+  // ----------------------------------------------------------
 
-    // ----------------------------------------------------------
-    // 2. DETERMINE MINIMUM QS LEVELS
-    // ----------------------------------------------------------
+  const experience = await calculateSchoolAdministrationExperience(
+    client,
+    applicantId,
+    minimumExperienceIncrement,
+  );
 
-    const minimumEducationIncrement =
-        await getMinimumEducationIncrement(
-            client,
-            vacancy.education_requirement
-        );
+  // ----------------------------------------------------------
+  // 6. ETE TOTAL
+  // ----------------------------------------------------------
 
+  const total =
+    Number(education.points || 0) +
+    Number(training.points || 0) +
+    Number(experience.points || 0);
 
-    const minimumTrainingIncrement =
-        await getMinimumTrainingIncrement(
-            client,
-            vacancy.training_requirement
-        );
+  // ----------------------------------------------------------
+  // 7. ETE QUALIFICATION RESULT
+  // ----------------------------------------------------------
 
+  const qualifiedByETE =
+    education.qualified && training.qualified && experience.qualified;
 
-    const minimumExperienceIncrement =
-        await getMinimumExperienceIncrement(
-            client,
-            vacancy.experience_requirement
-        );
+  // ----------------------------------------------------------
+  // 8. RETURN COMPLETE RESULT
+  // ----------------------------------------------------------
 
+  return {
+    vacancy: {
+      vacancy_id: vacancy.vacancy_id,
 
-    // ----------------------------------------------------------
-    // 3. EDUCATION
-    // ----------------------------------------------------------
+      position_id: vacancy.position_id,
 
-    const education =
-        await calculateSchoolAdministrationEducation(
-            client,
-            applicantId,
-            minimumEducationIncrement
-        );
+      position_title: vacancy.position_title,
 
+      salary_grade: vacancy.salary_grade,
+    },
 
-    // ----------------------------------------------------------
-    // 4. TRAINING
-    // ----------------------------------------------------------
+    minimumQualification: {
+      education: vacancy.education_requirement,
 
-    const training =
-        await calculateSchoolAdministrationTraining(
-            client,
-            applicantId,
-            minimumTrainingIncrement
-        );
+      training: vacancy.training_requirement,
 
+      experience: vacancy.experience_requirement,
 
-    // ----------------------------------------------------------
-    // 5. EXPERIENCE
-    // ----------------------------------------------------------
+      eligibility: vacancy.eligibility_requirement,
+    },
 
-    const experience =
-        await calculateSchoolAdministrationExperience(
-            client,
-            applicantId,
-            minimumExperienceIncrement
-        );
+    minimumIncrements: {
+      education: minimumEducationIncrement,
 
+      training: minimumTrainingIncrement,
 
-    // ----------------------------------------------------------
-    // 6. ETE TOTAL
-    // ----------------------------------------------------------
+      experience: minimumExperienceIncrement,
+    },
 
-    const total =
-        Number(education.points || 0) +
-        Number(training.points || 0) +
-        Number(experience.points || 0);
+    education,
 
+    training,
 
-    // ----------------------------------------------------------
-    // 7. ETE QUALIFICATION RESULT
-    // ----------------------------------------------------------
+    experience,
 
-    const qualifiedByETE =
-        education.qualified &&
-        training.qualified &&
-        experience.qualified;
+    total,
 
-
-    // ----------------------------------------------------------
-    // 8. RETURN COMPLETE RESULT
-    // ----------------------------------------------------------
-
-    return {
-
-        vacancy: {
-
-            vacancy_id:
-                vacancy.vacancy_id,
-
-            position_id:
-                vacancy.position_id,
-
-            position_title:
-                vacancy.position_title,
-
-            salary_grade:
-                vacancy.salary_grade
-        },
-
-
-        minimumQualification: {
-
-            education:
-                vacancy.education_requirement,
-
-            training:
-                vacancy.training_requirement,
-
-            experience:
-                vacancy.experience_requirement,
-
-            eligibility:
-                vacancy.eligibility_requirement
-        },
-
-
-        minimumIncrements: {
-
-            education:
-                minimumEducationIncrement,
-
-            training:
-                minimumTrainingIncrement,
-
-            experience:
-                minimumExperienceIncrement
-        },
-
-
-        education,
-
-        training,
-
-        experience,
-
-        total,
-
-        qualifiedByETE
-    };
+    qualifiedByETE,
+  };
 };

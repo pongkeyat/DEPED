@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
     ArrowLeft,
@@ -261,7 +261,7 @@ export default function ApplicantEvaluation() {
                 overall_result:
                     overallPass
                         ? "qualified"
-                        : "Not Qualified",
+                        : "disqualified",
 
                 general_remarks:
                     applicant?.hr_remarks_notes ||
@@ -289,7 +289,7 @@ export default function ApplicantEvaluation() {
                 application_status:
                     overallPass
                         ? "qualified"
-                        : "Not Qualified"
+                        : "disqualified"
             }));
 
             // Return to previous page

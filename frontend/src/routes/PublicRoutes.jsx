@@ -36,6 +36,8 @@ import UserManagement from "../pages/UserManagement";
 import DatabaseBackup from "../pages/DatabaseBackup";
 import AuditLogs from "../pages/AuditLogs";
 import ApplicantSummaryReport from "../pages/ApplicantSummaryReport";
+import OfficeUnitsPage from "../pages/OfficeUnitsPage";
+import PlacesOfAssignmentPage from "../pages/PlacesOfAssignmentPage";
 
 // ============================================================
 // HELP CENTER
@@ -57,7 +59,6 @@ import ProtectedRoute from "./ProtectedRoutes";
 
 import { useAuth } from "../context/AuthContext";
 
-
 // ============================================================
 // APP LAYOUT
 // ============================================================
@@ -67,7 +68,6 @@ function AppLayout() {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-[#edf2f8]">
-
       {/* ======================================================
           TOP HEADER
       ====================================================== */}
@@ -76,13 +76,11 @@ function AppLayout() {
         <Header isLoggedIn={!!token} />
       </div>
 
-
       {/* ======================================================
           MAIN CONTAINER
       ====================================================== */}
 
       <div className="flex flex-1 overflow-hidden">
-
         {/* ====================================================
             SIDEBAR
         ==================================================== */}
@@ -106,7 +104,6 @@ function AppLayout() {
           <SideBar />
         </aside>
 
-
         {/* ====================================================
             DYNAMIC PAGE CONTENT
         ==================================================== */}
@@ -114,64 +111,36 @@ function AppLayout() {
         <main className="flex-1 overflow-y-auto p-6">
           <Outlet />
         </main>
-
       </div>
-
     </div>
   );
 }
-
 
 // ============================================================
 // PUBLIC ROUTES
 // ============================================================
 
 export default function PublicRoutes() {
-
   return (
     <Router>
-
       <Routes>
-
         {/* ====================================================
             PUBLIC ROUTES
         ==================================================== */}
 
-        <Route
-          path="/"
-          element={<LandingPage />}
-        />
+        <Route path="/" element={<LandingPage />} />
 
-        <Route
-          path="/apply"
-          element={<LandingPageApplication />}
-        />
+        <Route path="/apply" element={<LandingPageApplication />} />
 
-        <Route
-          path="/ranking"
-          element={<LandingPageRanking />}
-        />
+        <Route path="/ranking" element={<LandingPageRanking />} />
 
-        <Route
-          path="/login"
-          element={<Login />}
-        />
+        <Route path="/login" element={<Login />} />
 
-        <Route
-          path="/change-password"
-          element={<ChangePassword />}
-        />
+        <Route path="/change-password" element={<ChangePassword />} />
 
-        <Route
-          path="/forgot-password"
-          element={<ForgotPassword />}
-        />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
 
-        <Route
-          path="/reset-password"
-          element={<ResetPassword />}
-        />
-
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* ====================================================
             PROTECTED APPLICATION ROUTES
@@ -184,66 +153,39 @@ export default function PublicRoutes() {
             </ProtectedRoute>
           }
         >
-
           {/* ==================================================
               DASHBOARD
           ================================================== */}
 
-          <Route
-            path="/dashboard"
-            element={<DashBoard />}
-          />
-
+          <Route path="/dashboard" element={<DashBoard />} />
 
           {/* ==================================================
               VACANCIES
           ================================================== */}
 
-          <Route
-            path="/postVacancies"
-            element={<PostVacancy />}
-          />
+          <Route path="/postVacancies" element={<PostVacancy />} />
 
-          <Route
-            path="/receiveApplicant"
-            element={<ReceiveApplications />}
-          />
+          <Route path="/receiveApplicant" element={<ReceiveApplications />} />
 
-          <Route
-            path="/vacancyPosting"
-            element={<VacancyPosting />}
-          />
-
+          <Route path="/vacancyPosting" element={<VacancyPosting />} />
 
           {/* ==================================================
               APPLICATIONS
           ================================================== */}
 
-          <Route
-            path="/allApplications"
-            element={<AllApplication />}
-          />
-
+          <Route path="/allApplications" element={<AllApplication />} />
 
           {/* ==================================================
               INITIAL SCREENING
           ================================================== */}
 
-          <Route
-            path="/initialScreening"
-            element={<InitialEvaluation />}
-          />
-
+          <Route path="/initialScreening" element={<InitialEvaluation />} />
 
           {/* ==================================================
               INTERVIEW SESSION
           ================================================== */}
 
-          <Route
-            path="/interviewSession"
-            element={<InterviewSession />}
-          />
-
+          <Route path="/interviewSession" element={<InterviewSession />} />
 
           {/* ==================================================
               INITIAL EVALUATION RESULTS
@@ -254,91 +196,58 @@ export default function PublicRoutes() {
             element={<InitialEvaluationResults />}
           />
 
-
           {/* ==================================================
               ASSESSMENT / SCORING
           ================================================== */}
 
-          <Route
-            path="/Scoring"
-            element={<AssessmentScoring />}
-          />
-
+          <Route path="/Scoring" element={<AssessmentScoring />} />
 
           {/* ==================================================
               RANKING
           ================================================== */}
 
-          <Route
-            path="/comparative-assessment-result"
-            element={<Ranking />}
-          />
-
+          <Route path="/comparative-assessment-result" element={<Ranking />} />
 
           {/* ==================================================
               CARRQA
           ================================================== */}
 
-          <Route
-            path="/carrqa"
-            element={<CARRQA />}
-          />
-
+          <Route path="/carrqa" element={<CARRQA />} />
 
           {/* ==================================================
               POSITIONS
           ================================================== */}
 
-          <Route
-            path="/positions"
-            element={<PositionsManagement />}
-          />
-
+          <Route path="/positions" element={<PositionsManagement />} />
 
           {/* ==================================================
               APPLICANTS
           ================================================== */}
 
-          <Route
-            path="/applicants/:id"
-            element={<ApplicantDetails />}
-          />
+          <Route path="/applicants/:id" element={<ApplicantDetails />} />
 
           <Route
             path="/applicants/:id/evaluation"
             element={<ApplicantEvaluation />}
           />
 
-
           {/* ==================================================
               USER MANAGEMENT
           ================================================== */}
 
-          <Route
-            path="/users"
-            element={<UserManagement />}
-          />
-
+          <Route path="/users" element={<UserManagement />} />
 
           {/* ==================================================
               DATABASE BACKUP
           ================================================== */}
 
-          <Route
-            path="/database-backup"
-            element={<DatabaseBackup />}
-          />
-
+          <Route path="/database-backup" element={<DatabaseBackup />} />
 
           {/* ==================================================
               AUDIT LOGS
           ================================================== */}
 
-          <Route
-            path="/audit-logs"
-            element={<AuditLogs />}
-          />
-
+          <Route path="/audit-logs" element={<AuditLogs />} />
 
           {/* ==================================================
               APPLICANT SUMMARY REPORT
@@ -349,35 +258,26 @@ export default function PublicRoutes() {
             element={<ApplicantSummaryReport />}
           />
 
+          <Route
+            path="/places-of-assignment"
+            element={<PlacesOfAssignmentPage />}
+          />
+
+          <Route path="/office-units" element={<OfficeUnitsPage />} />
 
           {/* ==================================================
               HELP CENTER
           ================================================== */}
 
-          <Route
-            path="/help-center"
-            element={<HelpCenter />}
-          />
-
+          <Route path="/help-center" element={<HelpCenter />} />
         </Route>
-
 
         {/* ====================================================
             FALLBACK
         ==================================================== */}
 
-        <Route
-          path="*"
-          element={
-            <Navigate
-              to="/"
-              replace
-            />
-          }
-        />
-
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-
     </Router>
   );
 }

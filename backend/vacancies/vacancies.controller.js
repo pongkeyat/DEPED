@@ -367,6 +367,7 @@ export const getAllVacancies = async (req, res) => {
                 q.training_requirement,
                 q.experience_requirement,
                 q.eligibility_requirement,
+                q.prescribed_qualifications,
                 r.remark_text,
                 r.memo
             FROM public.vacancies v
@@ -707,6 +708,7 @@ export const archiveVacancy = async (req, res) => {
 
 
 
+
 export const updateVacancyStatus = async (req, res) => {
     const { id } = req.params;
     const { memo, status: requestedStatus } = req.body;
@@ -724,7 +726,10 @@ export const updateVacancyStatus = async (req, res) => {
     try {
         await client.query("BEGIN");
 
+        // ======================================================
         // GET VACANCY
+        // ======================================================
+
         const vacancyResult = await client.query(
             `
             SELECT
@@ -751,16 +756,48 @@ export const updateVacancyStatus = async (req, res) => {
 
         const vacancy = vacancyResult.rows[0];
 
-        previousStatus = vacancy.status;
+        previousStatus = String(vacancy.status || "").trim();
         nextStatus = previousStatus;
         deadline = vacancy.application_deadline;
         deadlinePassed = vacancy.deadline_passed;
 
-        // VALIDATE TERMINATION MEMO
-        let cleanedMemo = null;
+        // Normalize requested status.
+        const requested = String(requestedStatus || "")
+            .trim()
+            .toLowerCase();
 
-        if (requestedStatus === "Terminated") {
-            cleanedMemo =
+        // ======================================================
+        // WORKFLOW: OPEN -> CLOSE -> TERMINATED -> ASSESSMENT
+        // ======================================================
+
+        // STEP 1: OPEN -> CLOSE
+        // The vacancy automatically closes when its deadline passes.
+        if (
+            previousStatus === "Open" &&
+            deadlinePassed
+        ) {
+            nextStatus = "Closed";
+        }
+
+        // Allow manual closing of an open vacancy.
+        if (requested === "closed" || requested === "closed") {
+            if (previousStatus === "Open") {
+                nextStatus = "Closed";
+            } else if (previousStatus !== "Closed") {
+                await client.query("ROLLBACK");
+
+                return res.status(400).json({
+                    success: false,
+                    error:
+                        `Cannot close this vacancy from status '${previousStatus}'.`,
+                });
+            }
+        }
+
+        // STEP 2: CLOSE -> TERMINATED
+        // A memo is required to terminate a closed vacancy.
+        if (requested === "terminated") {
+            const cleanedMemo =
                 typeof memo === "string" ? memo.trim() : "";
 
             if (!cleanedMemo) {
@@ -768,7 +805,8 @@ export const updateVacancyStatus = async (req, res) => {
 
                 return res.status(400).json({
                     success: false,
-                    error: "A memo is required when terminating a vacancy.",
+                    error:
+                        "A memo is required when terminating a vacancy.",
                 });
             }
 
@@ -780,53 +818,20 @@ export const updateVacancyStatus = async (req, res) => {
                     error: "This vacancy has already been terminated.",
                 });
             }
-        }
 
-        // DETERMINE NEXT STATUS
-        if (requestedStatus === "Terminated") {
+            if (previousStatus !== "Closed") {
+                await client.query("ROLLBACK");
+
+                return res.status(400).json({
+                    success: false,
+                    error:
+                        "Only a closed vacancy can be terminated.",
+                });
+            }
+
             nextStatus = "Terminated";
-        } else if (
-            requestedStatus === "Assessment" &&
-            ["Evaluation", "Terminated"].includes(previousStatus)
-        ) {
-            // Allow Evaluation or Terminated -> Assessment
-            // when the API explicitly requests Assessment.
-            nextStatus = "Assessment";
-        } else if (requestedStatus === "Evaluation") {
-            nextStatus = "Evaluation";
-        } else if (
-            previousStatus === "Open" &&
-            deadlinePassed
-        ) {
-            nextStatus = "Evaluation";
-        } else if (previousStatus === "Evaluation") {
-            nextStatus = "Assessment";
-        } else if (previousStatus === "Assessment") {
-            nextStatus = "Closed";
-        } else if (previousStatus === "Closed") {
-            nextStatus = "Closed";
-        }
 
-        // DETERMINE WHETHER INITIAL SCREENING SHOULD RUN
-        screeningTriggered =
-            previousStatus !== nextStatus &&
-            ["Evaluation", "Terminated"].includes(nextStatus);
-
-        // UPDATE VACANCY STATUS
-        await client.query(
-            `
-            UPDATE public.vacancies
-            SET status = $1
-            WHERE vacancy_id = $2
-            `,
-            [nextStatus, id]
-        );
-
-        // SAVE TERMINATION MEMO
-        if (
-            requestedStatus === "Terminated" &&
-            cleanedMemo
-        ) {
+            // Save the memo inside the same transaction.
             await client.query(
                 `
                 INSERT INTO public.vacancies_remarks (
@@ -840,7 +845,110 @@ export const updateVacancyStatus = async (req, res) => {
             );
         }
 
+        // STEP 3: TERMINATED -> ASSESSMENT
+        // Assessment is allowed only when no applicants remain
+        // pending Initial Screening.
+        if (requested === "assessment") {
+            if (previousStatus !== "Terminated") {
+                await client.query("ROLLBACK");
+
+                return res.status(400).json({
+                    success: false,
+                    error:
+                        "Only a terminated vacancy can proceed to Assessment.",
+                });
+            }
+
+            const pendingApplicantsResult = await client.query(
+                `
+                SELECT COUNT(*)::INTEGER AS pending_count
+                FROM public.hr_remarks_final_notes AS hr
+                JOIN public.applicant_information AS ai
+                    ON ai.applicant_id = hr.applicant_id
+                JOIN public.job_applications AS ja
+                    ON ja.job_applications_id = ai.job_applications_id
+                WHERE ja.vacancy_id = $1
+                  AND LOWER(TRIM(COALESCE(hr.application_status, '')))
+                      IN (
+                          'initial screening',
+                          'initial_screening',
+                          'pending screening',
+                          'screening'
+                      )
+                `,
+                [id]
+            );
+
+            const pendingCount =
+                pendingApplicantsResult.rows[0].pending_count;
+
+            if (pendingCount > 0) {
+                await client.query("ROLLBACK");
+
+                return res.status(400).json({
+                    success: false,
+                    error:
+                        `This vacancy still has ${pendingCount} applicant(s) pending Initial Screening.`,
+                    pendingApplicants: pendingCount,
+                });
+            }
+
+            nextStatus = "Assessment";
+        }
+
+        // Reject requests to use the removed Evaluation status.
+        if (requested === "evaluation") {
+            await client.query("ROLLBACK");
+
+            return res.status(400).json({
+                success: false,
+                error:
+                    "Evaluation is no longer a vacancy status. The workflow is Open -> Close -> Terminated -> Assessment.",
+            });
+        }
+
+        // ======================================================
+        // AUTOMATIC DEADLINE CLOSURE
+        // ======================================================
+
+        // When no explicit status change was requested, close an
+        // open vacancy if its application deadline has passed.
+        if (
+            !requested &&
+            previousStatus === "Open" &&
+            deadlinePassed
+        ) {
+            nextStatus = "Close";
+        }
+
+        // ======================================================
+        // DETERMINE WHETHER INITIAL SCREENING SHOULD START
+        // ======================================================
+
+        // Initial Screening starts when the vacancy becomes Terminated.
+        screeningTriggered =
+            previousStatus !== nextStatus &&
+            nextStatus === "Terminated";
+
+        // ======================================================
+        // UPDATE VACANCY
+        // ======================================================
+
+        if (previousStatus !== nextStatus) {
+            await client.query(
+                `
+                UPDATE public.vacancies
+                SET status = $1
+                WHERE vacancy_id = $2
+                `,
+                [nextStatus, id]
+            );
+        }
+
+        // ======================================================
         // MOVE COMPLETE APPLICANTS TO INITIAL SCREENING
+        // ======================================================
+
         if (screeningTriggered) {
             const applicationUpdateResult = await client.query(
                 `
@@ -854,7 +962,8 @@ export const updateVacancyStatus = async (req, res) => {
                        ai.job_applications_id
                 WHERE hr.applicant_id = ai.applicant_id
                   AND ja.vacancy_id = $1
-                  AND LOWER(TRIM(hr.application_status)) = 'complete'
+                  AND LOWER(TRIM(COALESCE(hr.application_status, '')))
+                      = 'complete'
                 RETURNING hr.applicant_id
                 `,
                 [id]
@@ -862,9 +971,10 @@ export const updateVacancyStatus = async (req, res) => {
 
             updatedApplicants = applicationUpdateResult.rowCount;
 
-            updatedApplicantIds = applicationUpdateResult.rows.map(
-                (applicant) => applicant.applicant_id
-            );
+            updatedApplicantIds =
+                applicationUpdateResult.rows.map(
+                    (applicant) => applicant.applicant_id
+                );
         }
 
         await client.query("COMMIT");
@@ -888,7 +998,10 @@ export const updateVacancyStatus = async (req, res) => {
         client.release();
     }
 
+    // ======================================================
     // SEND INITIAL SCREENING EMAILS
+    // ======================================================
+
     let emailsSent = 0;
     let emailsFailed = 0;
 
@@ -938,13 +1051,16 @@ export const updateVacancyStatus = async (req, res) => {
             }
         } catch (emailQueryError) {
             console.error(
-                "Failed to retrieve applicants for initial screening emails:",
+                "Failed to retrieve applicants for Initial Screening emails:",
                 emailQueryError
             );
         }
     }
 
+    // ======================================================
     // GET UPDATED VACANCY
+    // ======================================================
+
     const updatedVacancyResult = await pool.query(
         `
         SELECT *
@@ -954,7 +1070,10 @@ export const updateVacancyStatus = async (req, res) => {
         [id]
     );
 
+    // ======================================================
     // RESPONSE
+    // ======================================================
+
     return res.status(200).json({
         success: true,
         message:
@@ -971,6 +1090,7 @@ export const updateVacancyStatus = async (req, res) => {
         emailsFailed,
     });
 };
+
 
 // ============================================================
 // AUTOMATED REQUIREMENTS REMINDER

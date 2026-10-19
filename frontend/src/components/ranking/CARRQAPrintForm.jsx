@@ -1,4 +1,5 @@
 import React from "react";
+import getAssessmentCriterionScore from "../../utils/getAssessmentCriterionScore";
 
 const CARRQAPrintForm = ({
     vacancy,
@@ -83,6 +84,7 @@ const CARRQAPrintForm = ({
             applicant.let_rating ??
             applicant.lept_rating ??
             applicant.eligibility_rating ??
+            getAssessmentCriterionScore(applicant, "PBET/LET/LEPT Rating") ??
             ""
         );
     };
@@ -99,6 +101,7 @@ const CARRQAPrintForm = ({
             applicant.coi_score ??
             applicant.classroom_observation_score ??
             applicant.cois_score ??
+            getAssessmentCriterionScore(applicant, "PPST COIs") ??
             ""
         );
     };
@@ -115,6 +118,7 @@ const CARRQAPrintForm = ({
             applicant.ncoi_score ??
             applicant.teacher_reflection_score ??
             applicant.ncois_score ??
+            getAssessmentCriterionScore(applicant, "PPST NCOIs") ??
             ""
         );
     };

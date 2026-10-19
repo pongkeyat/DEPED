@@ -250,6 +250,18 @@ export default function AssessmentScoring() {
         );
     };
 
+    const getCriterionScore = (criterion, score, assessmentType) => {
+        const selected = Number(score || 0);
+
+        if (String(criterion.name || "").trim().toUpperCase() !== "PERFORMANCE") {
+            return selected;
+        }
+
+        return assessmentType === "RELATED_TEACHING"
+            ? selected * 4
+            : (selected / 5) * Number(criterion.max || 0);
+    };
+
     // ============================================================
     // 1. LOAD INTERVIEW SESSIONS
     // ============================================================
@@ -967,11 +979,12 @@ export default function AssessmentScoring() {
                 )
                 .reduce(
                     (sum, criterion) =>
-                        sum + (() => {
-                        const selected = Number(selectedScores[criterion.id] || 0);
-                        const isPerformance = String(criterion.name || "").trim().toUpperCase() === "PERFORMANCE";
-                        return isPerformance ? (selected / 5) * Number(criterion.max || 0) : selected;
-                    })(),
+                        sum +
+                        getCriterionScore(
+                            criterion,
+                            selectedScores[criterion.id],
+                            getAssessmentType(selectedSessionData)
+                        ),
                     0
                 );
 
@@ -1431,9 +1444,11 @@ export default function AssessmentScoring() {
                                     null,
 
                                 score:
-                                    criterion.name && String(criterion.name).trim().toUpperCase() === "PERFORMANCE"
-                                        ? (Number(score) / 5) * Number(criterion.max || 0)
-                                        : Number(score),
+                                    getCriterionScore(
+                                        criterion,
+                                        score,
+                                        getAssessmentType(selectedSessionData)
+                                    ),
 
                                 remarks: "",
                             };
@@ -1930,19 +1945,7 @@ export default function AssessmentScoring() {
                                                             }
                                                         </div>
 
-                                                        {criterion.type !==
-                                                            "initial" &&
-                                                            Number(
-                                                                criterion.max
-                                                            ) >
-                                                                0 && (
-                                                                <div className="mt-1 text-[10px] font-normal normal-case text-gray-500">
-                                                                    Max:{" "}
-                                                                    {
-                                                                        criterion.max
-                                                                    }
-                                                                </div>
-                                                            )}
+
                                                     </th>
                                                 )
                                             )}

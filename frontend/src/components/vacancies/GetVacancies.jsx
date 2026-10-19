@@ -19,6 +19,12 @@ import {
     updateVacancyStatus,
 } from "../../api/VacancyApi";
 import EditVacancyModal from "./EditVacancyModal";
+const normalizeStatus = (status) =>
+    String(status ?? "").trim().toLowerCase();
+
+const isClosedStatus = (status) =>
+    ["close", "closed"].includes(normalizeStatus(status));
+
 export default function GetVacancies({ onPostVacancy }) {
     const [vacancies, setVacancies] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -65,8 +71,8 @@ export default function GetVacancies({ onPostVacancy }) {
             setVacancies(
                 Array.isArray(data)
                     ? data.filter((vacancy) =>
-                        ["Open", "Evaluation", "Assessment", "Closed", "Terminated"].includes(
-                            vacancy.status
+                        ["open", "close", "closed", "assessment", "terminated"].includes(
+                            normalizeStatus(vacancy.status)
                         )
                     )
                     : []
@@ -89,7 +95,7 @@ export default function GetVacancies({ onPostVacancy }) {
         (v) => v.status === "Open" || !v.status
     ).length;
     const closedVacancies = vacancies.filter(
-        (v) => v.status === "Closed"
+        (v) => isClosedStatus(v.status)
     ).length;
     const totalSlots = vacancies.reduce(
         (acc, curr) =>
@@ -158,7 +164,8 @@ export default function GetVacancies({ onPostVacancy }) {
     const filteredVacancies = vacancies.filter((item) => {
         const matchesStatus =
             !appliedFilters.status ||
-            item.status === appliedFilters.status;
+            (normalizeStatus(item.status) === normalizeStatus(appliedFilters.status) ||
+                (isClosedStatus(item.status) && isClosedStatus(appliedFilters.status)));
         const matchesOffice =
             !appliedFilters.office ||
             item.office_unit === appliedFilters.office;
@@ -223,7 +230,7 @@ export default function GetVacancies({ onPostVacancy }) {
     // =====================================================
     const handleArchiveClick = (vacancy) => {
         // Only CLOSED vacancies can be archived.
-        if (vacancy.status !== "Closed") {
+        if (!isClosedStatus(vacancy.status)) {
             setArchiveError("Only closed vacancies can be archived.");
             return;
         }
@@ -246,7 +253,7 @@ export default function GetVacancies({ onPostVacancy }) {
             setArchiveError("Vacancy ID is missing.");
             return;
         }
-        if (selectedVacancy.status !== "Closed") {
+        if (!isClosedStatus(selectedVacancy.status)) {
             setArchiveError("Only closed vacancies can be archived.");
             return;
         }
@@ -439,9 +446,8 @@ export default function GetVacancies({ onPostVacancy }) {
                         >
                             <option value="">All Status</option>
                             <option value="Open">Open</option>
-                            <option value="Evaluation">Evaluation</option>
+                            <option value="Close">Close</option>
                             <option value="Assessment">Assessment</option>
-                            <option value="Closed">Closed</option>
                             <option value="Terminated">Terminated</option>
                         </select>
                     </div>
@@ -610,13 +616,13 @@ export default function GetVacancies({ onPostVacancy }) {
                                             <td className="px-6 py-4 text-center">
                                                 <span
                                                     className={`rounded-full px-3 py-1 text-xs font-medium ${
-                                                        item.status === "Open"
+                                                        normalizeStatus(item.status) === "open"
                                                             ? "bg-green-100 text-green-700"
-                                                            : item.status === "Evaluation"
-                                                              ? "bg-blue-100 text-blue-700"
-                                                              : item.status === "Assessment"
+                                                            : isClosedStatus(item.status)
+                                                              ? "bg-amber-100 text-amber-800"
+                                                              : normalizeStatus(item.status) === "assessment"
                                                                 ? "bg-purple-100 text-purple-700"
-                                                                : item.status === "Terminated"
+                                                                : normalizeStatus(item.status) === "terminated"
                                                                   ? "bg-gray-200 text-gray-800"
                                                                   : "bg-red-100 text-red-700"
                                                     }`}
@@ -639,13 +645,25 @@ export default function GetVacancies({ onPostVacancy }) {
                                                         </button>
                                                     ) : (
                                                         <>
-                                                            {item.status === "Open" && (
+                                                            {normalizeStatus(item.status) === "open" && (
+                                                                <button
+                                                                    type="button"
+                                                                    disabled
+                                                                    className="inline-flex cursor-not-allowed items-center gap-2 whitespace-nowrap rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-500"
+                                                                    title="This vacancy is still accepting applications"
+                                                                >
+                                                                    <Briefcase size={15} />
+                                                                    On Application Process
+                                                                </button>
+                                                            )}
+
+                                                            {isClosedStatus(item.status) && (
                                                                 <>
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => handleEditClick(item)}
                                                                         className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
-                                                                        title="Edit vacancy"
+                                                                        title="Extend application deadline"
                                                                     >
                                                                         <Pencil size={15} />
                                                                         Extend
@@ -654,6 +672,7 @@ export default function GetVacancies({ onPostVacancy }) {
                                                                         type="button"
                                                                         onClick={() => handleTerminateClick(item)}
                                                                         className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+                                                                        title="Terminate closed vacancy"
                                                                     >
                                                                         <XCircle size={15} />
                                                                         Terminate
@@ -661,7 +680,19 @@ export default function GetVacancies({ onPostVacancy }) {
                                                                 </>
                                                             )}
 
-                                                            {item.status === "Terminated" && (
+                                                            {normalizeStatus(item.status) === "assessment" && (
+                                                                <button
+                                                                    type="button"
+                                                                    disabled
+                                                                    className="inline-flex cursor-not-allowed items-center gap-2 whitespace-nowrap rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-500"
+                                                                    title="This vacancy is being assessed"
+                                                                >
+                                                                    <Briefcase size={15} />
+                                                                    On Process
+                                                                </button>
+                                                            )}
+
+                                                            {normalizeStatus(item.status) === "terminated" && (
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => {
@@ -673,30 +704,6 @@ export default function GetVacancies({ onPostVacancy }) {
                                                                 >
                                                                     <Eye size={15} />
                                                                     View Memo
-                                                                </button>
-                                                            )}
-
-                                                            {["Evaluation", "Assessment"].includes(item.status) && (
-                                                                <button
-                                                                    type="button"
-                                                                    disabled
-                                                                    className="inline-flex cursor-not-allowed items-center gap-2 whitespace-nowrap rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-400 opacity-70"
-                                                                    title="Archive is disabled until the vacancy is Closed"
-                                                                >
-                                                                    <Archive size={15} />
-                                                                    Archive
-                                                                </button>
-                                                            )}
-
-                                                            {item.status === "Closed" && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleArchiveClick(item)}
-                                                                    className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100"
-                                                                    title="Archive closed vacancy"
-                                                                >
-                                                                    <Archive size={15} />
-                                                                    Archive
                                                                 </button>
                                                             )}
                                                         </>

@@ -6,8 +6,6 @@ import {
 
 import { useNavigate } from "react-router-dom";
 
-import { Eye } from "lucide-react";
-
 import { getApplications } from "../api/ApplicationApi";
 import { getVacancies } from "../api/VacancyApi";
 
@@ -31,6 +29,30 @@ const getStatusStyles = (status) => {
 const normalizeVacancyId = (id) =>
   String(id ?? "").trim();
 
+const getApplicationStatus = (app) =>
+  String(
+    app?.application_status ??
+      app?.hr_remarks_final_notes?.application_status ??
+      app?.hr_remarks_final_notes_status ??
+      app?.hr_remarks?.application_status ??
+      app?.status ??
+      "",
+  )
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+const getVacancyStatus = (vacancy) =>
+  String(
+    vacancy?.status ??
+      vacancy?.vacancy_status ??
+      vacancy?.current_status ??
+      vacancy?.vacancyStatus ??
+      "",
+  )
+    .trim()
+    .toLowerCase();
+
 export default function InitialEvaluationResults() {
   const [allApplications, setAllApplications] =
     useState([]);
@@ -50,51 +72,56 @@ export default function InitialEvaluationResults() {
   const navigate = useNavigate();
 
   // ============================================================
-  // LOAD CLOSED VACANCIES
+  // LOAD TERMINATED AND ASSESSMENT VACANCIES
   // ============================================================
 
   useEffect(() => {
+    let isMounted = true;
+
     const loadVacancies = async () => {
       try {
-        const response = await getVacancies();
+        const firstPage = await getVacancies({ page: 1, limit: 100 });
+        const vacancyRows = Array.isArray(firstPage?.data)
+          ? firstPage.data
+          : [];
+        const totalPages = Math.max(
+          1,
+          Number(firstPage?.pagination?.totalPages) || 1,
+        );
 
-        const data =
-          response?.data || response;
+        const remainingPages = await Promise.all(
+          Array.from({ length: totalPages - 1 }, (_, index) =>
+            getVacancies({ page: index + 2, limit: 100 }),
+          ),
+        );
 
-        if (Array.isArray(data)) {
+        const allVacancies = [
+          ...vacancyRows,
+          ...remainingPages.flatMap((page) =>
+            Array.isArray(page?.data) ? page.data : [],
+          ),
+        ];
+        const eligibleVacancies = allVacancies.filter((vacancy) =>
+          ["terminated", "assessment"].includes(getVacancyStatus(vacancy)),
+        );
 
-          const closedVacancies =
-            data.filter((vacancy) => {
-              const status = String(
-                vacancy.status || ""
-              )
-                .trim()
-                .toLowerCase();
-
-              return status === "closed";
-            });
-
-          setVacancies(
-            closedVacancies
-          );
-
-        } else {
-          setVacancies([]);
+        if (isMounted) {
+          setVacancies(eligibleVacancies);
         }
-
       } catch (error) {
-
         console.error(
           "Failed to load vacancies:",
           error
         );
-
-        setVacancies([]);
-
+        if (isMounted) setVacancies([]);
       }
     };
 
     loadVacancies();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // ============================================================
@@ -113,15 +140,21 @@ export default function InitialEvaluationResults() {
           await getApplications();
 
         const data =
-          response?.data || response;
+          response?.data?.data ??
+          response?.data ??
+          response;
+        const applicationRows = Array.isArray(data)
+          ? data
+          : data?.rows ??
+            data?.applications ??
+            data?.results ??
+            [];
 
         if (!isMounted) return;
 
-        if (Array.isArray(data)) {
-          setAllApplications(data);
-        } else {
-          setAllApplications([]);
-        }
+        setAllApplications(
+          Array.isArray(applicationRows) ? applicationRows : [],
+        );
 
       } catch (error) {
 
@@ -183,25 +216,25 @@ export default function InitialEvaluationResults() {
 
   const filteredApplications = useMemo(() => {
 
-    const targetStatus =
-      showUnqualified
-        ? "unqualified"
-        : "qualified";
+    const allowedStatuses = showUnqualified
+      ? new Set(["unqualified"])
+      : new Set(["qualified", "rank", "assessment"]);
+    const eligibleVacancyIds = new Set(
+      vacancies.map((vacancy) =>
+        normalizeVacancyId(vacancy.vacancy_id ?? vacancy.id),
+      ),
+    );
 
-    // ----------------------------------------------------------
-    // STATUS FILTER
-    // ----------------------------------------------------------
-
-    let filtered =
-      allApplications.filter(
-        (app) =>
-          String(
-            app.application_status || ""
-          )
-            .trim()
-            .toLowerCase() ===
-          targetStatus
+    let filtered = allApplications.filter((app) => {
+      const status = getApplicationStatus(app);
+      const vacancyId = normalizeVacancyId(
+        app.vacancy_id ??
+          app.job_application?.vacancy_id ??
+          app.job_applications?.vacancy_id,
       );
+
+      return allowedStatuses.has(status) && eligibleVacancyIds.has(vacancyId);
+    });
 
     // ----------------------------------------------------------
     // VACANCY FILTER
@@ -219,7 +252,9 @@ export default function InitialEvaluationResults() {
 
           const applicantVacancyId =
             normalizeVacancyId(
-              app.vacancy_id
+              app.vacancy_id ??
+                app.job_application?.vacancy_id ??
+                app.job_applications?.vacancy_id
             );
 
           return (
@@ -264,6 +299,7 @@ export default function InitialEvaluationResults() {
 
   }, [
     allApplications,
+    vacancies,
     selectedVacancy,
     showUnqualified,
   ]);
@@ -292,7 +328,7 @@ export default function InitialEvaluationResults() {
     if (!selectedVacancy) {
 
       alert(
-        "Please select a closed vacancy before printing the IER."
+        "Please select a terminated or assessment vacancy before printing the IER."
       );
 
       return;
@@ -351,7 +387,7 @@ export default function InitialEvaluationResults() {
           <div className="w-full min-w-0 flex-1 lg:max-w-md">
 
             <label className="mb-1.5 block text-sm font-semibold text-gray-700">
-              Filter by Closed Vacancy
+              Filter by Terminated or Assessment Vacancy
             </label>
 
             <select
@@ -365,7 +401,7 @@ export default function InitialEvaluationResults() {
             >
 
               <option value="">
-                All Closed Vacancies
+                All Terminated and Assessment Vacancies
               </option>
 
               {vacancies.map(

@@ -14,6 +14,8 @@ import databaseRoutes from "./backup/database.route.js";
 import auditLogsRoutes from "./auditLogs/auditLogs.routes.js";
 import { auditActivity } from "./auditLogs/auditActivity.middleware.js";
 import reportRoutes from "./reports/report.routes.js";
+import placeOfAssignmentRoutes from './PlaceOfAssignments/place.of.assignments.routes.js';
+import officeUnitRoutes from './officeUnits/office.units.routes.js';
 import path from 'path';
 
 const app = express();
@@ -39,8 +41,10 @@ app.use("/api/assessment", assessmentRoutes );
 app.use("/api/", rankingRoutes);
 app.use("/api/database", databaseRoutes);
 app.use("/api/audit-logs", auditLogsRoutes);
-app.use("/api/reports", reportRoutes
-);
+app.use("/api/reports", reportRoutes);
+app.use('/api/places-of-assignment', placeOfAssignmentRoutes);
+app.use('/api/office-units', officeUnitRoutes);
+
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 

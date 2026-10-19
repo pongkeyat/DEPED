@@ -1,5 +1,7 @@
 import React from "react";
 
+const RELATED_TEACHING_PERFORMANCE_MAX = 20;
+
 export default function ApplicantRow({
   item,
   applicantDetails,
@@ -237,6 +239,18 @@ export default function ApplicantRow({
     isRelatedTeaching ||
     isSchoolAdministration;
 
+  const getCriterionScore = (criterion, score) => {
+    const selected = Number(score || 0);
+
+    if (normalize(criterion.name) !== "PERFORMANCE") {
+      return selected;
+    }
+
+    return assessmentType === "RELATED_TEACHING"
+      ? (selected / 5) * RELATED_TEACHING_PERFORMANCE_MAX
+      : (selected / 5) * Number(criterion.max || 0);
+  };
+
 
   // ============================================================
   // DISPLAY CATEGORY
@@ -445,18 +459,13 @@ export default function ApplicantRow({
 
         return true;
 
-      })
+      }      )
       .reduce(
         (
           sum,
           criterion
         ) =>
-          sum + (() => {
-            const selected = Number(scores?.[criterion.id] || 0);
-            const isPerformance = normalize(criterion.name) === "PERFORMANCE" &&
-              ["RELATED_TEACHING", "SCHOOL_ADMINISTRATION", "NON_TEACHING"].includes(assessmentType);
-            return isPerformance ? (selected / 5) * Number(criterion.max || 0) : selected;
-          })(),
+          sum + getCriterionScore(criterion, scores?.[criterion.id]),
         0
       );
 
@@ -706,9 +715,6 @@ export default function ApplicantRow({
                 </div>
 
 
-                <div className="mt-1 text-xs text-gray-400">
-                  Max: {criterion.max}
-                </div>
 
               </td>
             );
@@ -770,11 +776,6 @@ export default function ApplicantRow({
                 />
 
 
-                {criterion.max !== undefined && (
-                  <div className="mt-1 text-xs text-gray-400">
-                    Maximum: {criterion.max}
-                  </div>
-                )}
 
                 {manualScoreOutOfRange && (
                   <div className="mt-1 text-xs text-red-600">
@@ -833,12 +834,6 @@ export default function ApplicantRow({
 
               </select>
 
-
-              {criterion.max !== undefined && (
-                <div className="mt-1 text-xs text-gray-400">
-                  Maximum: {criterion.max}
-                </div>
-              )}
 
             </td>
           );

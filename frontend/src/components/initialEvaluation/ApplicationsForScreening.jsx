@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Eye,
@@ -8,9 +8,6 @@ import {
   Unlock,
   FileText,
   Clock,
-  CheckCircle,
-  X,
-  Loader2,
 } from "lucide-react";
 import { getApplications } from "../../api/ApplicationApi";
 import { getVacancies, updateVacancyStatus } from "../../api/VacancyApi";
@@ -18,7 +15,7 @@ import { getVacancies, updateVacancyStatus } from "../../api/VacancyApi";
 // ------------------------------------------------------------
 // LEFT CARD: Semi-Circle Gauge (Evaluated Applicants)
 // ------------------------------------------------------------
-const SemiCircleGauge = ({ value, total, percentage }) => {
+const SemiCircleGauge = ({ value, percentage }) => {
   const radius = 38;
   const strokeWidth = 9;
   const circumference = Math.PI * radius; // Half circle length
@@ -160,6 +157,17 @@ const isPendingStatus = (status) =>
 const isInitialScreening = (app) =>
   isPendingStatus(getNormalizedStatus(app));
 
+const getNormalizedVacancyStatus = (vacancy) => {
+  const rawStatus = [
+    vacancy?.status,
+    vacancy?.vacancy_status,
+    vacancy?.current_status,
+    vacancy?.vacancyStatus,
+  ].find((value) => String(value ?? "").trim() !== "");
+
+  return String(rawStatus ?? "").trim().toLowerCase();
+};
+
 export default function ApplicationsForScreening() {
   const [applications, setApplications] = useState([]);
   const [vacancies, setVacancies] = useState([]);
@@ -167,8 +175,6 @@ export default function ApplicationsForScreening() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
-  const [showDoneConfirmation, setShowDoneConfirmation] = useState(false);
-  const [markingDone, setMarkingDone] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
   const [actionError, setActionError] = useState("");
   const navigate = useNavigate();
@@ -184,7 +190,7 @@ export default function ApplicationsForScreening() {
 
         const [applicationsResponse, vacanciesResponse] = await Promise.all([
           getApplications(),
-          getVacancies(),
+          getVacancies({ limit: 100, page: 1 }),
         ]);
 
         const applicationPayload =
@@ -199,11 +205,29 @@ export default function ApplicationsForScreening() {
             applicationPayload?.results ??
             [];
 
-        const vacancyRows = Array.isArray(vacanciesResponse?.data)
+        let vacancyRows = Array.isArray(vacanciesResponse?.data)
           ? vacanciesResponse.data
           : Array.isArray(vacanciesResponse)
             ? vacanciesResponse
             : [];
+
+        const totalPages = Math.max(
+          1,
+          Number(vacanciesResponse?.pagination?.totalPages) || 1,
+        );
+        if (totalPages > 1) {
+          const remainingPages = await Promise.all(
+            Array.from({ length: totalPages - 1 }, (_, index) =>
+              getVacancies({ limit: 100, page: index + 2 }),
+            ),
+          );
+          vacancyRows = [
+            ...vacancyRows,
+            ...remainingPages.flatMap((page) =>
+              Array.isArray(page?.data) ? page.data : [],
+            ),
+          ];
+        }
 
         if (isMounted) {
           setApplications(Array.isArray(applicationRows) ? applicationRows : []);
@@ -232,41 +256,100 @@ export default function ApplicationsForScreening() {
     };
   }, []);
 
+  // Automatically move terminated vacancies to Assessment when no applicants
+  // linked to them remain pending Initial Screening.
+  const transitionedVacancies = useRef(new Set());
+  const transitioningVacancies = useRef(new Set());
+
+  useEffect(() => {
+    if (loading || fetchError || !vacancies.length) return;
+
+    const eligibleVacanciesWithoutPendingScreening = vacancies.filter(
+      (vacancy) =>
+        getNormalizedVacancyStatus(vacancy) === "terminated" &&
+        !applications.some(
+          (application) =>
+            normalizeVacancyId(getApplicationVacancyId(application)) ===
+              normalizeVacancyId(vacancy.vacancy_id ?? vacancy.id) &&
+            isInitialScreening(application),
+        ),
+    );
+
+    eligibleVacanciesWithoutPendingScreening.forEach((vacancy) => {
+      const vacancyId = vacancy.vacancy_id ?? vacancy.id;
+      const normalizedId = normalizeVacancyId(vacancyId);
+
+      if (
+        !vacancyId ||
+        transitionedVacancies.current.has(normalizedId) ||
+        transitioningVacancies.current.has(normalizedId)
+      ) {
+        return;
+      }
+
+      transitioningVacancies.current.add(normalizedId);
+
+      updateVacancyStatus(vacancyId, "Assessment")
+        .then((result) => {
+          transitionedVacancies.current.add(normalizedId);
+          const updatedStatus =
+            result?.currentStatus || result?.data?.status || "Assessment";
+
+          setVacancies((current) =>
+            current.map((item) =>
+              normalizeVacancyId(item.vacancy_id ?? item.id) === normalizedId
+                ? {
+                    ...item,
+                    status: updatedStatus,
+                    vacancy_status: updatedStatus,
+                  }
+                : item,
+            ),
+          );
+
+          setActionMessage(
+            result?.message ||
+              `Vacancy ${vacancyId} automatically moved to ${updatedStatus} because no applicants remain pending Initial Screening.`,
+          );
+          setActionError("");
+        })
+        .catch((error) => {
+          console.error(
+            `Unable to automatically move vacancy ${vacancyId} to Assessment:`,
+            error,
+          );
+          setActionError(
+            error?.response?.data?.error ||
+              error?.response?.data?.message ||
+              error?.message ||
+              `Unable to automatically move vacancy ${vacancyId} to Assessment.`,
+          );
+        })
+        .finally(() => {
+          transitioningVacancies.current.delete(normalizedId);
+        });
+    });
+  }, [loading, fetchError, vacancies, applications]);
+
   // Only explicit completed screening outcomes count as evaluated.
   // Missing or unknown statuses must not be counted as evaluated.
   const isEvaluatedStatus = (status) =>
     [
       "qualified",
       "disqualified",
+      "unqualified",
+      "not qualified",
+      "not_qualified",
       "initial_screening_qualified",
       "initial_screening_disqualified",
-      "evaluated",
-      "complete",
-      "completed",
       "initial screening complete",
       "initial_screening_complete",
     ].includes(status);
 
-  // Filter using vacancy records returned by the vacancies API.
-  const getNormalizedVacancyStatus = (vacancy) => {
-    // Some API responses include an empty `status` field alongside a populated
-    // `vacancy_status`; use the first non-empty value.
-    const rawStatus = [
-      vacancy?.status,
-      vacancy?.vacancy_status,
-      vacancy?.current_status,
-      vacancy?.vacancyStatus,
-    ].find((value) => String(value ?? "").trim() !== "");
-
-    return String(rawStatus ?? "").trim().toLowerCase();
-  };
-
   const eligibleVacancies = useMemo(
     () =>
-      vacancies.filter((vacancy) =>
-        ["open", "evaluation", "terminated"].includes(
-          getNormalizedVacancyStatus(vacancy)
-        )
+      vacancies.filter(
+        (vacancy) => getNormalizedVacancyStatus(vacancy) === "terminated",
       ),
     [vacancies]
   );
@@ -286,7 +369,6 @@ export default function ApplicationsForScreening() {
     () =>
       applications.filter(
         (app) =>
-          isInitialScreening(app) &&
           getApplicationVacancyId(app) &&
           eligibleVacancyIds.has(
             normalizeVacancyId(getApplicationVacancyId(app))
@@ -314,8 +396,6 @@ export default function ApplicationsForScreening() {
       );
     });
 
-    const total = vacancyApplications.length;
-
     const pending = vacancyApplications.filter((app) =>
       isPendingStatus(getNormalizedStatus(app))
     ).length;
@@ -323,6 +403,7 @@ export default function ApplicationsForScreening() {
     const evaluated = vacancyApplications.filter((app) =>
       isEvaluatedStatus(getNormalizedStatus(app))
     ).length;
+    const total = pending + evaluated;
 
     const evaluatedPercent =
       total > 0 ? Math.round((evaluated / total) * 100) : 0;
@@ -333,7 +414,7 @@ export default function ApplicationsForScreening() {
   }, [eligibleApplications, selectedVacancyId]);
 
   // Dynamic status check (turns green when pending count is 0)
-  const isComplete = screeningMetrics.total > 0 && screeningMetrics.pending === 0;
+  const isComplete = !loading && !fetchError && screeningMetrics.pending === 0;
 
   const initialScreeningApps = useMemo(
     () => eligibleApplications.filter(isInitialScreening),
@@ -342,24 +423,6 @@ export default function ApplicationsForScreening() {
 
   const vacancyOptions = eligibleVacancies;
 
-  const selectedVacancy = eligibleVacancies.find(
-    (vacancy) =>
-      normalizeVacancyId(vacancy.vacancy_id ?? vacancy.id) ===
-      normalizeVacancyId(selectedVacancyId)
-  );
-
-  // Count only applications that this page actually treats as needing
-  // Initial Screening for the selected eligible vacancy.
-  const selectedVacancyPendingCount = eligibleApplications.filter(
-    (app) =>
-      normalizeVacancyId(getApplicationVacancyId(app)) ===
-      normalizeVacancyId(selectedVacancyId)
-  ).length;
-
-  // The button is disabled only while this vacancy has applicants still
-  // needing Initial Screening, as requested.
-  const canMarkVacancyDone =
-    Boolean(selectedVacancy) && selectedVacancyPendingCount === 0;
 
   const filteredApplications = useMemo(
     () =>
@@ -392,55 +455,6 @@ export default function ApplicationsForScreening() {
       }),
     [initialScreeningApps, search, selectedVacancyId]
   );
-
-  const handleMarkVacancyDone = async () => {
-    if (
-      !selectedVacancyId ||
-      selectedVacancyId === "All" ||
-      selectedVacancyPendingCount > 0
-    ) {
-      return;
-    }
-
-    setMarkingDone(true);
-    setActionError("");
-    setActionMessage("");
-
-    try {
-      // The backend determines the next status from the vacancy's current status.
-      // For an Evaluation vacancy, its controller transitions it to Assessment.
-      const result = await updateVacancyStatus(selectedVacancyId, "Assessment");
-      const completedVacancyId = selectedVacancyId;
-      const updatedStatus =
-        result?.currentStatus || result?.data?.status || "Assessment";
-
-      setVacancies((current) =>
-        current.map((vacancy) =>
-          normalizeVacancyId(vacancy.vacancy_id ?? vacancy.id) ===
-          normalizeVacancyId(completedVacancyId)
-            ? { ...vacancy, status: updatedStatus, vacancy_status: updatedStatus }
-            : vacancy
-        )
-      );
-
-      setShowDoneConfirmation(false);
-      setSelectedVacancyId("All");
-      setActionMessage(
-        result?.message ||
-          `Vacancy ${completedVacancyId} status is now ${updatedStatus}.`
-      );
-    } catch (error) {
-      setActionError(
-        error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          error?.message ||
-          "Unable to update the vacancy status."
-      );
-      setShowDoneConfirmation(false);
-    } finally {
-      setMarkingDone(false);
-    }
-  };
 
   const handleViewApplication = (application) => {
     const routeId =
@@ -537,7 +551,6 @@ export default function ApplicationsForScreening() {
 
           <SemiCircleGauge
             value={screeningMetrics.evaluated}
-            total={screeningMetrics.total}
             percentage={screeningMetrics.evaluatedPercent}
           />
         </div>
@@ -554,7 +567,7 @@ export default function ApplicationsForScreening() {
               {screeningMetrics.total}
             </span>
             <span className="text-xs text-blue-200/90 font-medium mt-1 block">
-              Applicants in Eligible Vacancies
+              Applicants in Initial Screening
             </span>
           </div>
 
@@ -625,41 +638,6 @@ export default function ApplicationsForScreening() {
         </div>
       )}
 
-      {selectedVacancy && (
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="font-bold text-[#1E3E74]">Vacancy Completion</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                {selectedVacancy.position_title || "Selected vacancy"} ({selectedVacancy.vacancy_id})
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                {selectedVacancyPendingCount > 0
-                  ? `${selectedVacancyPendingCount} applicant(s) still need Initial Screening. Complete their evaluations first.`
-                  : "All applicants have completed Initial Screening. You can move this vacancy to Assessment."}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setActionError("");
-                setActionMessage("");
-                setShowDoneConfirmation(true);
-              }}
-              disabled={!canMarkVacancyDone || markingDone}
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
-              title={
-                selectedVacancyPendingCount > 0
-                  ? "Complete all applicant evaluations first"
-                  : "Mark the vacancy's Initial Evaluation as done"
-              }
-            >
-              <CheckCircle size={16} />
-              Mark as Done
-            </button>
-          </div>
-        </div>
-      )}
 
       {fetchError && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -775,69 +753,6 @@ export default function ApplicationsForScreening() {
           </table>
         </div>
       </div>
-      {showDoneConfirmation && selectedVacancy && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="mark-vacancy-done-title"
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
-          >
-            <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                <CheckCircle size={22} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h2 id="mark-vacancy-done-title" className="text-lg font-bold text-slate-900">
-                  Mark Vacancy as Done?
-                </h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  This will change <strong>{selectedVacancy.position_title || "this vacancy"}</strong>
-                  {" "}({selectedVacancy.vacancy_id}) from <strong>Evaluation</strong> to <strong>Assessment</strong>.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowDoneConfirmation(false)}
-                disabled={markingDone}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
-                aria-label="Close confirmation"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={() => setShowDoneConfirmation(false)}
-                disabled={markingDone}
-                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleMarkVacancyDone}
-                disabled={markingDone || !canMarkVacancyDone}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {markingDone ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    Updating...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle size={16} />
-                    Confirm
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

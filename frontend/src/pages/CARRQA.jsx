@@ -362,6 +362,18 @@ const CARRQA = () => {
                 normalizedName
             ] || [];
 
+        // PBET / LET / LEPT must never exceed its 10-point maximum.
+        const applyCriterionMax = (value) => {
+            const numericValue = Number(value);
+            if (!Number.isFinite(numericValue)) return 0;
+
+            if (normalizedName === "pbet/let/lept rating") {
+                return Math.min(10, Math.max(0, numericValue));
+            }
+
+            return numericValue;
+        };
+
         const getNumericValue = (
             value
         ) => {
@@ -413,7 +425,7 @@ const CARRQA = () => {
             );
 
         if (directScore !== null) {
-            return directScore;
+            return applyCriterionMax(directScore);
         }
 
         const assessment =
@@ -430,7 +442,7 @@ const CARRQA = () => {
             );
 
         if (assessmentScore !== null) {
-            return assessmentScore;
+            return applyCriterionMax(assessmentScore);
         }
 
         const possibleContainers = [
@@ -512,7 +524,7 @@ const CARRQA = () => {
                     criterionScore !==
                     null
                 ) {
-                    return criterionScore;
+                    return applyCriterionMax(criterionScore);
                 }
             }
 
@@ -565,7 +577,7 @@ const CARRQA = () => {
                     criterionScore !==
                     null
                 ) {
-                    return criterionScore;
+                    return applyCriterionMax(criterionScore);
                 }
             }
         }

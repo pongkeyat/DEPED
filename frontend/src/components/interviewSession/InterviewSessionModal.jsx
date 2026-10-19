@@ -509,10 +509,39 @@ export default function InterviewSessionModal({
 
     if (!sessionDate) {
       newErrors.session_date = "Session date is required.";
+    } else {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const selectedDate = new Date(`${sessionDate}T00:00:00`);
+
+      if (selectedDate < today) {
+        newErrors.session_date =
+          "Past dates are not allowed. Please select today or a future date.";
+      }
     }
+
+    const allowedSessionTimes = [
+      "08:00",
+      "09:00",
+      "10:00",
+      "11:00",
+      "12:00",
+      "13:00",
+      "14:00",
+      "15:00",
+      "16:00",
+      "17:00",
+    ];
 
     if (!sessionTime) {
       newErrors.session_time = "Session time is required.";
+    } else if (!allowedSessionTimes.includes(sessionTime)) {
+      newErrors.session_time =
+        "Choose a session time from 8:00 AM to 5:00 PM only.";
+    } else if (sessionTime < "08:00" || sessionTime > "17:00") {
+      newErrors.session_time =
+        "Session time must be within government office hours (8:00 AM to 5:00 PM).";
     }
 
     if (!venue) {
@@ -835,6 +864,7 @@ export default function InterviewSessionModal({
               type="date"
               name="session_date"
               value={formData.session_date}
+              min={new Date().toLocaleDateString("en-CA")}
               onChange={handleChange}
               disabled={isSaving}
               className={`w-full rounded-lg border ${
@@ -861,8 +891,7 @@ export default function InterviewSessionModal({
               Session Schedule Time
             </label>
 
-            <input
-              type="time"
+            <select
               name="session_time"
               value={formData.session_time}
               onChange={handleChange}
@@ -871,7 +900,22 @@ export default function InterviewSessionModal({
               className={`w-full rounded-lg border ${
                 errors.session_time ? "border-rose-500" : "border-slate-200"
               } bg-white px-3 py-2 text-xs outline-none focus:border-blue-500`}
-            />
+            >
+              <option value="">-- Select Session Time --</option>
+              <option value="08:00">08:00 AM</option>
+              <option value="09:00">09:00 AM</option>
+              <option value="10:00">10:00 AM</option>
+              <option value="11:00">11:00 AM</option>
+              <option value="12:00">12:00 PM</option>
+              <option value="13:00">01:00 PM</option>
+              <option value="14:00">02:00 PM</option>
+              <option value="15:00">03:00 PM</option>
+              <option value="16:00">04:00 PM</option>
+              <option value="17:00">05:00 PM</option>
+            </select>
+            <p className="text-[10px] text-slate-500">
+              Government office hours only: 8:00 AM to 5:00 PM.
+            </p>
 
             {errors.session_time && (
               <span className="text-[10px] text-rose-500">

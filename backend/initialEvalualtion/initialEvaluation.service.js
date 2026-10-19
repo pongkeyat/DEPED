@@ -698,7 +698,10 @@ export const createInitialScreening = async (data) => {
 
         else if (
             rawResult === "unqualified" ||
-            rawResult === "disqualified"
+            rawResult === "disqualified" ||
+            rawResult === "not qualified" ||
+            rawResult === "not_qualified" ||
+            rawResult === "not-qualified"
         ) {
 
             screeningOverallResult =

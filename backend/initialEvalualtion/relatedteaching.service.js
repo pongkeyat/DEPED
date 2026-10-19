@@ -16,6 +16,19 @@ const normalizeText = (value) => {
         .toUpperCase();
 };
 
+const getApplicantEducationRuleLevel = (educationLevel) => {
+    const normalizedLevel = normalizeText(educationLevel);
+    const aliases = {
+        ELEMENTARY: "ELEMENTARY GRADUATE",
+        "JUNIOR HIGH SCHOOL": "COMPLETED JUNIOR HIGH SCHOOL",
+        SECONDARY: "HIGH SCHOOL GRADUATE",
+        "SENIOR HIGH SCHOOL": "HIGH SCHOOL GRADUATE",
+        "SECONDARY / HIGH SCHOOL": "HIGH SCHOOL GRADUATE",
+    };
+
+    return aliases[normalizedLevel] || normalizedLevel;
+};
+
 
 /**
  * ============================================================
@@ -714,7 +727,7 @@ export const calculateRelatedTeachingEducation = async (
                     WHERE UPPER(education_level) = $1
                     LIMIT 1
                     `,
-                    [educationLevel]
+                    [getApplicantEducationRuleLevel(educationLevel)]
                 );
 
             if (

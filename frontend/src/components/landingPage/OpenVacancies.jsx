@@ -76,6 +76,71 @@ export default function OpenVacancies({
             position?.title ||
             "Position unavailable";
 
+          // Vacancy-specific qualification data may be returned as an object
+          // or as a JSON string by the API.
+          const parseObject = (value) => {
+            if (!value) return {};
+            if (typeof value === "object") return value;
+            if (typeof value === "string") {
+              try {
+                const parsed = JSON.parse(value);
+                return parsed && typeof parsed === "object" ? parsed : {};
+              } catch {
+                return {};
+              }
+            }
+            return {};
+          };
+
+          const vacancySpecificQualifications = parseObject(
+            job?.vacancy_specific_qualifications
+          );
+
+          // Qualifications may also be stored directly on the linked position.
+          const positionQualifications =
+            position?.qualifications ||
+            position?.Qualifications ||
+            position?.qualification_standards ||
+            position?.qualificationStandards ||
+            position?.prescribed_qualifications ||
+            position?.prescribedQualifications ||
+            {};
+
+          // The API field is prescribed_qualifications. Prefer the direct
+          // vacancy field, then check the nested vacancy-specific object.
+          const prescribedQualifications =
+            job?.prescribed_qualifications ??
+            vacancySpecificQualifications?.prescribed_qualifications ??
+            positionQualifications?.prescribed_qualifications ??
+            position?.prescribed_qualifications ??
+            position?.prescribedQualifications ??
+            "Not specified";
+
+          const getQualification = (jobKeys, positionKeys) => {
+            for (const key of jobKeys) {
+              const value = job?.[key];
+              if (value !== null && value !== undefined && value !== "") {
+                return value;
+              }
+            }
+
+            for (const key of positionKeys) {
+              const value = position?.[key];
+              if (value !== null && value !== undefined && value !== "") {
+                return value;
+              }
+            }
+
+            for (const key of positionKeys) {
+              const value = positionQualifications?.[key];
+              if (value !== null && value !== undefined && value !== "") {
+                return value;
+              }
+            }
+
+            return "Not specified";
+          };
+
           return {
             ...job,
 
@@ -90,21 +155,37 @@ export default function OpenVacancies({
             positionDetails: position || {},
 
             // Office and compensation
-            office: job.office_unit || "Not specified",
-            salaryGrade: job.salary_grade ?? "Not specified",
+            office: job.office_unit || position?.office_unit || "Not specified",
+            salaryGrade:
+              job.salary_grade ?? position?.salary_grade ?? "Not specified",
 
-            // Qualification standards
-            education:
-              job.education_requirement || "Not specified",
+            // Qualification standards: prefer vacancy-specific values,
+            // then fetch the prescribed qualifications from the linked position.
+            education: getQualification(
+              ["education_requirement", "education", "education_qualification"],
+              ["education_requirement", "education", "education_qualification"]
+            ),
 
-            training:
-              job.training_requirement || "Not specified",
+            training: getQualification(
+              ["training_requirement", "training", "training_qualification"],
+              ["training_requirement", "training", "training_qualification"]
+            ),
 
-            experience:
-              job.experience_requirement || "Not specified",
+            experience: getQualification(
+              ["experience_requirement", "experience", "experience_qualification"],
+              ["experience_requirement", "experience", "experience_qualification"]
+            ),
 
-            eligibility:
-              job.eligibility_requirement || "Not specified",
+            eligibility: getQualification(
+              ["eligibility_requirement", "eligibility", "eligibility_qualification"],
+              ["eligibility_requirement", "eligibility", "eligibility_qualification"]
+            ),
+
+            // Explicit prescribed qualifications from vacancy_specific_qualifications.
+            prescribedQualifications:
+              typeof prescribedQualifications === "object"
+                ? formatQualificationObject(prescribedQualifications)
+                : prescribedQualifications,
 
             // Vacancy details
             slots: job.number_of_vacancies ?? 1,
@@ -504,16 +585,6 @@ export default function OpenVacancies({
                     }
                   />
 
-                  <DetailItem
-                    icon={<ClipboardList size={18} />}
-                    label="Plantilla Item Number"
-                    value={
-                      selectedJob.plantilla_item_number ||
-                      selectedJob.item_number ||
-                      "Not specified"
-                    }
-                  />
-
                 </div>
               </section>
 
@@ -548,6 +619,12 @@ export default function OpenVacancies({
                     icon={<ShieldCheck size={20} />}
                     label="Eligibility"
                     value={selectedJob.eligibility}
+                  />
+
+                  <QualificationItem
+                    icon={<FileText size={20} />}
+                    label="Prescribed Qualifications"
+                    value={selectedJob.prescribedQualifications}
                   />
 
                 </div>
@@ -702,6 +779,17 @@ function JobCard({ job, formatSalaryGrade, setSelectedJob, handleApply }) {
               />
               <span className="text-xs">{job.eligibility}</span>
             </li>
+
+            <li className="border-b pb-1.5 flex gap-2">
+              <FileText
+                size={17}
+                className="shrink-0 text-[#1e3a67]"
+              />
+              <span className="text-xs leading-snug whitespace-pre-line break-words">
+                <span className="font-semibold">Prescribed Qualifications: </span>
+                {job.prescribedQualifications || "Not specified"}
+              </span>
+            </li>
           </ul>
         </div>
       </div>
@@ -775,6 +863,37 @@ function DetailItem({ icon, label, value }) {
       </p>
     </div>
   );
+}
+
+// Convert object-shaped prescribed qualifications into readable text.
+function formatQualificationObject(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) =>
+        item && typeof item === "object"
+          ? Object.entries(item)
+              .map(([key, val]) => `${formatQualificationLabel(key)}: ${String(val ?? "")}`)
+              .join("\n")
+          : String(item)
+      )
+      .join("\n");
+  }
+
+  return Object.entries(value)
+    .map(([key, val]) => {
+      const formattedValue =
+        val && typeof val === "object"
+          ? JSON.stringify(val)
+          : String(val ?? "");
+      return `${formatQualificationLabel(key)}: ${formattedValue}`;
+    })
+    .join("\n");
+}
+
+function formatQualificationLabel(key) {
+  return String(key)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 // =====================================================

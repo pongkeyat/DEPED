@@ -41,15 +41,62 @@ const getPostgresEnv = () => ({
 });
 
 // ======================================================
-// CREATE TIMESTAMP
+// CREATE BACKUP TIMESTAMP
 // ======================================================
 
 const createTimestamp = () => {
-    return new Date()
-        .toISOString()
-        .replace("T", "_")
-        .replace(/:/g, "-")
-        .replace(/\.\d{3}Z$/, "");
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, "0");
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const year = now.getFullYear();
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    const seconds = String(now.getSeconds()).padStart(2, "0");
+
+    return `${day}-${month}-${year}-${hours}-${minutes}-${seconds}`;
+};
+
+const reserveBackupPath = async (timestamp, prefix) => {
+    const date = timestamp.slice(0, 10);
+    const backupFiles = await fs.readdir(BACKUP_DIR);
+    const highestSequence = backupFiles.reduce((highest, filename) => {
+        if (!filename.startsWith(`${date}-`) || !filename.toLowerCase().endsWith(".dump")) {
+            return highest;
+        }
+
+        const prefixMarker = `-${prefix}-`;
+        const markerIndex = filename.lastIndexOf(prefixMarker);
+        const timestampPart = filename.slice(0, markerIndex);
+        const sequence = filename.slice(
+            markerIndex + prefixMarker.length,
+            -".dump".length
+        );
+
+        return markerIndex > 0 &&
+            /^\d{2}-\d{2}-\d{4}-\d{2}-\d{2}-\d{2}$/.test(timestampPart) &&
+            /^\d+$/.test(sequence)
+            ? Math.max(highest, Number(sequence))
+            : highest;
+    }, 0);
+
+    let sequence = highestSequence + 1;
+
+    while (true) {
+        const filename = `${timestamp}-${prefix}-${sequence}.dump`;
+        const backupPath = path.join(BACKUP_DIR, filename);
+
+        try {
+            const reservation = await fs.open(backupPath, "wx");
+            await reservation.close();
+            return { filename, backupPath };
+        } catch (error) {
+            if (error.code !== "EEXIST") {
+                throw error;
+            }
+
+            sequence += 1;
+        }
+    }
 };
 
 // ======================================================
@@ -77,12 +124,14 @@ const validateBackupFilename = (filename) => {
 // ======================================================
 
 export const createDatabaseBackup = async ({
-    prefix = "deped_backup",
+    prefix = "backup",
 } = {}) => {
     await fs.mkdir(BACKUP_DIR, { recursive: true });
 
-    const filename = `${prefix}_${createTimestamp()}.dump`;
-    const backupPath = path.join(BACKUP_DIR, filename);
+    const { filename, backupPath } = await reserveBackupPath(
+        createTimestamp(),
+        prefix
+    );
 
     const args = [
         "-h", DB_HOST,
@@ -203,7 +252,7 @@ export const restoreDatabaseBackup = async (filename) => {
 
     // STEP 1: Create a safety backup of the current database.
     const preRestoreBackup = await createDatabaseBackup({
-        prefix: "deped_pre_restore",
+        prefix: "pre-restore-backup",
     });
 
     // STEP 2: Restore the selected custom-format backup.

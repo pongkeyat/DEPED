@@ -1,6 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Info } from "lucide-react";
 import { getPositions } from "../../api/PositionsApi";
+import {
+    getOfficeUnits,
+    getPlacesOfAssignment,
+} from "../../api/AssignmentApi";
 
 // =========================================================
 // POSITION CATEGORIES
@@ -13,44 +17,7 @@ const categories = [
     "Non-Teaching Positions",
 ];
 
-// =========================================================
-// PLACES OF ASSIGNMENT
-// =========================================================
-
-const placesOfAssignment = [
-    "Regional Office 1",
-    "SDO Ilocos Norte",
-    "SDO Ilocos Sur",
-    "SDO La Union",
-    "SDO Pangasinan I (Lingayen)",
-    "SDO Pangasinan II (Binalonan)",
-    "SDO Alaminos City",
-    "SDO Batac City",
-    "SDO Candon City",
-    "SDO Dagupan City",
-    "SDO Laoag City",
-    "SDO San Carlos City",
-    "SDO San Fernando City",
-    "SDO Urdaneta City",
-    "SDO Vigan City",
-];
-
 const PLANTILLA_ITEM_PREFIX = "OSEC-DECSB-";
-
-const officeUnits = [
-    "Human Resource Management Office",
-    "Office of the Schools Division Superintendent",
-    "Office of the Regional Director",
-    "Curriculum and Learning Management Division (CLMD)",
-    "Education Support and Services Division (ESSD)",
-    "Field Technical Assistance Division (FTAD)",
-    "Quality Assurance Division (QAD)",
-    "Policy, Planning and Research Division (PPRD)",
-    "Human Resource Development Division (HRDD)",
-    "Administrative Division (AD)",
-    "Finance Division (FD)",
-    "School Division Office (SDO)",
-];
 
 // =========================================================
 // CATEGORY NORMALIZATION
@@ -105,6 +72,10 @@ export default function PostVacancyForm({
     const [positions, setPositions] = useState([]);
     const [loadingPositions, setLoadingPositions] =
         useState(true);
+    const [placesOfAssignment, setPlacesOfAssignment] = useState([]);
+    const [officeUnits, setOfficeUnits] = useState([]);
+    const [loadingAssignments, setLoadingAssignments] = useState(true);
+    const [assignmentLoadError, setAssignmentLoadError] = useState("");
     const isMissing = (value) =>
         showValidationErrors && !String(value ?? "").trim();
     const missingFieldClass =
@@ -274,6 +245,66 @@ export default function PostVacancyForm({
         };
 
         fetchPositionsData();
+
+        return () => {
+            mounted = false;
+        };
+    }, []);
+
+    // =========================================================
+    // FETCH PLACES OF ASSIGNMENT AND OFFICE UNITS
+    // =========================================================
+
+    useEffect(() => {
+        let mounted = true;
+
+        const fetchAssignmentOptions = async () => {
+            const [placesResult, officesResult] = await Promise.allSettled([
+                getPlacesOfAssignment(),
+                getOfficeUnits(),
+            ]);
+
+            if (!mounted) return;
+
+            const activeRecords = (result, nameField) =>
+                result.status === "fulfilled" && Array.isArray(result.value)
+                    ? result.value.filter(
+                          (record) =>
+                              record.is_archived !== true &&
+                              record.is_archived !== "true" &&
+                              String(record.status || "").toLowerCase() !==
+                                  "archived" &&
+                              typeof record[nameField] === "string" &&
+                              record[nameField].trim(),
+                      )
+                    : [];
+
+            setPlacesOfAssignment(
+                activeRecords(placesResult, "place_name"),
+            );
+            setOfficeUnits(activeRecords(officesResult, "office_unit_name"));
+
+            const errors = [];
+            if (placesResult.status === "rejected") {
+                console.error(
+                    "Failed to load places of assignment:",
+                    placesResult.reason,
+                );
+                errors.push("places of assignment");
+            }
+            if (officesResult.status === "rejected") {
+                console.error("Failed to load office units:", officesResult.reason);
+                errors.push("office units");
+            }
+            setAssignmentLoadError(
+                errors.length
+                    ? `Unable to load ${errors.join(" and ")}. Please check the API server and try again.`
+                    : "",
+            );
+            setLoadingAssignments(false);
+        };
+
+        fetchAssignmentOptions();
 
         return () => {
             mounted = false;
@@ -759,7 +790,7 @@ export default function PostVacancyForm({
                                     event.target.value
                                 )
                             }
-                            maxLength={5}
+                            maxLength={10}
                             className={`min-w-0 rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584] ${
                                 isPlantillaPositionMissing &&
                                 !plantillaPositionCode.trim()
@@ -780,7 +811,7 @@ export default function PostVacancyForm({
                                     event.target.value
                                 )
                             }
-                            maxLength={5}
+                            maxLength={10}
                             className={`min-w-0 rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584] ${
                                 isPlantillaPositionMissing &&
                                 !plantillaSerialNumber.trim()
@@ -833,6 +864,7 @@ export default function PostVacancyForm({
                             ""
                         }
                         onChange={onChange}
+                        disabled={loadingAssignments}
                         className={`w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584] ${
                             isMissing(formData?.place_of_assignment)
                                 ? missingFieldClass
@@ -840,15 +872,32 @@ export default function PostVacancyForm({
                         }`}
                     >
                         <option value="">
-                            Select Place of Assignment
+                            {loadingAssignments
+                                ? "Loading places of assignment..."
+                                : "Select Place of Assignment"}
                         </option>
+                        {formData?.place_of_assignment &&
+                            !placesOfAssignment.some(
+                                (place) =>
+                                    place.place_name ===
+                                    formData.place_of_assignment,
+                            ) && (
+                                <option value={formData.place_of_assignment}>
+                                    {formData.place_of_assignment} (current selection)
+                                </option>
+                            )}
                         {placesOfAssignment.map((place) => (
-                            <option key={place} value={place}>
-                                {place}
+                            <option key={place.place_id} value={place.place_name}>
+                                {place.place_name}
                             </option>
                         ))}
                     </select>
                     {missingFieldMessage(formData?.place_of_assignment)}
+                    {assignmentLoadError && (
+                        <p role="alert" className="mt-1 text-xs text-red-600">
+                            {assignmentLoadError}
+                        </p>
+                    )}
                 </div>
 
                 {/* =================================================
@@ -934,6 +983,7 @@ export default function PostVacancyForm({
                             ""
                         }
                         onChange={onChange}
+                        disabled={loadingAssignments}
                         className={`w-full rounded-lg border p-3 outline-none focus:border-[#1b4584] focus:ring-1 focus:ring-[#1b4584] bg-white ${
                             isMissing(formData?.office_unit)
                                 ? missingFieldClass
@@ -941,15 +991,27 @@ export default function PostVacancyForm({
                         }`}
                     >
                         <option value="">
-                            Select Office / Unit
+                            {loadingAssignments
+                                ? "Loading office units..."
+                                : "Select Office / Unit"}
                         </option>
+                        {formData?.office_unit &&
+                            !officeUnits.some(
+                                (office) =>
+                                    office.office_unit_name ===
+                                    formData.office_unit,
+                            ) && (
+                                <option value={formData.office_unit}>
+                                    {formData.office_unit} (current selection)
+                                </option>
+                            )}
 
                         {officeUnits.map((office) => (
                             <option
-                                key={office}
-                                value={office}
+                                key={office.office_unit_id}
+                                value={office.office_unit_name}
                             >
-                                {office}
+                                {office.office_unit_name}
                             </option>
                         ))}
                     </select>

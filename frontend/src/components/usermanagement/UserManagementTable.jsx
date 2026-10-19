@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
     X,
     Pencil,
@@ -20,7 +20,7 @@ const ROLES = [
     { value: "hrmpsb", label: "HRMPSB" }
 ];
 
-const UserManagementTable = () => {
+const UserManagementTable = ({ refreshKey, onUsersChanged }) => {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -54,7 +54,7 @@ const UserManagementTable = () => {
     // =========================================================
     // GET ALL ACTIVE USERS
     // =========================================================
-    const fetchUsers = async () => {
+    const fetchUsers = useCallback(async () => {
         try {
             setLoading(true);
             setError("");
@@ -83,11 +83,11 @@ const UserManagementTable = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
-        fetchUsers();
-    }, []);
+        void Promise.resolve().then(fetchUsers);
+    }, [fetchUsers, refreshKey]);
 
     // =========================================================
     // FORMAT ROLE
@@ -239,6 +239,7 @@ const UserManagementTable = () => {
             // CLOSE BOTH MODALS
             setShowUpdateConfirmation(false);
             setSelectedUser(null);
+            onUsersChanged();
         } catch (err) {
             console.error(
                 "Failed to update user:",
@@ -278,15 +279,8 @@ const UserManagementTable = () => {
                 confirmArchiveUser.id
             );
 
-            setUsers(prev =>
-                prev.filter(
-                    user =>
-                        user.id !==
-                        confirmArchiveUser.id
-                )
-            );
-
             setConfirmArchiveUser(null);
+            onUsersChanged();
         } catch (err) {
             console.error(
                 "Failed to archive user:",

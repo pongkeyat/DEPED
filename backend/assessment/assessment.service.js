@@ -1,5 +1,7 @@
 import pool from "../config/db.js";
 
+const RELATED_TEACHING_PERFORMANCE_MAX = 20;
+
 /*
 |--------------------------------------------------------------------------
 | NORMALIZE VALUES
@@ -11,6 +13,18 @@ const normalize = (value) => {
         .trim()
         .replace(/\s+/g, " ")
         .toUpperCase();
+};
+
+const getPerformanceScore = (optionPoints, assessmentType, maxPoints) => {
+    if (assessmentType === "RELATED_TEACHING") {
+        return (optionPoints / 5) * RELATED_TEACHING_PERFORMANCE_MAX;
+    }
+
+    if (["SCHOOL_ADMINISTRATION", "NON_TEACHING"].includes(assessmentType)) {
+        return (optionPoints / 5) * Number(maxPoints);
+    }
+
+    return optionPoints;
 };
 
 const getAssessmentTypeFromCategory = (category) => {
@@ -1418,14 +1432,17 @@ export const submitAssessment = async (
 
                 const optionPoints = Number(optionResult.rows[0].points || 0);
 
-                // The database stores the RPMS midpoint value for Performance.
-                // Convert it to the applicable criterion weight (20/25 by criterion;
-                // position-specific General Services weight needs position mapping).
+                // Related Teaching Performance is weighted at 20 points;
+                // its RPMS midpoint value is scaled by four.
                 if (
                     criterionName === "PERFORMANCE" &&
                     ["RELATED_TEACHING", "SCHOOL_ADMINISTRATION", "NON_TEACHING"].includes(assessmentType)
                 ) {
-                    finalScore = (optionPoints / 5) * Number(criterion.max_points);
+                    finalScore = getPerformanceScore(
+                        optionPoints,
+                        assessmentType,
+                        criterion.max_points
+                    );
                 } else {
                     finalScore = optionPoints;
                 }
@@ -2593,7 +2610,11 @@ export const submitPanelistAssessment = async ({
                     criterionName === "PERFORMANCE" &&
                     ["RELATED_TEACHING", "SCHOOL_ADMINISTRATION", "NON_TEACHING"].includes(assessmentType);
                 const expectedOptionScore = isPerformanceCriterion
-                    ? (optionPoints / 5) * Number(criterion.max_points)
+                    ? getPerformanceScore(
+                        optionPoints,
+                        assessmentType,
+                        criterion.max_points
+                    )
                     : optionPoints;
 
                 if (Math.abs(expectedOptionScore - score) > 0.0001) {

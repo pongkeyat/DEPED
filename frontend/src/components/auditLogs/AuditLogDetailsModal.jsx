@@ -158,7 +158,7 @@ const AuditLogDetailsModal = ({
                                             (log.username &&
                                             log.username !== "PUBLIC"
                                                 ? log.username
-                                                : "User not captured")
+                                                : "Unauthenticated request")
                                     )}
 
                                     {detailItem(
@@ -170,7 +170,7 @@ const AuditLogDetailsModal = ({
                                         "Role",
                                         log.display_user_role ||
                                             log.user_role ||
-                                            (log.user_id ? "Unknown" : "Unknown user")
+                                            "—"
                                     )}
                                 </div>
                             </section>

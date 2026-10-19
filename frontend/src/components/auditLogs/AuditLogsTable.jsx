@@ -190,13 +190,13 @@ const AuditLogsTable = ({
                                                 (log.username &&
                                                 log.username !== "PUBLIC"
                                                     ? log.username
-                                                    : "User not captured")}
+                                                    : "Unauthenticated request")}
                                         </p>
 
                                         <p className="mt-1 text-xs text-gray-500">
                                             {log.display_user_role ||
                                                 log.user_role ||
-                                                (log.user_id ? "Unknown" : "Unknown user")}
+                                                "—"}
                                         </p>
                                     </td>
 

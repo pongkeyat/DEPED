@@ -1,14 +1,9 @@
 import { useState } from "react";
-import { Users, UserPlus, ShieldAlert } from "lucide-react";
+import { Users, UserPlus } from "lucide-react";
 import RegisterUserModal from "./RegisterUserModal"; // Adjust path if needed
 
-export default function UserManagementHeader() {
+export default function UserManagementHeader({ onUserRegistered }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  const handleUserRegistered = (formData) => {
-    console.log("User successfully captured in parent component:", formData);
-    // You can refresh a user data list here if needed
-  };
 
   return (
     <>
@@ -54,7 +49,7 @@ export default function UserManagementHeader() {
       <RegisterUserModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
-        onUserRegistered={handleUserRegistered}
+        onUserRegistered={onUserRegistered}
       />
     </>
   );
