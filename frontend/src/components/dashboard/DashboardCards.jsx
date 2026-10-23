@@ -1,4 +1,3 @@
-
 import { useMemo, useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -87,6 +86,16 @@ export default function DashboardCards({
   onApplyDateFilter,
 }) {
   const navigate = useNavigate();
+
+  // Today's date (local) as YYYY-MM-DD, so the calendar can't pick future dates
+  const todayKey = (() => {
+    const now = new Date();
+    return [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0"),
+    ].join("-");
+  })();
 
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const notifRef = useRef(null);
@@ -460,6 +469,43 @@ export default function DashboardCards({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Date Range Filter */}
+          <div className="flex items-center gap-2 flex-wrap rounded-xl border border-gray-200 bg-[#f4f7fb] px-3 py-1.5">
+            <label className="flex items-center gap-1.5 text-[12px] font-medium text-gray-500">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+              </svg>
+              From:
+              <input
+                type="date"
+                value={dateFrom ?? ""}
+                max={dateTo && dateTo < todayKey ? dateTo : todayKey}
+                onChange={(e) => onDateFromChange?.(e.target.value)}
+                className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-[12px] text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1e3a6d]"
+              />
+            </label>
+
+            <label className="flex items-center gap-1.5 text-[12px] font-medium text-gray-500">
+              To:
+              <input
+                type="date"
+                value={dateTo ?? ""}
+                min={dateFrom || undefined}
+                max={todayKey}
+                onChange={(e) => onDateToChange?.(e.target.value)}
+                className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-[12px] text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1e3a6d]"
+              />
+            </label>
+
+            <button
+              type="button"
+              onClick={() => onApplyDateFilter?.()}
+              className="bg-[#1e3a6d] hover:bg-[#152a50] text-white text-[12px] font-bold px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+            >
+              Filter
+            </button>
           </div>
         </div>
       </div>

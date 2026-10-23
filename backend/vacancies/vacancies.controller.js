@@ -16,6 +16,45 @@ import {
     sendInitialScreeningEmail,
     sendRequirementsReminderEmail,
 } from "./email.service.js";
+import {
+    getMemoFileReference,
+    isValidMemoFile,
+    removeMemoUpload,
+    resolveMemoFilePath
+} from "./vacancyMemoUpload.js";
+import path from "node:path";
+
+const getMemoOriginalFilename = (file) =>
+    String(file.originalname || "memo")
+        .replace(/[\\/]/g, "")
+        .replace(/[\r\n]/g, "");
+
+const cleanupUnreferencedMemoUpload = async (file) => {
+    if (!file) return;
+
+    try {
+        const fileReference = getMemoFileReference(file);
+        const referenceResult = await pool.query(
+            `
+            SELECT EXISTS (
+                SELECT 1
+                FROM public.vacancies_remarks
+                WHERE memo_file_path = $1
+            ) AS is_referenced
+            `,
+            [fileReference]
+        );
+
+        if (!referenceResult.rows[0].is_referenced) {
+            await removeMemoUpload(file);
+        }
+    } catch (error) {
+        console.error(
+            "Failed to clean up unreferenced memo upload:",
+            error
+        );
+    }
+};
 
 // ============================================================
 // HELPER: Generate Vacancy ID
@@ -369,7 +408,8 @@ export const getAllVacancies = async (req, res) => {
                 q.eligibility_requirement,
                 q.prescribed_qualifications,
                 r.remark_text,
-                r.memo
+                r.memo_file_path,
+                r.prescribed_qualifications_memo AS memo_file_name
             FROM public.vacancies v
             LEFT JOIN public.positions p
                 ON v.position_id = p.position_id
@@ -711,9 +751,9 @@ export const archiveVacancy = async (req, res) => {
 
 export const updateVacancyStatus = async (req, res) => {
     const { id } = req.params;
-    const { memo, status: requestedStatus } = req.body;
-
-    const client = await pool.connect();
+    const { status: requestedStatus } = req.body;
+    let client;
+    let memoFilePersisted = false;
 
     let updatedApplicants = 0;
     let updatedApplicantIds = [];
@@ -724,6 +764,28 @@ export const updateVacancyStatus = async (req, res) => {
     let screeningTriggered = false;
 
     try {
+        if (String(requestedStatus || "").trim().toLowerCase() === "terminated") {
+            if (!req.file) {
+                return res.status(400).json({
+                    success: false,
+                    error: "A PDF or DOCX memo file is required to terminate a vacancy."
+                });
+            }
+
+            if (!(await isValidMemoFile(req.file))) {
+                return res.status(400).json({
+                    success: false,
+                    error: "The uploaded memo is not a valid PDF or DOCX file."
+                });
+            }
+        } else if (req.file) {
+            return res.status(400).json({
+                success: false,
+                error: "Memo files can only be uploaded when terminating a vacancy."
+            });
+        }
+
+        client = await pool.connect();
         await client.query("BEGIN");
 
         // ======================================================
@@ -797,19 +859,6 @@ export const updateVacancyStatus = async (req, res) => {
         // STEP 2: CLOSE -> TERMINATED
         // A memo is required to terminate a closed vacancy.
         if (requested === "terminated") {
-            const cleanedMemo =
-                typeof memo === "string" ? memo.trim() : "";
-
-            if (!cleanedMemo) {
-                await client.query("ROLLBACK");
-
-                return res.status(400).json({
-                    success: false,
-                    error:
-                        "A memo is required when terminating a vacancy.",
-                });
-            }
-
             if (previousStatus === "Terminated") {
                 await client.query("ROLLBACK");
 
@@ -831,18 +880,50 @@ export const updateVacancyStatus = async (req, res) => {
 
             nextStatus = "Terminated";
 
-            // Save the memo inside the same transaction.
-            await client.query(
+            const existingRemark = await client.query(
                 `
-                INSERT INTO public.vacancies_remarks (
-                    vacancy_id,
-                    remark_text,
-                    memo
-                )
-                VALUES ($1, $2, $3)
+                SELECT vacancies_remark_id
+                FROM public.vacancies_remarks
+                WHERE vacancy_id = $1
+                ORDER BY vacancies_remark_id DESC
+                LIMIT 1
+                FOR UPDATE
                 `,
-                [id, cleanedMemo, cleanedMemo]
+                [id]
             );
+
+            const memoFilePath = getMemoFileReference(req.file);
+            const memoFileName = getMemoOriginalFilename(req.file);
+
+            if (existingRemark.rowCount > 0) {
+                await client.query(
+                    `
+                    UPDATE public.vacancies_remarks
+                    SET
+                        memo_file_path = $1,
+                        prescribed_qualifications_memo = $2
+                    WHERE vacancies_remark_id = $3
+                    `,
+                    [
+                        memoFilePath,
+                        memoFileName,
+                        existingRemark.rows[0].vacancies_remark_id
+                    ]
+                );
+            } else {
+                await client.query(
+                    `
+                    INSERT INTO public.vacancies_remarks (
+                        vacancy_id,
+                        remark_text,
+                        memo_file_path,
+                        prescribed_qualifications_memo
+                    )
+                    VALUES ($1, '', $2, $3)
+                    `,
+                    [id, memoFilePath, memoFileName]
+                );
+            }
         }
 
         // STEP 3: TERMINATED -> ASSESSMENT
@@ -978,11 +1059,14 @@ export const updateVacancyStatus = async (req, res) => {
         }
 
         await client.query("COMMIT");
+        memoFilePersisted = Boolean(req.file);
     } catch (error) {
-        try {
-            await client.query("ROLLBACK");
-        } catch (rollbackError) {
-            console.error("Rollback error:", rollbackError);
+        if (client) {
+            try {
+                await client.query("ROLLBACK");
+            } catch (rollbackError) {
+                console.error("Rollback error:", rollbackError);
+            }
         }
 
         console.error(
@@ -995,7 +1079,10 @@ export const updateVacancyStatus = async (req, res) => {
             error: "Internal server error",
         });
     } finally {
-        client.release();
+        client?.release();
+        if (req.file && !memoFilePersisted) {
+            await cleanupUnreferencedMemoUpload(req.file);
+        }
     }
 
     // ======================================================
@@ -1089,6 +1176,87 @@ export const updateVacancyStatus = async (req, res) => {
         emailsSent,
         emailsFailed,
     });
+};
+
+export const downloadVacancyMemo = async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const result = await pool.query(
+            `
+            SELECT
+                memo_file_path,
+                prescribed_qualifications_memo AS memo_file_name
+            FROM public.vacancies_remarks
+            WHERE vacancy_id = $1
+              AND memo_file_path IS NOT NULL
+            ORDER BY vacancies_remark_id DESC
+            LIMIT 1
+            `,
+            [id]
+        );
+
+        const memo = result.rows[0];
+        if (!memo) {
+            return res.status(404).json({
+                success: false,
+                error: "No memo file is available for this vacancy."
+            });
+        }
+
+        const filePath = resolveMemoFilePath(memo.memo_file_path);
+        if (!filePath) {
+            console.error(
+                `Invalid memo file reference for vacancy ${id}.`
+            );
+            return res.status(404).json({
+                success: false,
+                error: "The memo file could not be found."
+            });
+        }
+
+        const downloadName = path
+            .basename(String(memo.memo_file_name || "memo").replace(/\\/g, "/"))
+            .replace(/[\r\n"]/g, "");
+
+        const encodedFilename = encodeURIComponent(downloadName || "memo");
+        const extension = path.extname(downloadName).toLowerCase();
+        res.setHeader(
+            "Content-Type",
+            extension === ".pdf"
+                ? "application/pdf"
+                : "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        );
+        res.setHeader(
+            "Content-Disposition",
+            `inline; filename*=UTF-8''${encodedFilename}`
+        );
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.setHeader("Cache-Control", "private, no-store");
+
+        return res.sendFile(filePath, (error) => {
+            if (error && !res.headersSent) {
+                if (error.code === "ENOENT") {
+                    return res.status(404).json({
+                        success: false,
+                        error: "The memo file could not be found."
+                    });
+                }
+
+                console.error("Failed to send vacancy memo:", error);
+                return res.status(500).json({
+                    success: false,
+                    error: "Unable to download the memo file."
+                });
+            }
+        });
+    } catch (error) {
+        console.error("Failed to retrieve vacancy memo:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Unable to retrieve the memo file."
+        });
+    }
 };
 
 

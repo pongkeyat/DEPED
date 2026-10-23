@@ -1,0 +1,674 @@
+import {
+  useState,
+  useEffect,
+  useMemo,
+} from "react";
+
+import { useNavigate } from "react-router-dom";
+
+import { useAuth } from "../context/AuthContext";
+import { getApplications } from "../api/ApplicationApi";
+import { getVacancies } from "../api/VacancyApi";
+
+import InitialEvaluationResultsHeader from "../components/initialEvaluation/InitialEvaluationResultsHeader"
+
+import IERPrintForm from "../components/initialEvaluation/IERPrintForm";
+
+const getStatusStyles = (status) => {
+  switch (status?.toLowerCase()) {
+    case "qualified":
+      return "bg-emerald-100 text-emerald-700";
+
+    case "unqualified":
+      return "bg-red-100 text-red-700";
+
+    default:
+      return "bg-slate-100 text-slate-700";
+  }
+};
+
+const normalizeVacancyId = (id) =>
+  String(id ?? "").trim();
+
+const getApplicationStatus = (app) =>
+  String(
+    app?.application_status ??
+      app?.hr_remarks_final_notes?.application_status ??
+      app?.hr_remarks_final_notes_status ??
+      app?.hr_remarks?.application_status ??
+      app?.status ??
+      "",
+  )
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+const getVacancyStatus = (vacancy) =>
+  String(
+    vacancy?.status ??
+      vacancy?.vacancy_status ??
+      vacancy?.current_status ??
+      vacancy?.vacancyStatus ??
+      "",
+  )
+    .trim()
+    .toLowerCase();
+
+export default function InitialEvaluationResults() {
+  const { user } = useAuth();
+  const [allApplications, setAllApplications] =
+    useState([]);
+
+  const [vacancies, setVacancies] =
+    useState([]);
+
+  const [selectedVacancy, setSelectedVacancy] =
+    useState("");
+
+  const [showUnqualified, setShowUnqualified] =
+    useState(false);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const navigate = useNavigate();
+  const authenticatedUser = user?.user ?? user?.profile ?? user;
+  const hrName =
+    [
+      authenticatedUser?.first_name,
+      authenticatedUser?.middle_name,
+      authenticatedUser?.last_name,
+      authenticatedUser?.suffix,
+    ]
+      .filter(Boolean)
+      .join(" ") ||
+    authenticatedUser?.full_name ||
+    authenticatedUser?.name ||
+    "";
+  const normalizedHrRole = String(authenticatedUser?.role || "")
+    .trim()
+    .toUpperCase();
+  const hrTitle =
+    normalizedHrRole === "HRO"
+      ? "Human Resource Officer (HRO)"
+      : normalizedHrRole === "HRMO"
+        ? "Human Resource Management Officer (HRMO)"
+        : "Human Resource Management Officer";
+
+  // ============================================================
+  // LOAD TERMINATED AND ASSESSMENT VACANCIES
+  // ============================================================
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadVacancies = async () => {
+      try {
+        const firstPage = await getVacancies({ page: 1, limit: 100 });
+        const vacancyRows = Array.isArray(firstPage?.data)
+          ? firstPage.data
+          : [];
+        const totalPages = Math.max(
+          1,
+          Number(firstPage?.pagination?.totalPages) || 1,
+        );
+
+        const remainingPages = await Promise.all(
+          Array.from({ length: totalPages - 1 }, (_, index) =>
+            getVacancies({ page: index + 2, limit: 100 }),
+          ),
+        );
+
+        const allVacancies = [
+          ...vacancyRows,
+          ...remainingPages.flatMap((page) =>
+            Array.isArray(page?.data) ? page.data : [],
+          ),
+        ];
+        const eligibleVacancies = allVacancies.filter((vacancy) =>
+          ["terminated", "assessment"].includes(getVacancyStatus(vacancy)),
+        );
+
+        if (isMounted) {
+          setVacancies(eligibleVacancies);
+        }
+      } catch (error) {
+        console.error(
+          "Failed to load vacancies:",
+          error
+        );
+        if (isMounted) setVacancies([]);
+      }
+    };
+
+    loadVacancies();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // ============================================================
+  // LOAD APPLICATIONS
+  // ============================================================
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchApplications = async () => {
+      try {
+
+        setLoading(true);
+
+        const response =
+          await getApplications();
+
+        const data =
+          response?.data?.data ??
+          response?.data ??
+          response;
+        const applicationRows = Array.isArray(data)
+          ? data
+          : data?.rows ??
+            data?.applications ??
+            data?.results ??
+            [];
+
+        if (!isMounted) return;
+
+        setAllApplications(
+          Array.isArray(applicationRows) ? applicationRows : [],
+        );
+
+      } catch (error) {
+
+        console.error(
+          "Error fetching applications:",
+          error
+        );
+
+        if (isMounted) {
+          setAllApplications([]);
+        }
+
+      } finally {
+
+        if (isMounted) {
+          setLoading(false);
+        }
+
+      }
+    };
+
+    fetchApplications();
+
+    return () => {
+      isMounted = false;
+    };
+
+  }, []);
+
+  // ============================================================
+  // SELECTED VACANCY
+  // ============================================================
+
+  const selectedVacancyData = useMemo(() => {
+
+    if (!selectedVacancy) {
+      return null;
+    }
+
+    return vacancies.find(
+      (vacancy) =>
+        normalizeVacancyId(
+          vacancy.vacancy_id ||
+            vacancy.id
+        ) ===
+        normalizeVacancyId(
+          selectedVacancy
+        )
+    );
+
+  }, [
+    vacancies,
+    selectedVacancy,
+  ]);
+
+  // ============================================================
+  // FILTER APPLICANTS
+  // ============================================================
+
+  const filteredApplications = useMemo(() => {
+
+    const allowedStatuses = showUnqualified
+      ? new Set(["unqualified"])
+      : new Set(["qualified", "rank", "assessment"]);
+    const eligibleVacancyIds = new Set(
+      vacancies.map((vacancy) =>
+        normalizeVacancyId(vacancy.vacancy_id ?? vacancy.id),
+      ),
+    );
+
+    let filtered = allApplications.filter((app) => {
+      const status = getApplicationStatus(app);
+      const vacancyId = normalizeVacancyId(
+        app.vacancy_id ??
+          app.job_application?.vacancy_id ??
+          app.job_applications?.vacancy_id,
+      );
+
+      return allowedStatuses.has(status) && eligibleVacancyIds.has(vacancyId);
+    });
+
+    // ----------------------------------------------------------
+    // VACANCY FILTER
+    // ----------------------------------------------------------
+
+    if (selectedVacancy) {
+
+      const selectedId =
+        normalizeVacancyId(
+          selectedVacancy
+        );
+
+      filtered =
+        filtered.filter((app) => {
+
+          const applicantVacancyId =
+            normalizeVacancyId(
+              app.vacancy_id ??
+                app.job_application?.vacancy_id ??
+                app.job_applications?.vacancy_id
+            );
+
+          return (
+            applicantVacancyId ===
+            selectedId
+          );
+
+        });
+    }
+
+    // ----------------------------------------------------------
+    // DEDUPLICATE
+    // ----------------------------------------------------------
+
+    const uniqueApplicants =
+      new Map();
+
+    filtered.forEach((app) => {
+
+      const applicantId =
+        app.applicant_id ||
+        app.application_id ||
+        app.id;
+
+      if (
+        applicantId &&
+        !uniqueApplicants.has(
+          applicantId
+        )
+      ) {
+        uniqueApplicants.set(
+          applicantId,
+          app
+        );
+      }
+
+    });
+
+    return Array.from(
+      uniqueApplicants.values()
+    );
+
+  }, [
+    allApplications,
+    vacancies,
+    selectedVacancy,
+    showUnqualified,
+  ]);
+
+  // ============================================================
+  // VIEW APPLICANT
+  // ============================================================
+
+
+
+  // ============================================================
+  // TARGET STATUS
+  // ============================================================
+
+  const targetStatus =
+    showUnqualified
+      ? "unqualified"
+      : "qualified";
+
+  // ============================================================
+  // PRINT
+  // ============================================================
+
+  const handlePrint = () => {
+
+    if (!selectedVacancy) {
+
+      alert(
+        "Please select a terminated or assessment vacancy before printing the IER."
+      );
+
+      return;
+    }
+
+    if (
+      filteredApplications.length === 0
+    ) {
+
+      alert(
+        `There are no ${targetStatus} applicants for the selected vacancy.`
+      );
+
+      return;
+    }
+
+    const originalTitle = document.title;
+    document.title = "";
+    window.addEventListener(
+      "afterprint",
+      () => {
+        document.title = originalTitle;
+      },
+      { once: true },
+    );
+    window.print();
+  };
+
+  return (
+    <div className="min-h-screen p-6">
+
+      {/* ======================================================
+          SCREEN HEADER
+          ====================================================== */}
+
+      <div className="print:hidden">
+
+        <InitialEvaluationResultsHeader
+          onBack={() =>
+            navigate(
+              "/applications-screening"
+            )
+          }
+
+          onProceed={() =>
+            navigate("/assessment")
+          }
+
+          onPrint={handlePrint}
+        />
+
+      </div>
+
+      {/* ======================================================
+          SCREEN CONTENT
+          ====================================================== */}
+
+      <div className="print:hidden">
+
+        {/* FILTER CONTAINER */}
+        <div className="mt-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+
+          {/* VACANCY */}
+          <div className="w-full min-w-0 flex-1 lg:max-w-md">
+
+            <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+              Filter by Terminated or Assessment Vacancy
+            </label>
+
+            <select
+              value={selectedVacancy}
+              onChange={(e) =>
+                setSelectedVacancy(
+                  e.target.value
+                )
+              }
+              className="h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+            >
+
+              <option value="">
+                All Terminated and Assessment Vacancies
+              </option>
+
+              {vacancies.map(
+                (vacancy) => {
+
+                  const id =
+                    normalizeVacancyId(
+                      vacancy.vacancy_id ||
+                        vacancy.id
+                    );
+
+                  const title =
+                    vacancy.position_title ||
+                    vacancy.title ||
+                    vacancy.job_title ||
+                    "Unknown Position";
+
+                  return (
+                    <option
+                      key={id}
+                      value={id}
+                    >
+                      {title}{" "}
+                      (ID: {id})
+                    </option>
+                  );
+                }
+              )}
+
+            </select>
+
+          </div>
+
+          {/* SELECTED VACANCY */}
+          {selectedVacancyData && (
+            <div className="flex min-h-11 min-w-0 items-center rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-800 lg:max-w-sm">
+
+              <span className="font-semibold">
+                Selected:
+              </span>
+
+              <span className="ml-1 truncate">
+                {selectedVacancyData.position_title ||
+                  selectedVacancyData.title ||
+                  "Unknown Position"}
+              </span>
+
+            </div>
+          )}
+
+          {/* UNQUALIFIED */}
+          <button
+            type="button"
+            onClick={() =>
+              setShowUnqualified(
+                !showUnqualified
+              )
+            }
+            className={`h-11 w-full shrink-0 rounded-lg border px-5 text-sm font-semibold transition sm:w-auto lg:ml-auto ${
+              showUnqualified
+                ? "border-red-600 bg-red-600 text-white hover:bg-red-700"
+                : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            {showUnqualified
+              ? "Showing Unqualified"
+              : "View Unqualified Pool"}
+          </button>
+          </div>
+        </div>
+
+
+        {/* ====================================================
+            TABLE
+        ==================================================== */}
+
+        <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+
+          <div className="overflow-x-auto">
+
+            <table className="min-w-full">
+
+              <thead className="bg-[#1b4584] px-6 py-4">
+
+                <tr>
+
+                  <th className="px-5 py-4 text-left font-semibold text-white">
+                    Vacancy ID
+                  </th>
+
+                  <th className="px-5 py-4 text-left font-semibold text-white">
+                    Applicant ID
+                  </th>
+
+                  <th className="px-5 py-4 text-left font-semibold text-white">
+                    Applicant Name
+                  </th>
+
+                  <th className="px-5 py-4 text-left font-semibold text-white">
+                    Position
+                  </th>
+
+                  <th className="px-5 py-4 text-left font-semibold text-white">
+                    Date Applied
+                  </th>
+
+                  <th className="px-5 py-4 text-center font-semibold text-white">
+                    Status
+                  </th>
+
+                </tr>
+
+              </thead>
+
+              <tbody>
+
+                {loading ? (
+
+                  <tr>
+
+                    <td
+                      colSpan="7"
+                      className="py-10 text-center text-slate-500"
+                    >
+                      Loading applicants...
+                    </td>
+
+                  </tr>
+
+                ) : filteredApplications.length === 0 ? (
+
+                  <tr>
+
+                    <td
+                      colSpan="7"
+                      className="py-10 text-center text-slate-500"
+                    >
+                      No {targetStatus} applicants
+                      found
+                      {selectedVacancy
+                        ? " for this vacancy."
+                        : "."}
+                    </td>
+
+                  </tr>
+
+                ) : (
+
+                  filteredApplications.map(
+                    (app, index) => {
+
+                      const targetId =
+                        app.applicant_id ||
+                        app.application_id ||
+                        app.id;
+
+                      return (
+
+                        <tr
+                          key={`${targetId}-${index}`}
+                          className="border-b transition-colors hover:bg-slate-50"
+                        >
+
+                          <td className="px-5 py-4 font-medium text-[#1E3E74]">
+                            {app.vacancy_id ||
+                              "N/A"}
+                          </td>
+
+                          <td className="px-5 py-4 font-medium text-gray-700">
+                            {app.applicant_id ||
+                              "N/A"}
+                          </td>
+
+                          <td className="px-5 py-4 font-semibold">
+                            {app.last_name &&
+                            app.first_name
+                              ? `${app.last_name}, ${app.first_name}`
+                              : "Unknown Applicant"}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            {app.position_title ||
+                              "N/A"}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            {app.date_received ||
+                              "N/A"}
+                          </td>
+
+                          <td className="px-5 py-4 text-center">
+
+                            <span
+                              className={`rounded-full px-4 py-1 text-sm font-semibold capitalize ${getStatusStyles(
+                                app.application_status
+                              )}`}
+                            >
+                              {app.application_status ||
+                                "Pending"}
+                            </span>
+
+                          </td>
+
+  
+
+                        </tr>
+
+                      );
+                    }
+                  )
+
+                )}
+
+              </tbody>
+
+            </table>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* ======================================================
+          PRINT VERSION
+          ====================================================== */}
+
+      <IERPrintForm
+        vacancy={selectedVacancyData}
+        applicants={filteredApplications}
+        hrName={hrName}
+        hrTitle={hrTitle}
+      />
+
+    </div>
+  );
+}

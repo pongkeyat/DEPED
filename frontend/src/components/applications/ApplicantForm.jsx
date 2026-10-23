@@ -8,6 +8,12 @@ import { useState } from "react";
 // NOTE: Residential Address is now handled by <PhilippineAddressSelector />
 // (rendered right below this card in ReceiveApplications.jsx).
 
+// Local-time YYYY-MM-DD (toISOString() uses UTC and can be a day off).
+const toLocalISODate = (date) => {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
 export default function ApplicantForm({ formData, onChange }) {
   const [internal, setInternal] = useState({
     lastName: "",
@@ -23,12 +29,12 @@ export default function ApplicantForm({ formData, onChange }) {
 
   const form = formData ?? internal;
 
-  // Compute maximum date allowed (15 years ago from today) to enforce minimum age requirement
+  // Latest allowed birthdate: 15 years before today (minimum age requirement).
+  // This is always earlier than today, so future dates can never be picked.
   const today = new Date();
-  const maxDobYear = today.getFullYear() - 15;
-  const maxDobDate = new Date(maxDobYear, today.getMonth(), today.getDate())
-    .toISOString()
-    .split("T")[0];
+  const maxDobDate = toLocalISODate(
+    new Date(today.getFullYear() - 15, today.getMonth(), today.getDate())
+  );
 
   const handleChange = (e) => {
     let { name, value } = e.target;
@@ -39,6 +45,9 @@ export default function ApplicantForm({ formData, onChange }) {
       if (numericValue.length > 11) return;          // Stop typing beyond 11 digits
       value = numericValue;
     }
+
+    // Date of birth: reject dates past the allowed maximum (also when typed by hand)
+    if (name === "dob" && value && value > maxDobDate) return;
 
     if (onChange) onChange(name, value);
     else setInternal((prev) => ({ ...prev, [name]: value }));

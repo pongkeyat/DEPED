@@ -1,6 +1,8 @@
 import pool from "../config/db.js";
-
-const RELATED_TEACHING_PERFORMANCE_MAX = 20;
+import {
+    getPerformanceAssessmentType,
+    getPerformanceScore
+} from "./performanceScoring.js";
 
 /*
 |--------------------------------------------------------------------------
@@ -13,18 +15,6 @@ const normalize = (value) => {
         .trim()
         .replace(/\s+/g, " ")
         .toUpperCase();
-};
-
-const getPerformanceScore = (optionPoints, assessmentType, maxPoints) => {
-    if (assessmentType === "RELATED_TEACHING") {
-        return (optionPoints / 5) * RELATED_TEACHING_PERFORMANCE_MAX;
-    }
-
-    if (["SCHOOL_ADMINISTRATION", "NON_TEACHING"].includes(assessmentType)) {
-        return (optionPoints / 5) * Number(maxPoints);
-    }
-
-    return optionPoints;
 };
 
 const getAssessmentTypeFromCategory = (category) => {
@@ -105,7 +95,82 @@ export const getQualifiedApplicantForAssessment = async (
 
             ins.experience_months,
             ins.experience_increment,
-            ins.experience_points
+            ins.experience_points,
+
+            CASE
+                WHEN REGEXP_REPLACE(
+                    UPPER(TRIM(p.category)),
+                    '[-_]+',
+                    ' ',
+                    'g'
+                ) IN (
+                    'NON-TEACHING',
+                    'NON TEACHING',
+                    'NON-TEACHING POSITIONS',
+                    'NON TEACHING POSITIONS',
+                    'SCHOOL ADMINISTRATION',
+                    'SCHOOL ADMINISTRATION POSITION',
+                    'SCHOOL ADMINISTRATION POSITIONS',
+                    'RELATED TEACHING',
+                    'RELATED-TEACHING',
+                    'RELATED_TEACHING',
+                    'RELATED TEACHING POSITION',
+                    'RELATED TEACHING POSITIONS',
+                    'RELATED-TEACHING POSITIONS'
+                )
+                THEN ins.performance_assessment_option_id
+                ELSE NULL
+            END AS performance_assessment_option_id,
+
+            CASE
+                WHEN REGEXP_REPLACE(
+                    UPPER(TRIM(p.category)),
+                    '[-_]+',
+                    ' ',
+                    'g'
+                ) IN (
+                    'NON-TEACHING',
+                    'NON TEACHING',
+                    'NON-TEACHING POSITIONS',
+                    'NON TEACHING POSITIONS',
+                    'SCHOOL ADMINISTRATION',
+                    'SCHOOL ADMINISTRATION POSITION',
+                    'SCHOOL ADMINISTRATION POSITIONS',
+                    'RELATED TEACHING',
+                    'RELATED-TEACHING',
+                    'RELATED_TEACHING',
+                    'RELATED TEACHING POSITION',
+                    'RELATED TEACHING POSITIONS',
+                    'RELATED-TEACHING POSITIONS'
+                )
+                THEN ins.performance_points
+                ELSE NULL
+            END AS performance_points,
+
+            CASE
+                WHEN REGEXP_REPLACE(
+                    UPPER(TRIM(p.category)),
+                    '[-_]+',
+                    ' ',
+                    'g'
+                ) IN (
+                    'NON-TEACHING',
+                    'NON TEACHING',
+                    'NON-TEACHING POSITIONS',
+                    'NON TEACHING POSITIONS',
+                    'SCHOOL ADMINISTRATION',
+                    'SCHOOL ADMINISTRATION POSITION',
+                    'SCHOOL ADMINISTRATION POSITIONS',
+                    'RELATED TEACHING',
+                    'RELATED-TEACHING',
+                    'RELATED_TEACHING',
+                    'RELATED TEACHING POSITION',
+                    'RELATED TEACHING POSITIONS',
+                    'RELATED-TEACHING POSITIONS'
+                )
+                THEN performance_option.option_label
+                ELSE NULL
+            END AS performance_option_label
 
         FROM applicant_information ai
 
@@ -124,6 +189,27 @@ export const getQualifiedApplicantForAssessment = async (
         JOIN initial_screening ins
             ON ins.job_applications_id =
                ai.job_applications_id
+
+        LEFT JOIN assessment_options performance_option
+            ON performance_option.assessment_option_id =
+               ins.performance_assessment_option_id
+
+           AND REGEXP_REPLACE(
+                UPPER(TRIM(p.category)),
+                '[-_]+',
+                ' ',
+                'g'
+           ) IN (
+                'NON TEACHING',
+                'NON TEACHING POSITION',
+                'NON TEACHING POSITIONS',
+                'SCHOOL ADMINISTRATION',
+                'SCHOOL ADMINISTRATION POSITION',
+                'SCHOOL ADMINISTRATION POSITIONS',
+                'RELATED TEACHING',
+                'RELATED TEACHING POSITION',
+                'RELATED TEACHING POSITIONS'
+           )
 
         WHERE ai.applicant_id = $1
 
@@ -148,6 +234,8 @@ export const getQualifiedApplicantForAssessment = async (
     }
 
     const applicant = result.rows[0];
+    const performanceAssessmentType =
+        getPerformanceAssessmentType(applicant.category);
     const isSchoolAdministration =
         normalize(applicant.category).includes(
             "SCHOOL ADMINISTRATION"
@@ -189,6 +277,27 @@ export const getQualifiedApplicantForAssessment = async (
 
         category:
             applicant.category,
+
+        performance_assessment_type:
+            performanceAssessmentType || null,
+
+        performance_assessment_option_id:
+            performanceAssessmentType
+                ? Number(
+                    applicant.performance_assessment_option_id
+                ) || null
+                : null,
+
+        performance_points:
+            performanceAssessmentType &&
+            applicant.performance_points !== null
+                ? Number(applicant.performance_points)
+                : null,
+
+        performance_option_label:
+            performanceAssessmentType
+                ? applicant.performance_option_label || null
+                : null,
 
         salary_grade:
             applicant.salary_grade,
@@ -2122,7 +2231,10 @@ export const submitPanelistAssessment = async ({
                     screening.screening_id,
                     screening.education_points,
                     screening.training_points,
-                    screening.experience_points
+                    screening.experience_points,
+                    screening.performance_assessment_option_id,
+                    screening.performance_points,
+                    performance_option.option_label AS performance_option_label
 
                 FROM applicant_information ai
 
@@ -2143,7 +2255,47 @@ export const submitPanelistAssessment = async ({
                         ins.screening_id,
                         ins.education_points,
                         ins.training_points,
-                        ins.experience_points
+                        ins.experience_points,
+                        CASE
+                            WHEN REGEXP_REPLACE(
+                                UPPER(TRIM(p.category)),
+                                '[-_]+',
+                                ' ',
+                                'g'
+                            ) IN (
+                                'NON TEACHING',
+                                'NON TEACHING POSITION',
+                                'NON TEACHING POSITIONS',
+                                'SCHOOL ADMINISTRATION',
+                                'SCHOOL ADMINISTRATION POSITION',
+                                'SCHOOL ADMINISTRATION POSITIONS',
+                                'RELATED TEACHING',
+                                'RELATED TEACHING POSITION',
+                                'RELATED TEACHING POSITIONS'
+                            )
+                            THEN ins.performance_assessment_option_id
+                            ELSE NULL
+                        END AS performance_assessment_option_id,
+                        CASE
+                            WHEN REGEXP_REPLACE(
+                                UPPER(TRIM(p.category)),
+                                '[-_]+',
+                                ' ',
+                                'g'
+                            ) IN (
+                                'NON TEACHING',
+                                'NON TEACHING POSITION',
+                                'NON TEACHING POSITIONS',
+                                'SCHOOL ADMINISTRATION',
+                                'SCHOOL ADMINISTRATION POSITION',
+                                'SCHOOL ADMINISTRATION POSITIONS',
+                                'RELATED TEACHING',
+                                'RELATED TEACHING POSITION',
+                                'RELATED TEACHING POSITIONS'
+                            )
+                            THEN ins.performance_points
+                            ELSE NULL
+                        END AS performance_points
                     FROM initial_screening ins
                     WHERE ins.job_applications_id =
                           ai.job_applications_id
@@ -2152,6 +2304,27 @@ export const submitPanelistAssessment = async ({
                     ORDER BY ins.screening_id DESC
                     LIMIT 1
                 ) screening ON TRUE
+
+                LEFT JOIN assessment_options performance_option
+                    ON performance_option.assessment_option_id =
+                       screening.performance_assessment_option_id
+
+                   AND REGEXP_REPLACE(
+                        UPPER(TRIM(p.category)),
+                        '[-_]+',
+                        ' ',
+                        'g'
+                   ) IN (
+                        'NON TEACHING',
+                        'NON TEACHING POSITION',
+                        'NON TEACHING POSITIONS',
+                        'SCHOOL ADMINISTRATION',
+                        'SCHOOL ADMINISTRATION POSITION',
+                        'SCHOOL ADMINISTRATION POSITIONS',
+                        'RELATED TEACHING',
+                        'RELATED TEACHING POSITION',
+                        'RELATED TEACHING POSITIONS'
+                   )
 
                 WHERE ai.applicant_id = $1
 
@@ -2175,6 +2348,23 @@ export const submitPanelistAssessment = async ({
 
         const rawCategory =
             applicant.category || "";
+        const performanceAssessmentType =
+            getPerformanceAssessmentType(rawCategory);
+        const hasSavedPerformanceOption =
+            applicant.performance_assessment_option_id !== null &&
+            applicant.performance_assessment_option_id !== undefined;
+        const hasSavedPerformancePoints =
+            applicant.performance_points !== null &&
+            applicant.performance_points !== undefined;
+
+        if (
+            performanceAssessmentType &&
+            hasSavedPerformanceOption !== hasSavedPerformancePoints
+        ) {
+            throw new Error(
+                "INVALID_INITIAL_SCREENING_PERFORMANCE"
+            );
+        }
 
         // ========================================================
         // 6. DETERMINE ASSESSMENT TYPE
@@ -2456,6 +2646,11 @@ export const submitPanelistAssessment = async ({
 
             const criterionName =
                 normalize(criterion.criterion_name);
+            const isSavedInitialPerformance =
+                performanceAssessmentType &&
+                criterionName === "PERFORMANCE" &&
+                hasSavedPerformanceOption &&
+                hasSavedPerformancePoints;
             const isIntegratedScreeningCriterion =
                 (
                     assessmentType === "RELATED_TEACHING" ||
@@ -2498,6 +2693,27 @@ export const submitPanelistAssessment = async ({
                 }
 
                 score = expectedScore;
+            }
+
+            if (isSavedInitialPerformance) {
+                const savedOptionId = Number(
+                    applicant.performance_assessment_option_id
+                );
+                const savedPoints = Number(
+                    applicant.performance_points
+                );
+
+                if (
+                    optionId !== savedOptionId ||
+                    !Number.isFinite(savedPoints) ||
+                    Math.abs(score - savedPoints) > 0.0001
+                ) {
+                    throw new Error(
+                        `INVALID_INITIAL_SCREENING_PERFORMANCE_${criterionId}`
+                    );
+                }
+
+                score = savedPoints;
             }
 
             // ====================================================
@@ -2609,13 +2825,15 @@ export const submitPanelistAssessment = async ({
                 const isPerformanceCriterion =
                     criterionName === "PERFORMANCE" &&
                     ["RELATED_TEACHING", "SCHOOL_ADMINISTRATION", "NON_TEACHING"].includes(assessmentType);
-                const expectedOptionScore = isPerformanceCriterion
-                    ? getPerformanceScore(
+                const expectedOptionScore = isSavedInitialPerformance
+                    ? Number(applicant.performance_points)
+                    : isPerformanceCriterion
+                        ? getPerformanceScore(
                         optionPoints,
                         assessmentType,
                         criterion.max_points
                     )
-                    : optionPoints;
+                        : optionPoints;
 
                 if (Math.abs(expectedOptionScore - score) > 0.0001) {
                     throw new Error(`OPTION_SCORE_MISMATCH_${criterionId}`);

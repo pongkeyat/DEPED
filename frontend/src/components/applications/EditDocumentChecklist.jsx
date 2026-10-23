@@ -3,10 +3,9 @@ import {
   FileCheck,
   Upload,
   FileText,
-  Check,
-  Eye,
   X,
 } from "lucide-react";
+import DocumentFileThumbnail from "./DocumentFileThumbnail";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
@@ -268,16 +267,8 @@ export default function EditableDocumentChecklist({
     return mimeType === "application/pdf" || /\.pdf$/i.test(fileName);
   };
 
-  const handlePreview = (file) => {
-    if (file instanceof File) {
-      setPreview({
-        file,
-        url: URL.createObjectURL(file),
-        isObjectUrl: true,
-      });
-      return;
-    }
-
+  const getPreviewUrl = (file) => {
+    if (file instanceof File) return "";
     const filePath =
       typeof file === "string"
         ? file
@@ -300,7 +291,16 @@ export default function EditableDocumentChecklist({
           }`
       : "";
 
-    setPreview({ file, url, isObjectUrl: false });
+    return url;
+  };
+
+  const handlePreview = (file) => {
+    const isObjectUrl = file instanceof File;
+    setPreview({
+      file,
+      url: isObjectUrl ? URL.createObjectURL(file) : getPreviewUrl(file),
+      isObjectUrl,
+    });
   };
 
   return (
@@ -376,28 +376,14 @@ export default function EditableDocumentChecklist({
                   {/* Document Actions */}
                   <td className="border border-gray-300 text-center py-2 align-middle">
                     <div className="flex items-center justify-center gap-2">
-                      {/* CHECK ICON */}
-                      {uploaded && (
-                        <div
-                          className="flex items-center justify-center w-8 h-8 rounded-md bg-green-100 text-green-600 border border-green-200"
-                          title="File uploaded"
-                        >
-                          <Check size={16} strokeWidth={2.5} />
-                        </div>
-                      )}
-
-                      {/* UPLOAD ICON */}
+                      {/* FILE THUMBNAILS */}
                       {getFiles(item.field).map((file, fileIndex) => (
-                        <button
+                        <DocumentFileThumbnail
                           key={`${item.field}-preview-${fileIndex}`}
-                          type="button"
-                          onClick={() => handlePreview(file)}
-                          className="flex items-center justify-center w-8 h-8 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors border border-blue-200"
-                          title={`Preview ${getFileLabel(file) || "document"}`}
-                          aria-label={`Preview ${getFileLabel(file) || "document"} for ${item.label}`}
-                        >
-                          <Eye size={16} />
-                        </button>
+                          files={[file]}
+                          onPreview={handlePreview}
+                          getRemoteUrl={getPreviewUrl}
+                        />
                       ))}
 
                       <label

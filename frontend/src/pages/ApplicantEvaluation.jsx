@@ -11,12 +11,91 @@ import {
 
 import { getApplicationById } from "../api/ApplicationApi";
 import { postScreening } from "../api/ScreeningApi";
+import { getAssessmentCriteria } from "../api/assessmentApi";
 
 import ActionModal from "../components/ActionModal";
+import DocumentPreviewModal from "../components/applications/DocumentPreviewModal";
 import ApplicantHeader from "../components/appliacantEvaluation/ApplicantHeader";
 import QualificationOverview from "../components/appliacantEvaluation/QualificationOverview";
 import EvaluationSection from "../components/appliacantEvaluation/EvaluationSection";
 import FinalEvaluationCard from "../components/appliacantEvaluation/FinalEvaluationCard";
+
+const getPerformanceAssessmentType = (category) => {
+    const normalizedCategory = String(category || "")
+        .trim()
+        .toUpperCase()
+        .replace(/[-_]+/g, " ")
+        .replace(/\s+/g, " ");
+
+    const assessmentTypes = {
+        "NON TEACHING": "NON_TEACHING",
+        "NON TEACHING POSITION": "NON_TEACHING",
+        "NON TEACHING POSITIONS": "NON_TEACHING",
+        "SCHOOL ADMINISTRATION": "SCHOOL_ADMINISTRATION",
+        "SCHOOL ADMINISTRATION POSITION": "SCHOOL_ADMINISTRATION",
+        "SCHOOL ADMINISTRATION POSITIONS": "SCHOOL_ADMINISTRATION",
+        "RELATED TEACHING": "RELATED_TEACHING",
+        "RELATED TEACHING POSITION": "RELATED_TEACHING",
+        "RELATED TEACHING POSITIONS": "RELATED_TEACHING",
+    };
+
+    return assessmentTypes[normalizedCategory] || "";
+};
+
+const getPerformanceScore = (optionPoints, assessmentType, maxPoints) => {
+    const points = Number(optionPoints);
+
+    if (points > 5) {
+        return points;
+    }
+
+    if (assessmentType === "RELATED_TEACHING") {
+        return (points / 5) * 20;
+    }
+
+    return (points / 5) * Number(maxPoints);
+};
+
+const getPerformanceRatingFile = (path) => {
+    const filePath = String(path || "").trim();
+    if (!filePath) return null;
+
+    const normalizedPath = filePath.replace(/\\/g, "/");
+    const encodedFileName =
+        normalizedPath.split("/").pop() || "Performance rating file";
+    let fileName = encodedFileName;
+    try {
+        fileName = decodeURIComponent(encodedFileName);
+    } catch {
+        // Keep the encoded filename if it is not valid URI encoding.
+    }
+    const extension = fileName.split(".").pop()?.toLowerCase();
+    const typeByExtension = {
+        pdf: "application/pdf",
+        png: "image/png",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        gif: "image/gif",
+        webp: "image/webp",
+    };
+
+    let url;
+    try {
+        const apiBaseUrl =
+            import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
+        url = new URL(normalizedPath, new URL(apiBaseUrl).origin).toString();
+    } catch (error) {
+        console.error("Invalid Performance rating file URL:", error);
+        return null;
+    }
+
+    return {
+        url,
+        name: fileName,
+        type: typeByExtension[extension] || "",
+        isImage: String(typeByExtension[extension] || "").startsWith("image/"),
+    };
+};
 
 const getStatusStyles = (status) => {
     switch (status) {
@@ -52,6 +131,14 @@ export default function ApplicantEvaluation() {
     const [modalError, setModalError] = useState(null);
 
     const [actionLoading, setActionLoading] = useState(false);
+    const [performanceCriterion, setPerformanceCriterion] = useState(null);
+    const [selectedPerformanceOptionId, setSelectedPerformanceOptionId] =
+        useState("");
+    const [performanceOptionsLoading, setPerformanceOptionsLoading] =
+        useState(false);
+    const [performanceOptionsError, setPerformanceOptionsError] =
+        useState("");
+    const [performanceFilePreview, setPerformanceFilePreview] = useState(null);
 
     // Confirmation modal
     const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -91,6 +178,101 @@ export default function ApplicantEvaluation() {
             fetchApplicantDetails();
         }
     }, [id]);
+
+    const performanceAssessmentType =
+        getPerformanceAssessmentType(applicant?.category);
+    const performanceRatingFile = getPerformanceRatingFile(
+        applicant?.performance_rating_path
+    );
+
+    useEffect(() => {
+        let mounted = true;
+
+        const loadPerformanceOptions = async () => {
+            setPerformanceCriterion(null);
+            setSelectedPerformanceOptionId("");
+            setPerformanceOptionsError("");
+
+            if (!performanceAssessmentType) {
+                setPerformanceOptionsLoading(false);
+                return;
+            }
+
+            try {
+                setPerformanceOptionsLoading(true);
+
+                const response = await getAssessmentCriteria(
+                    performanceAssessmentType
+                );
+                const criteria = Array.isArray(response)
+                    ? response
+                    : response?.data || [];
+                const criterion = criteria.find(
+                    (item) =>
+                        String(
+                            item?.criterion_name ||
+                                item?.name ||
+                                ""
+                        )
+                            .trim()
+                            .toUpperCase() === "PERFORMANCE" &&
+                        Array.isArray(item?.options) &&
+                        item.options.length > 0
+                );
+                const options = Array.isArray(criterion?.options)
+                    ? criterion.options.filter(
+                        (option) =>
+                            Number.isInteger(
+                                Number(option.assessment_option_id)
+                            ) &&
+                            Number.isFinite(Number(option.points))
+                    )
+                    : [];
+
+                if (mounted && criterion && options.length > 0) {
+                    setPerformanceCriterion({
+                        ...criterion,
+                        options,
+                    });
+                }
+            } catch (err) {
+                console.error(
+                    "Error loading Performance assessment options:",
+                    err
+                );
+                if (mounted) {
+                    setPerformanceOptionsError(
+                        "Performance ratings could not be loaded. You can still complete the existing evaluation fields."
+                    );
+                }
+            } finally {
+                if (mounted) {
+                    setPerformanceOptionsLoading(false);
+                }
+            }
+        };
+
+        loadPerformanceOptions();
+
+        return () => {
+            mounted = false;
+        };
+    }, [performanceAssessmentType]);
+
+    const selectedPerformanceOption =
+        performanceCriterion?.options?.find(
+            (option) =>
+                Number(option.assessment_option_id) ===
+                Number(selectedPerformanceOptionId)
+        );
+    const selectedPerformancePoints =
+        selectedPerformanceOption
+            ? getPerformanceScore(
+                selectedPerformanceOption.points,
+                performanceAssessmentType,
+                performanceCriterion.max_points
+            )
+            : null;
 
     // ======================================================
     // LOADING
@@ -280,6 +462,15 @@ export default function ApplicantEvaluation() {
                 documents_note:
                     null
             };
+
+            if (selectedPerformanceOption) {
+                payload.performance_assessment_option_id =
+                    Number(
+                        selectedPerformanceOption.assessment_option_id
+                    );
+                payload.performance_points =
+                    selectedPerformancePoints;
+            }
 
             await postScreening(payload);
 
@@ -479,6 +670,113 @@ export default function ApplicantEvaluation() {
                             </p>
                         )}
                     </EvaluationSection>
+
+                    {performanceAssessmentType && (
+                        <EvaluationSection
+                            title="Performance Rating"
+                            icon={Award}
+                        >
+                            {performanceRatingFile && (
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setPerformanceFilePreview({
+                                            url: performanceRatingFile.url,
+                                            name: performanceRatingFile.name,
+                                            type: performanceRatingFile.type,
+                                        })
+                                    }
+                                    className="mb-4 flex w-full max-w-xs items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2 text-left transition hover:border-[#1E3E74] hover:bg-blue-50"
+                                    aria-label={`Preview ${performanceRatingFile.name}`}
+                                >
+                                    {performanceRatingFile.isImage ? (
+                                        <img
+                                            src={performanceRatingFile.url}
+                                            alt="Performance rating document thumbnail"
+                                            className="h-16 w-16 rounded-lg border border-slate-200 bg-white object-cover"
+                                        />
+                                    ) : (
+                                        <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-bold text-[#1E3E74]">
+                                            {performanceRatingFile.type ===
+                                            "application/pdf"
+                                                ? "PDF"
+                                                : "FILE"}
+                                        </span>
+                                    )}
+                                    <span className="min-w-0">
+                                        <span className="block text-sm font-semibold text-slate-700">
+                                            Performance rating file
+                                        </span>
+                                        <span className="block truncate text-xs text-slate-500">
+                                            {performanceRatingFile.name}
+                                        </span>
+                                        <span className="mt-1 block text-xs font-medium text-[#1E3E74]">
+                                            Click to preview
+                                        </span>
+                                    </span>
+                                </button>
+                            )}
+                            {performanceOptionsLoading ? (
+                                <p className="text-sm text-slate-500">
+                                    Loading active Performance ratings...
+                                </p>
+                            ) : performanceOptionsError ? (
+                                <p className="text-sm text-amber-700">
+                                    {performanceOptionsError}
+                                </p>
+                            ) : performanceCriterion?.options?.length ? (
+                                <div>
+                                    <label
+                                        htmlFor="initial-performance-rating"
+                                        className="mb-2 block text-sm font-medium text-slate-700"
+                                    >
+                                        Select a Performance rating
+                                    </label>
+                                    <select
+                                        id="initial-performance-rating"
+                                        value={selectedPerformanceOptionId}
+                                        onChange={(event) =>
+                                            setSelectedPerformanceOptionId(
+                                                event.target.value
+                                            )
+                                        }
+                                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-[#1E3E74] focus:ring-1 focus:ring-[#1E3E74]"
+                                    >
+                                        <option value="">
+                                            Select Performance rating
+                                        </option>
+                                        {performanceCriterion.options.map(
+                                            (option) => (
+                                                <option
+                                                    key={
+                                                        option.assessment_option_id
+                                                    }
+                                                    value={
+                                                        option.assessment_option_id
+                                                    }
+                                                >
+                                                    {option.option_label} (
+                                                    {option.points} points)
+                                                </option>
+                                            )
+                                        )}
+                                    </select>
+                                    {selectedPerformanceOption && (
+                                        <p className="mt-2 text-sm text-slate-600">
+                                            Performance score:{" "}
+                                            <span className="font-semibold text-slate-800">
+                                                {selectedPerformancePoints}
+                                            </span>
+                                        </p>
+                                    )}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-slate-500">
+                                    No active Performance rating options are configured for this category.
+                                </p>
+                            )}
+                        </EvaluationSection>
+                    )}
                 </div>
 
                 {/* RIGHT COLUMN */}
@@ -608,6 +906,13 @@ export default function ApplicantEvaluation() {
                 message={modalError}
                 onClose={() => setModalError(null)}
             />
+
+            {performanceFilePreview && (
+                <DocumentPreviewModal
+                    file={performanceFilePreview}
+                    onClose={() => setPerformanceFilePreview(null)}
+                />
+            )}
         </div>
     );
 }

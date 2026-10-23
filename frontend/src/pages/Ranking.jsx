@@ -3,9 +3,14 @@ import { useNavigate } from "react-router-dom";
 
 import { getRankingByVacancy } from "../api/rankingAPI";
 import { getVacancies } from "../api/VacancyApi";
+import { getAllUsers } from "../api/AuthApi";
 
 import CARPrintForm from "../components/ranking/CARPrintForm";
 import RankingHeader from "../components/ranking/RankingHeader";
+import {
+    getSavedHrmpsbMembers,
+    getUserList,
+} from "../utils/signatureManagementUtils";
 
 const Ranking = () => {
     const navigate = useNavigate();
@@ -22,33 +27,96 @@ const Ranking = () => {
     const [loadingRanking, setLoadingRanking] = useState(false);
 
     const [error, setError] = useState("");
+    const [hrmpsbMembers, setHrmpsbMembers] = useState([]);
+    const [signatureError, setSignatureError] = useState("");
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const fetchHrmpsbMembers = async () => {
+            try {
+                const response = await getAllUsers();
+                if (!cancelled) {
+                    setHrmpsbMembers(getSavedHrmpsbMembers(getUserList(response)));
+                    setSignatureError("");
+                }
+            } catch (fetchError) {
+                console.error(
+                    "Failed to load HRMPSB signature members:",
+                    fetchError.response?.data || fetchError.message
+                );
+                if (!cancelled) {
+                    setSignatureError(
+                        fetchError.response?.data?.message ||
+                            "Unable to load HRMPSB signature members."
+                    );
+                }
+            }
+        };
+
+        void fetchHrmpsbMembers();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     // ============================================================
     // GET VACANCIES
     // ============================================================
 
     useEffect(() => {
+        let cancelled = false;
+
+        const getList = (response) => {
+            if (Array.isArray(response)) return response;
+            if (Array.isArray(response?.data)) return response.data;
+            if (Array.isArray(response?.data?.data)) return response.data.data;
+            if (Array.isArray(response?.results)) return response.results;
+            return [];
+        };
+
+        const hasRankedApplicant = (response) => {
+            const applicants = getList(response);
+            if (applicants.length === 0) return false;
+
+            // If the ranking endpoint returns an application status,
+            // require that status to be exactly "rank". If status is not
+            // included, a non-empty result from getRankingByVacancy is
+            // treated as an existing ranking record.
+            const statusKeys = [
+                "application_status",
+                "job_application_status",
+                "applicant_status",
+                "status",
+            ];
+
+            const rowsWithStatus = applicants.filter((applicant) =>
+                statusKeys.some((key) => applicant?.[key] != null)
+            );
+
+            if (rowsWithStatus.length === 0) return true;
+
+            return rowsWithStatus.some((applicant) =>
+                statusKeys.some(
+                    (key) =>
+                        String(applicant?.[key] ?? "")
+                            .trim()
+                            .toLowerCase() === "rank"
+                )
+            );
+        };
+
         const fetchVacancies = async () => {
             try {
                 setLoadingVacancies(true);
                 setError("");
 
-                const response = await getVacancies({
-                    limit: 1000,
-                });
+                const response = await getVacancies({ limit: 1000 });
+                const data = getList(response);
 
-                const data = Array.isArray(response)
-                    ? response
-                    : Array.isArray(response?.data)
-                        ? response.data
-                        : [];
-
-                // ----------------------------------------------------
-                // Keep non-teaching / related teaching /
-                // school administration vacancies.
-                // ----------------------------------------------------
-
-                const nonTeachingVacancies = data.filter((vacancy) => {
+                // Keep the existing category filter.
+                const eligibleVacancies = data.filter((vacancy) => {
                     const category = String(vacancy.category || "")
                         .trim()
                         .toLowerCase()
@@ -60,21 +128,51 @@ const Ranking = () => {
                     );
                 });
 
-                setVacancies(nonTeachingVacancies);
+                // Only retain vacancies whose ranking endpoint returns at
+                // least one ranked applicant. Run checks concurrently.
+                const checks = await Promise.all(
+                    eligibleVacancies.map(async (vacancy) => {
+                        try {
+                            const rankingResponse = await getRankingByVacancy(
+                                vacancy.vacancy_id
+                            );
+
+                            return hasRankedApplicant(rankingResponse)
+                                ? vacancy
+                                : null;
+                        } catch (rankingError) {
+                            console.warn(
+                                `Could not check ranking for vacancy ${vacancy.vacancy_id}:`,
+                                rankingError.response?.data || rankingError.message
+                            );
+                            return null;
+                        }
+                    })
+                );
+
+                if (!cancelled) {
+                    setVacancies(checks.filter(Boolean));
+                }
             } catch (error) {
                 console.error(
                     "Error fetching vacancies:",
                     error.response?.data || error.message
                 );
 
-                setError("Failed to load vacancies.");
-                setVacancies([]);
+                if (!cancelled) {
+                    setError("Failed to load vacancies.");
+                    setVacancies([]);
+                }
             } finally {
-                setLoadingVacancies(false);
+                if (!cancelled) setLoadingVacancies(false);
             }
         };
 
         fetchVacancies();
+
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
     // ============================================================
@@ -525,6 +623,15 @@ const Ranking = () => {
             return;
         }
 
+        const originalTitle = document.title;
+        document.title = "";
+        window.addEventListener(
+            "afterprint",
+            () => {
+                document.title = originalTitle;
+            },
+            { once: true }
+        );
         window.print();
     };
 
@@ -533,7 +640,7 @@ const Ranking = () => {
     // ============================================================
 
     return (
-        <div className="min-h-screen p-6">
+        <div className="min-h-screen p-6 print:min-h-0 print:p-0">
 
             {/* =====================================================
                 EVERYTHING ON SCREEN
@@ -541,6 +648,11 @@ const Ranking = () => {
             ===================================================== */}
 
             <div className="print:hidden">
+                {signatureError && (
+                    <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                        {signatureError} The CAR will print without member names.
+                    </div>
+                )}
 
                 {/* =================================================
                     HEADER
@@ -1062,6 +1174,7 @@ const Ranking = () => {
             <CARPrintForm
                 vacancy={selectedVacancyData}
                 ranking={ranking}
+                hrmpsbMembers={hrmpsbMembers}
             />
 
         </div>

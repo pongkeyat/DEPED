@@ -4,15 +4,19 @@ const LEGACY_API_DESCRIPTION =
 export const formatAuditDescription = (log) => {
     const description = log?.description || "No description";
 
+    const legacyMatch = description.match(LEGACY_API_DESCRIPTION);
+    if (!legacyMatch) {
+        return description;
+    }
+
     const requestPath =
         log?.metadata?.path ||
-        description.match(LEGACY_API_DESCRIPTION)?.[2];
+        legacyMatch[2];
 
     if (!requestPath) {
         return description;
     }
 
-    const legacyMatch = description.match(LEGACY_API_DESCRIPTION);
     const method = String(
         log.metadata?.method || legacyMatch?.[1] || ""
     ).toUpperCase();

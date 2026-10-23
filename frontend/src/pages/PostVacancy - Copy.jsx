@@ -1,0 +1,694 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+
+import VacancyHeader from "../components/vacancies/PostVacancyHeader";
+import PostVacancyForm from "../components/vacancies/PostVacancyForm";
+import PostQualificationsForm from "../components/vacancies/PostQualificationsForm";
+import PostRemarksForm from "../components/vacancies/PostRemarksForm";
+import PostVacancyModal from "../components/vacancies/PostVacancyModal";
+
+// API
+import { postVacancies } from "../api/VacancyApi";
+import { getPositions } from "../api/PositionsApi";
+
+// =====================================================
+// INITIAL FORM STATE
+// =====================================================
+
+const initialFormState = {
+    vacancy: {
+        position_id: "",
+        plantilla_position: "",
+        office_unit: "",
+        number_of_vacancies: "",
+        place_of_assignment: "",
+        application_posted: "",
+        application_deadline: "",
+        category: "",
+        status: "Open",
+    },
+
+    qualifications: {
+        education_requirement: "",
+        training_requirement: "",
+        experience_requirement: "",
+        eligibility_requirement: "",
+        prescribed_qualifications: "",
+    },
+
+    remarks: {
+        remarks: "",
+    },
+};
+
+const DRAFT_STORAGE_KEY = "post_vacancy_draft";
+const PLANTILLA_ITEM_PREFIX = "OSEC-DECSB-";
+
+// =====================================================
+// COMPONENT
+// =====================================================
+
+export default function PostVacancy({ onBack }) {
+    const navigate = useNavigate();
+    const isBelowMinimum = false;
+    const handleBack = () => {
+        if (onBack) {
+            onBack();
+            return;
+        }
+
+        navigate("/vacancyPosting");
+    };
+
+    // =====================================================
+    // MODAL STATES
+    // =====================================================
+
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [modalState, setModalState] = useState("confirm");
+    const [modalMessage, setModalMessage] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [showValidationErrors, setShowValidationErrors] =
+        useState(false);
+
+    // =====================================================
+    // MASTER FORM STATE (INITIALIZED FROM LOCALSTORAGE IF EXISTS)
+    // =====================================================
+
+    const [masterForm, setMasterForm] = useState(() => {
+        try {
+            const savedDraft = localStorage.getItem(DRAFT_STORAGE_KEY);
+            if (savedDraft) {
+                return JSON.parse(savedDraft);
+            }
+        } catch (error) {
+            console.error("Failed to load draft from localStorage:", error);
+        }
+        return initialFormState;
+    });
+
+    // =====================================================
+    // AUTO-SAVE DRAFT TO LOCALSTORAGE ON CHANGE
+    // =====================================================
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(masterForm));
+        } catch (error) {
+            console.error("Failed to save draft to localStorage:", error);
+        }
+    }, [masterForm]);
+
+    // =====================================================
+    // POSITIONS
+    // =====================================================
+
+    const [positions, setPositions] = useState([]);
+    const [positionsLoading, setPositionsLoading] =
+        useState(true);
+
+    // =====================================================
+    // FETCH POSITIONS
+    // =====================================================
+
+    useEffect(() => {
+        const fetchPositions = async () => {
+            try {
+                setPositionsLoading(true);
+
+                const response = await getPositions(
+                    "",
+                    1000,
+                    1
+                );
+
+                console.log(
+                    "POSITIONS API RESPONSE:",
+                    response
+                );
+
+                let data = [];
+
+                if (Array.isArray(response)) {
+                    data = response;
+                } else if (Array.isArray(response?.data)) {
+                    data = response.data;
+                } else if (
+                    Array.isArray(response?.data?.data)
+                ) {
+                    data = response.data.data;
+                } else if (
+                    Array.isArray(response?.data?.positions)
+                ) {
+                    data = response.data.positions;
+                } else if (
+                    Array.isArray(response?.positions)
+                ) {
+                    data = response.positions;
+                }
+
+                console.log(
+                    "PROCESSED POSITIONS:",
+                    data
+                );
+
+                setPositions(data);
+            } catch (error) {
+                console.error(
+                    "ERROR FETCHING POSITIONS:",
+                    error
+                );
+
+                setPositions([]);
+            } finally {
+                setPositionsLoading(false);
+            }
+        };
+
+        fetchPositions();
+    }, []);
+
+    // =====================================================
+    // HANDLE FORM CHANGES
+    // =====================================================
+
+    const handleSectionChange = (section, e) => {
+        const { name, value } = e.target;
+
+        // =================================================
+        // POSITION SELECTED
+        // =================================================
+
+        if (
+            section === "vacancy" &&
+            name === "position_id"
+        ) {
+            console.log(
+                "SELECTED POSITION ID:",
+                value
+            );
+
+            // ---------------------------------------------
+            // Empty position
+            // ---------------------------------------------
+
+            if (!value) {
+                setMasterForm((prev) => ({
+                    ...prev,
+
+                    vacancy: {
+                        ...prev.vacancy,
+                        position_id: "",
+                    },
+
+                    qualifications: {
+                        education_requirement: "",
+                        training_requirement: "",
+                        experience_requirement: "",
+                        eligibility_requirement: "",
+                        prescribed_qualifications: "",
+                    },
+                }));
+
+                return;
+            }
+
+            // ---------------------------------------------
+            // Find selected position
+            // ---------------------------------------------
+
+            const selectedPosition = positions.find(
+                (position) =>
+                    String(position.position_id) ===
+                    String(value)
+            );
+
+            console.log(
+                "SELECTED POSITION:",
+                selectedPosition
+            );
+
+            // ---------------------------------------------
+            // Position not found
+            // ---------------------------------------------
+
+            if (!selectedPosition) {
+                console.warn(
+                    "Position was not found in positions:",
+                    value
+                );
+
+                setMasterForm((prev) => ({
+                    ...prev,
+
+                    vacancy: {
+                        ...prev.vacancy,
+                        position_id: value,
+                        category: "",
+                    },
+
+                    qualifications: {
+                        education_requirement: "",
+                        training_requirement: "",
+                        experience_requirement: "",
+                        eligibility_requirement: "",
+                        prescribed_qualifications: "",
+                    },
+                }));
+
+                return;
+            }
+
+            // ---------------------------------------------
+            // POSITION FOUND
+            // ---------------------------------------------
+
+            setMasterForm((prev) => ({
+                ...prev,
+
+                vacancy: {
+                    ...prev.vacancy,
+
+                    position_id:
+                        selectedPosition.position_id,
+
+                    category:
+                        selectedPosition.category ||
+                        "",
+                },
+
+                qualifications: {
+                    education_requirement:
+                        selectedPosition.education ||
+                        "",
+
+                    training_requirement:
+                        selectedPosition.training ||
+                        "",
+
+                    experience_requirement:
+                        selectedPosition.experience ||
+                        "",
+
+                    eligibility_requirement:
+                        selectedPosition.eligibility ||
+                        "",
+
+                    prescribed_qualifications: "",
+                },
+            }));
+
+            return;
+        }
+
+        // =================================================
+        // NORMAL FIELD CHANGE
+        // =================================================
+
+        setMasterForm((prev) => ({
+            ...prev,
+
+            [section]: {
+                ...prev[section],
+                [name]: value,
+            },
+        }));
+    };
+
+    // =====================================================
+    // RESET & CLEAR DRAFT
+    // =====================================================
+
+    const resetForm = () => {
+        setMasterForm(initialFormState);
+        setShowValidationErrors(false);
+        try {
+            localStorage.removeItem(DRAFT_STORAGE_KEY);
+        } catch (error) {
+            console.error("Failed to clear draft from localStorage:", error);
+        }
+    };
+
+    // =====================================================
+    // PRE-SUBMIT
+    // =====================================================
+
+    const handlePreSubmitCheck = (e) => {
+        e.preventDefault();
+
+        if (loading) return;
+        setShowValidationErrors(true);
+
+        const {
+            position_id,
+            plantilla_position,
+            office_unit,
+            number_of_vacancies,
+            application_posted,
+            application_deadline,
+            category,
+            place_of_assignment,
+        } = masterForm.vacancy;
+        const plantillaItemParts =
+            String(plantilla_position || "").startsWith(
+                PLANTILLA_ITEM_PREFIX
+            )
+                ? String(plantilla_position)
+                      .slice(PLANTILLA_ITEM_PREFIX.length)
+                      .split("-")
+                : [];
+        const hasCompletePlantillaItemNumber =
+            plantillaItemParts.length === 3 &&
+            plantillaItemParts.every((part) => part.trim());
+
+        // =================================================
+        // VACANCY VALIDATION
+        // =================================================
+
+        if (
+            !position_id ||
+            !hasCompletePlantillaItemNumber ||
+            !office_unit ||
+            !number_of_vacancies ||
+            Number(number_of_vacancies) <= 0 ||
+            !application_posted ||
+            !application_deadline ||
+            !category ||
+            !place_of_assignment?.trim()
+        ) {
+            setModalState("error");
+
+            setModalMessage(
+                "Please fill out all mandatory fields in the Vacancy Information section."
+            );
+
+            setIsModalOpen(true);
+
+            return;
+        }
+
+        // =================================================
+        // QUALIFICATION VALIDATION
+        // =================================================
+
+        const {
+            education_requirement,
+            training_requirement,
+            experience_requirement,
+            eligibility_requirement,
+        } = masterForm.qualifications;
+
+        if (
+            !education_requirement?.trim() ||
+            !training_requirement?.trim() ||
+            !experience_requirement?.trim() ||
+            !eligibility_requirement?.trim()
+        ) {
+            setModalState("error");
+
+            setModalMessage(
+                "The selected position does not have complete qualification requirements in Position Management."
+            );
+
+            setIsModalOpen(true);
+
+            return;
+        }
+
+        // =================================================
+        // CONFIRMATION
+        // =================================================
+
+        setModalState("confirm");
+        setModalMessage("");
+        setIsModalOpen(true);
+    };
+
+    // =====================================================
+    // SUBMIT
+    // =====================================================
+
+    const handleMasterSubmit = async () => {
+        if (loading) return;
+
+        setLoading(true);
+
+        const {
+            position_id,
+            plantilla_position,
+            office_unit,
+            number_of_vacancies,
+            application_posted,
+            application_deadline,
+            place_of_assignment,
+            category,
+        } = masterForm.vacancy;
+
+        const {
+            education_requirement,
+            training_requirement,
+            experience_requirement,
+            eligibility_requirement,
+            prescribed_qualifications,
+        } = masterForm.qualifications;
+
+        // =================================================
+        // PAYLOAD
+        // =================================================
+
+        const payload = {
+            position_id,
+
+            plantilla_position,
+
+            office_unit,
+
+            number_of_vacancies:
+                parseInt(number_of_vacancies, 10),
+
+            application_posted,
+
+            application_deadline,
+
+            place_of_assignment,
+
+            category,
+
+            education_requirement,
+
+            training_requirement,
+
+            experience_requirement,
+
+            eligibility_requirement,
+
+            prescribed_qualifications,
+
+            remark_text:
+                masterForm.remarks.remarks,
+        };
+
+        try {
+            console.log(
+                "POST VACANCY PAYLOAD:",
+                payload
+            );
+
+            const response =
+                await postVacancies(payload);
+
+            console.log(
+                "POST VACANCY RESPONSE:",
+                response
+            );
+
+            // Reset & clear draft storage
+            resetForm();
+
+            // Success
+            setModalState("success");
+
+            setModalMessage(
+                response?.message ||
+                    response?.data?.message ||
+                    "Vacancy posted successfully!"
+            );
+        } catch (error) {
+            console.error(
+                "SUBMISSION ERROR:",
+                error
+            );
+
+            const serverMessage =
+                error?.response?.data?.error ||
+                error?.response?.data?.message ||
+                "An error occurred while saving details.";
+
+            setModalState("error");
+            setModalMessage(serverMessage);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // =====================================================
+    // MODAL CLOSE
+    // =====================================================
+
+    const handleModalClose = () => {
+        if (loading) return;
+
+        setIsModalOpen(false);
+
+        if (modalState === "success") {
+            handleBack();
+        }
+    };
+
+    // =====================================================
+    // RENDER
+    // =====================================================
+
+    return (
+        <div className="min-h-screen p-6 max-w-7xl mx-auto">
+
+            {/* HEADER */}
+
+            <VacancyHeader
+                isPosting={true}
+                onBack={handleBack}
+            />
+
+            {/* MAIN GRID */}
+
+            <div className="grid gap-6 lg:grid-cols-3 mt-6">
+
+                {/* =================================================
+                    VACANCY INFORMATION
+                ================================================= */}
+
+                <div className="lg:col-span-2">
+
+                    <PostVacancyForm
+                        formData={masterForm.vacancy}
+                        showValidationErrors={showValidationErrors}
+                        onChange={(e) =>
+                            handleSectionChange(
+                                "vacancy",
+                                e
+                            )
+                        }
+
+                        positions={positions}
+
+                        positionsLoading={
+                            positionsLoading
+                        }
+                    />
+
+                </div>
+
+                {/* =================================================
+                    QUALIFICATIONS + REMARKS
+                ================================================= */}
+
+                <div className="lg:col-span-1 space-y-6">
+
+                <PostQualificationsForm
+                    formData={masterForm.qualifications}
+                    showValidationErrors={showValidationErrors}
+                    onChange={(e) => handleSectionChange("qualifications", e)}
+                />
+
+
+                    <PostRemarksForm
+                        formData={masterForm.remarks}
+                        onChange={(e) =>
+                            handleSectionChange(
+                                "remarks",
+                                e
+                            )
+                        }
+                    />
+
+                </div>
+            </div>
+
+            {/* =================================================
+                ACTION BUTTONS
+            ================================================= */}
+
+            <div className="mt-8 flex justify-end gap-3 pt-5">
+
+                <button
+                    type="button"
+                    onClick={onBack}
+                    disabled={loading}
+                    className="
+                        rounded-lg
+                        border
+                        border-gray-300
+                        px-5
+                        py-2
+                        text-sm
+                        font-medium
+                        text-gray-700
+                        hover:bg-gray-50
+                        transition
+                        disabled:cursor-not-allowed
+                        disabled:opacity-50
+                    "
+                >
+                    Cancel
+                </button>
+
+                <button
+                    type="button"
+                    onClick={handlePreSubmitCheck}
+                    disabled={
+                        isBelowMinimum ||
+                        loading ||
+                        positionsLoading
+                    }
+                    className={`
+                        rounded-lg
+                        px-6
+                        py-2
+                        text-sm
+                        font-medium
+                        text-white
+                        transition
+
+                        ${
+                            isBelowMinimum ||
+                            loading ||
+                            positionsLoading
+                                ? "cursor-not-allowed bg-gray-400"
+                                : "bg-[#1b4584] hover:bg-[#16386b]"
+                        }
+                    `}
+                >
+                    {loading
+                        ? "Submitting..."
+                        : positionsLoading
+                        ? "Loading positions..."
+                        : "Post Vacancy"}
+                </button>
+            </div>
+
+            {/* =================================================
+                MODAL
+            ================================================= */}
+
+            <PostVacancyModal
+                isOpen={isModalOpen}
+                modalState={modalState}
+                message={modalMessage}
+                onClose={handleModalClose}
+                onConfirm={handleMasterSubmit}
+                loading={loading}
+            />
+
+        </div>
+    );
+}

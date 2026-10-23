@@ -12,6 +12,10 @@ const GET_VACANCIES =
     import.meta.env.VITE_VACANCIES_GET ||
     "http://localhost:5000/api/vacancies";
 
+const VACANCY_RESOURCE_URL = GET_VACANCIES
+    .replace(/\/getVacancies\/?$/i, "")
+    .replace(/\/+$/, "");
+
 const PUT_VACANCIES =
     import.meta.env.VITE_VACANCIES_PUT ||
     "http://localhost:5000/api/vacancies";
@@ -150,6 +154,39 @@ export const updateVacancy = async (
     }
 };
 
+export const getVacancyMemo = async (vacancy_id) => {
+    try {
+        const response = await axios.get(
+            `${VACANCY_RESOURCE_URL}/${encodeURIComponent(vacancy_id)}/memo`,
+            { responseType: "blob" }
+        );
+
+        return response.data;
+    } catch (error) {
+        const responseData = error.response?.data;
+        if (responseData instanceof Blob) {
+            try {
+                const errorBody = JSON.parse(await responseData.text());
+                error.message =
+                    errorBody.error ||
+                    errorBody.message ||
+                    "Unable to retrieve the memo file.";
+            } catch {
+                error.message = "Unable to retrieve the memo file.";
+            }
+        } else if (responseData?.error || responseData?.message) {
+            error.message = responseData.error || responseData.message;
+        }
+
+        console.error(
+            "Error retrieving vacancy memo:",
+            error.response?.data || error.message
+        );
+
+        throw error;
+    }
+};
+
 
 // ============================================================
 // ARCHIVE VACANCY
@@ -191,10 +228,19 @@ export const updateVacancyStatus = async (vacancy_id, statusOrData, memo = "") =
                       status: statusOrData,
                       ...(memo ? { memo } : {}),
                   };
+        const requestData = payload.memo_file
+            ? Object.entries(payload).reduce((formData, [key, value]) => {
+                  if (value !== undefined && value !== null) {
+                      formData.append(key, value);
+                  }
+
+                  return formData;
+              }, new FormData())
+            : payload;
 
         const res = await axios.patch(
             `${PATCH_STATUS}/${encodeURIComponent(vacancy_id)}/status`,
-            payload
+            requestData
         );
 
         return res.data;

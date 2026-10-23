@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
     Users,
     UserRoundCheck,
@@ -13,7 +15,8 @@ import {
     RefreshCw,
     Loader2,
     Search,
-    Download
+    Download,
+    FileText
 } from "lucide-react";
 
 import {
@@ -38,6 +41,7 @@ export default function ApplicantSummaryReport() {
 
     const [loading, setLoading] = useState(true);
     const [generating, setGenerating] = useState(false);
+    const [generatingPdf, setGeneratingPdf] = useState(false);
     const [error, setError] = useState("");
 
     // Added applicant list and vacancy filter; existing summary stays intact.
@@ -47,6 +51,7 @@ export default function ApplicantSummaryReport() {
     const [applicantSearch, setApplicantSearch] = useState("");
     const [applicantsLoading, setApplicantsLoading] = useState(false);
     const [applicantsGenerating, setApplicantsGenerating] = useState(false);
+    const [applicantsPdfGenerating, setApplicantsPdfGenerating] = useState(false);
     const [applicantError, setApplicantError] = useState("");
 
 
@@ -136,6 +141,61 @@ export default function ApplicantSummaryReport() {
 
         }
 
+    };
+
+    const generateSummaryPdf = async () => {
+        try {
+            setGeneratingPdf(true);
+            const response = await getApplicantSummaryReport();
+            const data = response?.data;
+            if (!data) {
+                throw new Error("No report data available.");
+            }
+
+            const summaryRows = [
+                ["Total Applicants", Number(data.total_applicants || 0)],
+                ["PWD", Number(data.pwd || 0)],
+                ["Solo Parent", Number(data.solo_parent || 0)],
+                ["Indigenous Person (IP)", Number(data.indigenous_person || 0)],
+                ["Married", Number(data.married || 0)],
+                ["Single", Number(data.single || 0)],
+                ["Qualified", Number(data.qualified || 0)],
+                ["Disqualified", Number(data.disqualified || 0)]
+            ];
+            const doc = new jsPDF();
+            doc.setFontSize(18);
+            doc.setTextColor(30, 62, 116);
+            doc.text("APPLICANT SUMMARY REPORT", 14, 20);
+            doc.setFontSize(10);
+            doc.setTextColor(90, 98, 110);
+            doc.text("Recruitment Management and Evaluation System", 14, 27);
+            doc.text(
+                `Generated: ${new Date().toLocaleDateString("en-PH")}`,
+                14,
+                35
+            );
+
+            autoTable(doc, {
+                startY: 43,
+                head: [["Category", "Count"]],
+                body: summaryRows,
+                theme: "grid",
+                styles: { fontSize: 10, cellPadding: 3 },
+                headStyles: { fillColor: [30, 62, 116] },
+                columnStyles: {
+                    0: { cellWidth: 110 },
+                    1: { cellWidth: 45, halign: "right" }
+                }
+            });
+
+            const date = new Date().toISOString().split("T")[0];
+            doc.save(`Applicant_Summary_Report_${date}.pdf`);
+        } catch (error) {
+            console.error("Error generating PDF report:", error);
+            alert("Failed to generate PDF report.");
+        } finally {
+            setGeneratingPdf(false);
+        }
     };
 
 
@@ -263,6 +323,100 @@ export default function ApplicantSummaryReport() {
             alert("Failed to generate the applicant Excel report.");
         } finally {
             setApplicantsGenerating(false);
+        }
+    };
+
+    const generateApplicantsPdf = () => {
+        try {
+            setApplicantsPdfGenerating(true);
+            if (!selectedVacancy || !filteredApplicants.length) {
+                alert("Select a vacancy with applicants before generating the PDF.");
+                return;
+            }
+
+            const positionTitle = selectedVacancyData?.position_title ||
+                selectedVacancyData?.plantilla_position || "Selected Vacancy";
+            const rows = filteredApplicants.map((application, index) => [
+                index + 1,
+                application.applicant_id || "",
+                application.application_code || application.applicationCode || "",
+                application.ticket || "",
+                application.job_applications_id || "",
+                getApplicantName(application),
+                application.email_address || application.email || "",
+                getApplicationVacancyId(application),
+                application.position_title || positionTitle,
+                application.salary_grade || selectedVacancyData?.salary_grade || "",
+                application.category || selectedVacancyData?.category || "",
+                application.application_status || application.status || "",
+            ]);
+
+            const doc = new jsPDF({
+                orientation: "landscape",
+                format: "a3"
+            });
+            doc.setFontSize(16);
+            doc.setTextColor(30, 62, 116);
+            doc.text("APPLICANT LIST REPORT", 14, 16);
+            doc.setFontSize(9);
+            doc.setTextColor(90, 98, 110);
+            doc.text("Recruitment Management and Evaluation System", 14, 22);
+            doc.text(`Vacancy: ${positionTitle}`, 14, 30);
+            doc.text(`Vacancy ID: ${selectedVacancy}`, 14, 35);
+            doc.text(`Matching Applicants: ${rows.length}`, 14, 40);
+
+            autoTable(doc, {
+                startY: 46,
+                head: [[
+                    "No.",
+                    "Applicant ID",
+                    "Application Code",
+                    "Ticket",
+                    "Application ID",
+                    "Applicant Name",
+                    "Email Address",
+                    "Vacancy ID",
+                    "Position Title",
+                    "Salary Grade",
+                    "Category",
+                    "Application Status"
+                ]],
+                body: rows,
+                theme: "grid",
+                styles: {
+                    fontSize: 7,
+                    cellPadding: 2,
+                    overflow: "linebreak"
+                },
+                headStyles: {
+                    fillColor: [30, 62, 116],
+                    fontSize: 7
+                },
+                margin: { left: 14, right: 14 },
+                didDrawPage: () => {
+                    const pageCount = doc.getNumberOfPages();
+                    doc.setFontSize(8);
+                    doc.setTextColor(120);
+                    doc.text(
+                        `Page ${doc.internal.getCurrentPageInfo().pageNumber} of ${pageCount}`,
+                        doc.internal.pageSize.getWidth() - 14,
+                        doc.internal.pageSize.getHeight() - 8,
+                        { align: "right" }
+                    );
+                }
+            });
+
+            const date = new Date().toISOString().split("T")[0];
+            const safeTitle = String(positionTitle)
+                .replace(/[\\/:*?"<>|]/g, "")
+                .trim()
+                .replace(/\s+/g, "_");
+            doc.save(`Applicants_${safeTitle}_${date}.pdf`);
+        } catch (err) {
+            console.error("Error generating applicant PDF:", err);
+            alert("Failed to generate the applicant PDF report.");
+        } finally {
+            setApplicantsPdfGenerating(false);
         }
     };
 
@@ -670,6 +824,20 @@ export default function ApplicantSummaryReport() {
 
                     </button>
 
+                    <button
+                        type="button"
+                        onClick={generateSummaryPdf}
+                        disabled={loading || generatingPdf}
+                        className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        {generatingPdf ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                            <FileText className="h-3.5 w-3.5" />
+                        )}
+                        {generatingPdf ? "Generating..." : "Generate PDF"}
+                    </button>
+
                 </div>
 
             </div>
@@ -873,7 +1041,7 @@ export default function ApplicantSummaryReport() {
             <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
                 <div className="border-b border-gray-100 px-6 py-5">
                     <h2 className="text-lg font-bold text-gray-900">Applicants by Vacancy</h2>
-                    <p className="mt-1 text-sm text-gray-500">Select a vacancy to view only applicants who applied for it, then export the list to Excel.</p>
+                    <p className="mt-1 text-sm text-gray-500">Select a vacancy to view only its applicants, then export the list to Excel or PDF.</p>
                 </div>
 
                 <div className="space-y-5 p-6">
@@ -932,15 +1100,26 @@ export default function ApplicantSummaryReport() {
                                 {selectedVacancy ? `Vacancy ID: ${selectedVacancy} · ${filteredApplicants.length} matching applicant(s)` : "Choose a vacancy to show its applicants."}
                             </p>
                         </div>
-                        <button
-                            type="button"
-                            onClick={generateApplicantsExcel}
-                            disabled={applicantsLoading || applicantsGenerating || !selectedVacancy || filteredApplicants.length === 0}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            {applicantsGenerating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-                            {applicantsGenerating ? "Generating..." : "Export Applicants (.xlsx)"}
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                onClick={generateApplicantsExcel}
+                                disabled={applicantsLoading || applicantsGenerating || applicantsPdfGenerating || !selectedVacancy || filteredApplicants.length === 0}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {applicantsGenerating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                                {applicantsGenerating ? "Generating..." : "Export Applicants (.xlsx)"}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={generateApplicantsPdf}
+                                disabled={applicantsLoading || applicantsPdfGenerating || applicantsGenerating || !selectedVacancy || filteredApplicants.length === 0}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {applicantsPdfGenerating ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
+                                {applicantsPdfGenerating ? "Generating..." : "Export Applicants (.pdf)"}
+                            </button>
+                        </div>
                     </div>
 
                     <div className="overflow-x-auto rounded-xl border border-gray-200">

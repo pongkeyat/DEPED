@@ -16,7 +16,8 @@ import {
   LampDesk,
   ChevronDown,
   ChevronRight,
-  LayoutList
+  LayoutList,
+  Signature
 } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
@@ -190,6 +191,7 @@ export default function SideBar() {
           icon: CirclePlus,
         },
       ],
+
     },
     {
       title: "RANKING",
@@ -204,6 +206,17 @@ export default function SideBar() {
           label: "Comparative Assessment Result/RQA",
           to: "/carrqa",
           icon: User,
+        },
+      ],
+    },
+    {
+          title: "SIGNATURE",
+      roles: [ROLES.HRMPSB, ROLES.HRO],
+      items: [
+        {
+          label: "Signature Management",
+          to: "/signature-management",
+          icon: Signature,
         },
       ],
     },

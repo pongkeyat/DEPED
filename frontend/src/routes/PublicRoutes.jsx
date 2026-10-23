@@ -1,4 +1,3 @@
-import React from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -58,6 +57,7 @@ import ProtectedRoute from "./ProtectedRoutes";
 // ============================================================
 
 import { useAuth } from "../context/AuthContext";
+import SignatureManagement from "../pages/SingatureManagement";
 
 // ============================================================
 // APP LAYOUT
@@ -67,7 +67,7 @@ function AppLayout() {
   const { token } = useAuth();
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-[#edf2f8]">
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-[#edf2f8] print:block print:h-auto print:w-full print:overflow-visible print:bg-white">
       {/* ======================================================
           TOP HEADER
       ====================================================== */}
@@ -80,7 +80,7 @@ function AppLayout() {
           MAIN CONTAINER
       ====================================================== */}
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden print:block print:overflow-visible">
         {/* ====================================================
             SIDEBAR
         ==================================================== */}
@@ -108,7 +108,7 @@ function AppLayout() {
             DYNAMIC PAGE CONTENT
         ==================================================== */}
 
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-6 print:overflow-visible print:p-0">
           <Outlet />
         </main>
       </div>
@@ -264,6 +264,8 @@ export default function PublicRoutes() {
           />
 
           <Route path="/office-units" element={<OfficeUnitsPage />} />
+
+           <Route path="/signature-management" element={<SignatureManagement />} />
 
           {/* ==================================================
               HELP CENTER

@@ -184,6 +184,41 @@ export default function ApplicantRow({
           ? "NON_TEACHING"
           : "";
 
+  const performanceCategory = normalize(
+    details?.category ||
+      details?.position_category ||
+      details?.vacancy_category ||
+      item?.category ||
+      item?.position_category ||
+      item?.vacancy_category
+  )
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ");
+  const eligiblePerformanceCategories = new Set([
+    "NON TEACHING",
+    "NON TEACHING POSITION",
+    "NON TEACHING POSITIONS",
+    "SCHOOL ADMINISTRATION",
+    "SCHOOL ADMINISTRATION POSITION",
+    "SCHOOL ADMINISTRATION POSITIONS",
+    "RELATED TEACHING",
+    "RELATED TEACHING POSITION",
+    "RELATED TEACHING POSITIONS",
+  ]);
+  const performanceOptionId = Number(
+    details?.performance_assessment_option_id
+  );
+  const performancePoints = Number(
+    details?.performance_points
+  );
+  const hasInitialPerformance =
+    eligiblePerformanceCategories.has(performanceCategory) &&
+    Number.isInteger(performanceOptionId) &&
+    performanceOptionId > 0 &&
+    details?.performance_points !== null &&
+    details?.performance_points !== undefined &&
+    Number.isFinite(performancePoints);
+
 
   // ============================================================
   // CATEGORY FLAGS
@@ -243,6 +278,15 @@ export default function ApplicantRow({
     const selected = Number(score || 0);
 
     if (normalize(criterion.name) !== "PERFORMANCE") {
+      return selected;
+    }
+
+    if (
+      ["RELATED_TEACHING", "SCHOOL_ADMINISTRATION", "NON_TEACHING"].includes(
+        assessmentType
+      ) &&
+      selected > 5
+    ) {
       return selected;
     }
 
@@ -464,8 +508,19 @@ export default function ApplicantRow({
         (
           sum,
           criterion
-        ) =>
-          sum + getCriterionScore(criterion, scores?.[criterion.id]),
+        ) => {
+          if (
+            normalize(criterion.name) === "PERFORMANCE" &&
+            hasInitialPerformance
+          ) {
+            return sum + performancePoints;
+          }
+
+          return sum + getCriterionScore(
+            criterion,
+            scores?.[criterion.id]
+          );
+        },
         0
       );
 
@@ -490,11 +545,18 @@ export default function ApplicantRow({
             (
               sum,
               criterion
-            ) =>
-              sum +
-              Number(
+            ) => {
+              if (
+                normalize(criterion.name) === "PERFORMANCE" &&
+                hasInitialPerformance
+              ) {
+                return sum + performancePoints;
+              }
+
+              return sum + Number(
                 scores?.[criterion.id] || 0
-              ),
+              );
+            },
             0
           );
 
@@ -716,6 +778,25 @@ export default function ApplicantRow({
 
 
 
+              </td>
+            );
+          }
+
+          if (
+            criterionName === "PERFORMANCE" &&
+            hasInitialPerformance
+          ) {
+            return (
+              <td
+                key={criterion.id}
+                className="min-w-[180px] bg-blue-50/40 px-4 py-4 text-center"
+              >
+                <div className="font-semibold text-gray-900">
+                  {performancePoints}
+                </div>
+                <div className="mt-1 text-[10px] font-medium text-blue-500">
+                  From Initial Evaluation
+                </div>
               </td>
             );
           }

@@ -1,4 +1,6 @@
-import transporters from "../config/emailTransporters.js";
+import transporters, {
+    createEmailSender,
+} from "../config/emailTransporters.js";
 
 const transporter = transporters.userAccounts;
 
@@ -18,10 +20,7 @@ export const AccountCreatedEmail = async (email, password) => {
     }
 
     const mailOptions = {
-        from: {
-            name: "DEPED Recruitment System",
-            address: process.env.EMAIL,
-        },
+        from: createEmailSender(),
         to: email,
         subject: "DEPED Recruitment System Account",
         html: `
@@ -99,7 +98,7 @@ export const AccountCreatedEmail = async (email, password) => {
 
 export const ForgotPasswordEmail = async (email, resetLink) => {
     const mailOptions = {
-        from: `"DepEd Recruitment System" <${process.env.USER_ACCOUNTS_EMAIL}>`,
+        from: createEmailSender(process.env.USER_ACCOUNTS_EMAIL),
         to: email,
         subject: "Password Reset Request",
         html: `

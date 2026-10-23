@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-
 import { useParams, useNavigate } from "react-router-dom";
 
 import {
@@ -15,7 +14,6 @@ import {
   Mail,
   MapPin,
   CheckCircle2,
-  Eye,
 } from "lucide-react";
 
 import {
@@ -24,16 +22,13 @@ import {
 } from "../api/ApplicationApi";
 
 import ActionModal from "../components/ActionModal";
-
 import DocumentPreviewModal from "../components/applications/DocumentPreviewModal";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
 
 // ============================================================
-
 // STATUS STYLES
-
 // ============================================================
 
 const getStatusStyles = (status) => {
@@ -67,63 +62,42 @@ const getStatusStyles = (status) => {
 };
 
 // ============================================================
-
 // DOCUMENT REQUIREMENTS
-
 // IMPORTANT: these fields must match applicant_documents.
-
 // ============================================================
 
 const DOCUMENT_REQUIREMENTS = [
   { field: "has_application_letter", label: "Letter of Intent" },
-
   {
     field: "has_personal_data_sheet",
-
     label: "Personal Data Sheet (PDS) with Work Experience Sheet",
   },
-
   { field: "has_prc_license_id", label: "PRC License/ID" },
-
   {
     field: "has_civil_service_eligibility_cert",
-
     label: "Certificate of Eligibility/Rating",
   },
-
   { field: "has_diploma", label: "Diploma" },
-
   {
     field: "has_transcript_of_records",
-
     label: "Transcript of Records (TOR) / Academic Record",
   },
-
   { field: "has_training_certificates", label: "Certificate/s of Training" },
-
   {
     field: "has_certificate_of_employment",
-
     label: "Certificate of Employment / Contract of Service",
   },
-
   { field: "has_service_record", label: "Service Record" },
-
   { field: "has_latest_appointment", label: "Latest Appointment" },
-
   { field: "has_performance_rating", label: "Performance Rating" },
-
   {
     field: "has_omnibus_sworn_statement",
-
     label: "Checklist of Requirements and Omnibus Sworn Statement",
   },
 ];
 
 // ============================================================
-
 // RESOLVE FILE URL
-
 // ============================================================
 
 const resolveFileUrl = (urlOrPath) => {
@@ -132,9 +106,7 @@ const resolveFileUrl = (urlOrPath) => {
   }
 
   // If the value is an array, return the first file.
-
   // Multiple files are handled separately in getDocumentFiles().
-
   const filePath = Array.isArray(urlOrPath) ? urlOrPath[0] : urlOrPath;
 
   if (!filePath || typeof filePath !== "string") {
@@ -148,7 +120,6 @@ const resolveFileUrl = (urlOrPath) => {
   }
 
   // Already a complete URL
-
   if (
     normalizedPath.startsWith("http://") ||
     normalizedPath.startsWith("https://")
@@ -157,7 +128,6 @@ const resolveFileUrl = (urlOrPath) => {
   }
 
   // Normalize uploads path
-
   const cleanPath = normalizedPath.startsWith("/uploads/")
     ? normalizedPath
     : normalizedPath.startsWith("uploads/")
@@ -168,9 +138,7 @@ const resolveFileUrl = (urlOrPath) => {
 };
 
 // ============================================================
-
 // GET ALL FILES FOR A DOCUMENT
-
 // ============================================================
 
 const parsePostgresFileArray = (value) => {
@@ -179,23 +147,19 @@ const parsePostgresFileArray = (value) => {
   const values = [];
 
   let current = "";
-
   let quoted = false;
-
   let escaped = false;
 
   for (const character of contents) {
     if (escaped) {
       current += character;
-
       escaped = false;
-    } else if (character === "\\\\\\\\") {
+    } else if (character === "\\") {
       escaped = true;
     } else if (character === '"') {
       quoted = !quoted;
     } else if (character === "," && !quoted) {
       values.push(current);
-
       current = "";
     } else {
       current += character;
@@ -203,7 +167,7 @@ const parsePostgresFileArray = (value) => {
   }
 
   if (escaped) {
-    current += "\\\\\\\\";
+    current += "\\";
   }
 
   values.push(current);
@@ -257,24 +221,17 @@ const getDocumentFiles = (applicant, field) => {
   const rawKey = field.replace(/^has_/, "");
 
   const possibleValues = [
-    applicant[`${rawKey}\_url`],
-
-    applicant[`${rawKey}\_file_path`],
-
-    applicant[`${rawKey}\_path`],
-
-    applicant[`${rawKey}\_file`],
-
-    applicant[`${rawKey}\_filename`],
-
+    applicant[`${rawKey}_url`],
+    applicant[`${rawKey}_file_path`],
+    applicant[`${rawKey}_path`],
+    applicant[`${rawKey}_file`],
+    applicant[`${rawKey}_filename`],
     applicant[rawKey],
   ];
 
   const values =
     possibleValues
-
       .map(normalizeDocumentPaths)
-
       .find((paths) => paths.length > 0) || [];
 
   if (values.length === 0) {
@@ -282,21 +239,12 @@ const getDocumentFiles = (applicant, field) => {
   }
 
   return values
-
     .map((filePath) => ({
       url: resolveFileUrl(filePath),
-
       name: filePath.replace(/\\/g, "/").split("/").pop() || "Uploaded File",
     }))
-
     .filter((file) => file.url);
 };
-
-// ============================================================
-
-// MAIN COMPONENT
-
-// ============================================================
 
 // ============================================================
 // APPLICANT TYPE (INTERNAL / EXTERNAL)
@@ -322,60 +270,93 @@ const getApplicantType = (applicant) => {
   return "Not specified";
 };
 
+// ============================================================
+// FILE THUMBNAIL BUTTON
+// Small preview of the uploaded photo. Click it to open the full
+// in-app preview. PDFs (and anything that cannot be shown as an
+// image) display a small file tile instead.
+// ============================================================
+
+const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp"];
+
+const getFileExtension = (nameOrUrl = "") => {
+  const clean = String(nameOrUrl).split("?")[0].split("#")[0];
+  return clean.includes(".") ? clean.split(".").pop().toLowerCase() : "";
+};
+
+function FileThumbnailButton({ file, title, onClick }) {
+  const [failed, setFailed] = useState(false);
+
+  const extension = getFileExtension(file.name || file.url);
+  const isImage = IMAGE_EXTENSIONS.includes(extension) && !failed;
+  const isPdf = extension === "pdf";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border border-blue-200 bg-blue-50 transition hover:ring-2 hover:ring-blue-400"
+    >
+      {isImage ? (
+        <img
+          src={file.url}
+          alt={file.name || title}
+          loading="lazy"
+          onError={() => setFailed(true)}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <span className="flex flex-col items-center text-[9px] font-bold leading-none text-[#1E3E74]">
+          <FileText size={16} />
+          {isPdf ? "PDF" : "FILE"}
+        </span>
+      )}
+    </button>
+  );
+}
+
+// ============================================================
+// MAIN COMPONENT
+// ============================================================
+
 export default function ApplicantDetails() {
   const { id } = useParams();
-
   const navigate = useNavigate();
 
-  // ==========================================================
-
   // STATES
-
-  // ==========================================================
-
   const [applicant, setApplicant] = useState(null);
-
   const [loading, setLoading] = useState(true);
-
   const [error, setError] = useState(null);
-
   const [updating, setUpdating] = useState(false);
 
   // Checked documents
-
   const [checkedDocs, setCheckedDocs] = useState({});
 
   // Modals
-
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-
   const [modalError, setModalError] = useState(null);
 
   // In-app document preview (replaces opening a new browser tab)
-
   const [previewFile, setPreviewFile] = useState(null);
 
   // ==========================================================
-
   // FETCH APPLICANT
-
   // ==========================================================
 
   useEffect(() => {
     const fetchApplicantDetails = async () => {
       try {
         setLoading(true);
-
         setError(null);
 
         const response = await getApplicationById(id);
-
         const data = response && response.data ? response.data : response;
 
         setApplicant(data);
 
         // Initial checkbox state
-
         if (data) {
           const initialCheckedState = {};
 
@@ -387,7 +368,6 @@ export default function ApplicantDetails() {
         }
       } catch (err) {
         console.error("Error fetching applicant details:", err);
-
         setError("Failed to load applicant details. Please try again.");
       } finally {
         setLoading(false);
@@ -399,70 +379,42 @@ export default function ApplicantDetails() {
     }
   }, [id]);
 
-  // ============================================================
-
   // DOCUMENTS
-
-  // ============================================================
-
   const documents = DOCUMENT_REQUIREMENTS.map((document) => ({
     ...document,
-
     files: getDocumentFiles(applicant, document.field),
   }));
 
-  // ============================================================
-
   // CHECKBOX CHANGE
-
-  // ============================================================
-
   const handleCheckboxChange = (fullKey) => {
     setCheckedDocs((prev) => ({
       ...prev,
-
       [fullKey]: !prev[fullKey],
     }));
   };
 
-  // ============================================================
-
   // DOCUMENT COUNTS
-
-  // ============================================================
-
   const totalDocs = documents.length;
-
   const checkedDocsCount = Object.values(checkedDocs).filter(Boolean).length;
-
   const isAllChecked = totalDocs > 0 && checkedDocsCount === totalDocs;
 
-  // ============================================================
-
   // APPLICATION STATUS
-
-  // ============================================================
-
   const rawStatus = applicant?.application_status || "";
-
   const normalizedStatus = rawStatus.toLowerCase().trim();
 
   const isUnderReview =
     normalizedStatus === "under_review" || normalizedStatus === "under review";
 
   const isFinalStatus = ["complete", "completed", "incomplete"].includes(
-    normalizedStatus,
+    normalizedStatus
   );
 
   const canUpdateStatus = isUnderReview && !isFinalStatus;
-
   const currentStatus = rawStatus;
 
-  // ============================================================
-
+  // ==========================================================
   // CONFIRM APPLICATION
-
-  // ============================================================
+  // ==========================================================
 
   const handleConfirmApplication = async () => {
     setShowConfirmModal(false);
@@ -471,7 +423,6 @@ export default function ApplicantDetails() {
       setUpdating(true);
 
       const applicantId = applicant.applicant_id || id;
-
       const targetStatus = isAllChecked ? "complete" : "incomplete";
 
       const remarksText = isAllChecked
@@ -480,7 +431,6 @@ export default function ApplicantDetails() {
 
       const payload = {
         application_status: targetStatus,
-
         hr_remarks_notes: applicant.hr_remarks_notes
           ? `${applicant.hr_remarks_notes}\n[${remarksText}]`
           : remarksText,
@@ -489,28 +439,22 @@ export default function ApplicantDetails() {
       await updateApplicationStatus(applicantId, payload);
 
       // Update local state
-
       setApplicant((prev) => ({
         ...prev,
-
         application_status: targetStatus,
-
         hr_remarks_notes: payload.hr_remarks_notes,
       }));
     } catch (err) {
       console.error("Error updating application status:", err);
-
       setModalError("Failed to update application status. Please try again.");
     } finally {
       setUpdating(false);
     }
   };
 
-  // ============================================================
-
+  // ==========================================================
   // LOADING SCREEN
-
-  // ============================================================
+  // ==========================================================
 
   if (loading) {
     return (
@@ -526,11 +470,9 @@ export default function ApplicantDetails() {
     );
   }
 
-  // ============================================================
-
+  // ==========================================================
   // ERROR SCREEN
-
-  // ============================================================
+  // ==========================================================
 
   if (error || !applicant) {
     return (
@@ -557,20 +499,15 @@ export default function ApplicantDetails() {
     );
   }
 
-  // ============================================================
+  const applicantType = getApplicantType(applicant);
 
+  // ==========================================================
   // MAIN UI
-
-  // ============================================================
+  // ==========================================================
 
   return (
     <div className="min-h-screen p-6 relative">
-      {/* ======================================================
-
-          TOP NAVIGATION
-
-          ====================================================== */}
-
+      {/* TOP NAVIGATION */}
       <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <button
           onClick={() => navigate(-1)}
@@ -582,23 +519,17 @@ export default function ApplicantDetails() {
 
         <div className="flex items-center gap-3">
           {/* STATUS: only shown when NOT under_review */}
-
           {!isUnderReview && (
             <span
               className={`rounded-full border px-4 py-1.5 text-sm font-bold shadow-sm uppercase tracking-wide flex items-center gap-1.5 ${getStatusStyles(
-                currentStatus,
+                currentStatus
               )}`}
             >
               {currentStatus || "N/A"}
             </span>
           )}
 
-          {/* ACTION BUTTONS: only shown when under_review.
-
-              HR can edit the applicant's details, but NOT the uploaded
-
-              documents (the edit form treats documents as read-only). */}
-
+          {/* ACTION BUTTON: only shown when under_review */}
           {isUnderReview && (
             <button
               onClick={() => setShowConfirmModal(true)}
@@ -623,17 +554,11 @@ export default function ApplicantDetails() {
         </div>
       </div>
 
-      {/* ======================================================
-
-          APPLICANT HEADER
-
-          ====================================================== */}
-
+      {/* APPLICANT HEADER */}
       <div className="relative mb-8 flex min-h-[88px] flex-col items-start justify-between gap-6 overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm md:flex-row md:items-center">
         <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1E3E74]" />
 
         {/* APPLICANT NAME */}
-
         <div className="flex items-center gap-5">
           <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-blue-50 text-[#1E3E74] font-bold text-2xl shadow-inner">
             {applicant.first_name ? (
@@ -657,33 +582,27 @@ export default function ApplicantDetails() {
               ({applicant.office_unit || "N/A"})
             </p>
 
-            {(() => {
-              const applicantType = getApplicantType(applicant);
-              return (
-                <div className="mt-3">
-                  <span className="text-sm font-medium text-slate-500">
-                    Applicant Type:
-                  </span>
-                  <span
-                    className={`ml-2 inline-flex rounded-full border px-3 py-1 text-xs font-bold ${
-                      applicantType === "Internal"
-                        ? "border-blue-200 bg-blue-50 text-blue-700"
-                        : applicantType === "External"
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                          : "border-slate-200 bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {applicantType}
-                  </span>
-                </div>
-              );
-            })()}
+            <div className="mt-3">
+              <span className="text-sm font-medium text-slate-500">
+                Applicant Type:
+              </span>
+              <span
+                className={`ml-2 inline-flex rounded-full border px-3 py-1 text-xs font-bold ${
+                  applicantType === "Internal"
+                    ? "border-blue-200 bg-blue-50 text-blue-700"
+                    : applicantType === "External"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-slate-200 bg-slate-100 text-slate-600"
+                }`}
+              >
+                {applicantType}
+              </span>
+            </div>
 
             <div className="flex flex-wrap gap-4 mt-3 text-sm text-slate-500">
               {applicant.contact_number && (
                 <span className="flex items-center gap-1.5">
                   <Phone size={15} />
-
                   {applicant.contact_number}
                 </span>
               )}
@@ -691,7 +610,6 @@ export default function ApplicantDetails() {
               {applicant.email_address && (
                 <span className="flex items-center gap-1.5">
                   <Mail size={15} />
-
                   {applicant.email_address}
                 </span>
               )}
@@ -699,7 +617,6 @@ export default function ApplicantDetails() {
               {applicant.residential_address && (
                 <span className="flex items-center gap-1.5">
                   <MapPin size={15} />
-
                   {applicant.residential_address}
                 </span>
               )}
@@ -708,7 +625,6 @@ export default function ApplicantDetails() {
         </div>
 
         {/* APPLICATION DETAILS */}
-
         <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 min-w-[220px]">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
             Application Details
@@ -728,22 +644,11 @@ export default function ApplicantDetails() {
         </div>
       </div>
 
-      {/* ======================================================
-
-          MAIN GRID
-
-          ====================================================== */}
-
+      {/* MAIN GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* ====================================================
-
-            LEFT COLUMN
-
-            ==================================================== */}
-
+        {/* LEFT COLUMN */}
         <div className="lg:col-span-2 space-y-8">
           {/* EDUCATION */}
-
           <div className="rounded-3xl bg-white shadow p-6">
             <h2 className="text-xl font-bold text-[#1E3E74] flex items-center gap-2 mb-4">
               <GraduationCap size={22} />
@@ -791,7 +696,6 @@ export default function ApplicantDetails() {
           </div>
 
           {/* WORK EXPERIENCE */}
-
           <div className="rounded-3xl bg-white shadow p-6">
             <h2 className="text-xl font-bold text-[#1E3E74] flex items-center gap-2 mb-4">
               <Briefcase size={22} />
@@ -823,11 +727,8 @@ export default function ApplicantDetails() {
 
                       <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
                         <Calendar size={13} />
-
                         {work.experience_date_from || work.date_from || "N/A"}
-
                         {" — "}
-
                         {work.experience_date_to || work.date_to || "Present"}
                       </span>
                     </div>
@@ -850,7 +751,6 @@ export default function ApplicantDetails() {
           </div>
 
           {/* TRAININGS */}
-
           <div className="rounded-3xl bg-white shadow p-6">
             <h2 className="text-xl font-bold text-[#1E3E74] flex items-center gap-2 mb-4">
               <Award size={22} />
@@ -883,15 +783,9 @@ export default function ApplicantDetails() {
           </div>
         </div>
 
-        {/* ====================================================
-
-            RIGHT COLUMN
-
-            ==================================================== */}
-
+        {/* RIGHT COLUMN */}
         <div className="space-y-8">
           {/* ELIGIBILITY */}
-
           <div className="rounded-3xl bg-white shadow p-6">
             <h2 className="text-xl font-bold text-[#1E3E74] mb-4">
               Civil Service Eligibility
@@ -916,7 +810,10 @@ export default function ApplicantDetails() {
                     </p>
 
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Exam Date: {elig.date_of_exam || "N/A"}
+                      {elig.eligibility_type === "PD 907"
+                        ? "Graduation Date"
+                        : "Exam Date"}
+                      : {elig.date_of_exam || "N/A"}
                     </p>
                   </div>
                 ))}
@@ -929,10 +826,8 @@ export default function ApplicantDetails() {
           </div>
 
           {/* DOCUMENT VERIFICATION */}
-
           <div className="rounded-3xl bg-white shadow p-6">
             {/* HEADER */}
-
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-[#1E3E74] flex items-center gap-2">
                 <FileText size={22} />
@@ -951,7 +846,6 @@ export default function ApplicantDetails() {
             </div>
 
             {/* DOCUMENT LIST */}
-
             {documents.length > 0 ? (
               <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1">
                 {documents.map((doc, idx) => {
@@ -968,7 +862,6 @@ export default function ApplicantDetails() {
                     >
                       <div className="flex items-start justify-between gap-3">
                         {/* CHECKBOX + DOCUMENT NAME */}
-
                         <label className="flex items-start gap-3 cursor-pointer min-w-0 flex-1">
                           <input
                             type="checkbox"
@@ -994,7 +887,6 @@ export default function ApplicantDetails() {
                             </span>
 
                             {/* FILE COUNT */}
-
                             {doc.files.length > 0 && (
                               <p className="text-xs text-green-600 mt-1">
                                 {doc.files.length === 1
@@ -1006,39 +898,34 @@ export default function ApplicantDetails() {
                         </label>
 
                         {/* FILE BUTTONS: open the in-app preview, not a new tab */}
-
                         <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
                           {doc.files.length > 0 ? (
-                            doc.files.map((file, fileIndex) => (
-                              <button
-                                key={`${doc.field}-${fileIndex}`}
-                                type="button"
-                                onClick={() =>
-                                  setPreviewFile({
-                                    url: file.url,
+                            doc.files.map((file, fileIndex) => {
+                              const previewName =
+                                doc.files.length > 1
+                                  ? `${doc.label} (${fileIndex + 1})`
+                                  : doc.label;
 
-                                    name:
-                                      doc.files.length > 1
-                                        ? `${doc.label} (${fileIndex + 1})`
-                                        : doc.label,
-                                  })
-                                }
-                                className="inline-flex items-center gap-1 text-xs font-semibold text-[#1E3E74] bg-blue-50 border border-blue-200 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors"
-                                title={file.name}
-                              >
-                                <Eye size={13} />
-
-                                {doc.files.length > 1
-                                  ? `View ${fileIndex + 1}`
-                                  : "View"}
-                              </button>
-                            ))
+                              return (
+                                <FileThumbnailButton
+                                  key={`${doc.field}-${fileIndex}`}
+                                  file={file}
+                                  title={`View ${file.name}`}
+                                  onClick={() =>
+                                    setPreviewFile({
+                                      url: file.url,
+                                      name: previewName,
+                                    })
+                                  }
+                                />
+                              );
+                            })
                           ) : (
                             <span
                               className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg cursor-not-allowed"
                               title="No uploaded file path available"
                             >
-                              <Eye size={13} />
+                              <FileText size={13} />
                               No File
                             </span>
                           )}
@@ -1056,7 +943,6 @@ export default function ApplicantDetails() {
           </div>
 
           {/* HR REMARKS */}
-
           {applicant.hr_remarks_notes && (
             <div className="rounded-3xl bg-blue-50/50 border border-blue-100 shadow p-6">
               <h2 className="text-lg font-bold text-[#1E3E74] mb-2">
@@ -1071,12 +957,7 @@ export default function ApplicantDetails() {
         </div>
       </div>
 
-      {/* ======================================================
-
-          CONFIRMATION MODAL
-
-          ====================================================== */}
-
+      {/* CONFIRMATION MODAL */}
       {canUpdateStatus && (
         <ActionModal
           isOpen={showConfirmModal}
@@ -1094,12 +975,7 @@ export default function ApplicantDetails() {
         />
       )}
 
-      {/* ======================================================
-
-          ERROR MODAL
-
-          ====================================================== */}
-
+      {/* ERROR MODAL */}
       <ActionModal
         isOpen={Boolean(modalError)}
         type="error"
@@ -1108,12 +984,7 @@ export default function ApplicantDetails() {
         onClose={() => setModalError(null)}
       />
 
-      {/* ======================================================
-
-          IN-APP DOCUMENT PREVIEW
-
-          ====================================================== */}
-
+      {/* IN-APP DOCUMENT PREVIEW */}
       <DocumentPreviewModal
         file={previewFile}
         onClose={() => setPreviewFile(null)}

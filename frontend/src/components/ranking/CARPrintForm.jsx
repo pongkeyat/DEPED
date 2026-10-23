@@ -1,8 +1,7 @@
-import React from "react";
-
 export default function CARPrintForm({
   vacancy,
   ranking = [],
+  hrmpsbMembers = [],
 }) {
   const formatScore = (value) => {
     const number = Number(value || 0);
@@ -12,9 +11,38 @@ export default function CARPrintForm({
       : number.toFixed(2);
   };
 
+  const formatDate = (value) => {
+    if (!value) return "";
+    const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return new Intl.DateTimeFormat("en-PH", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(date);
+  };
+
   return (
-    <div className="hidden print:block bg-white text-black">
-      <div className="w-full px-6 py-4 font-serif text-[9px]">
+    <>
+      <style>{`
+        @page {
+          size: landscape;
+          margin: 0;
+        }
+
+        @media print {
+          html,
+          body,
+          #root {
+            width: 100% !important;
+            height: auto !important;
+            margin: 0 !important;
+            overflow: visible !important;
+          }
+        }
+      `}</style>
+      <div className="car-print-page hidden print:block bg-white text-black">
+        <div className="w-full px-2 py-2 font-serif text-[9px]">
 
         {/* =========================================================
             OUTER BORDER
@@ -56,7 +84,8 @@ export default function CARPrintForm({
                   </span>
 
                   <span className="ml-2 flex-1 border-b border-black">
-                    {vacancy?.office ||
+                    {vacancy?.office_unit ||
+                      vacancy?.office ||
                       vacancy?.office_name ||
                       vacancy?.unit ||
                       ""}
@@ -71,7 +100,8 @@ export default function CARPrintForm({
                   </span>
 
                   <span className="ml-2 flex-1 border-b border-black">
-                    {vacancy?.plantilla_item_number ||
+                    {vacancy?.plantilla_position ||
+                      vacancy?.plantilla_item_number ||
                       vacancy?.item_number ||
                       ""}
                   </span>
@@ -79,11 +109,11 @@ export default function CARPrintForm({
 
                 <div className="mt-1 flex">
                   <span className="font-bold whitespace-nowrap">
-                    Date of Final Deliberation:
+                    Date Posted:
                   </span>
 
                   <span className="ml-2 flex-1 border-b border-black">
-                    {vacancy?.final_deliberation_date || ""}
+                    {formatDate(vacancy?.application_posted)}
                   </span>
                 </div>
               </div>
@@ -97,6 +127,24 @@ export default function CARPrintForm({
           <div className="mt-3 overflow-hidden">
 
             <table className="w-full table-fixed border-collapse border border-black text-center">
+              <colgroup>
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "8%" }} />
+                <col style={{ width: "5%" }} />
+                <col style={{ width: "5%" }} />
+                <col style={{ width: "5%" }} />
+                <col style={{ width: "5%" }} />
+                <col style={{ width: "9%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "5%" }} />
+                <col style={{ width: "8%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "3%" }} />
+                <col style={{ width: "3%" }} />
+                <col style={{ width: "8%" }} />
+                <col style={{ width: "8%" }} />
+              </colgroup>
 
               <thead>
 
@@ -105,14 +153,14 @@ export default function CARPrintForm({
 
                   <th
                     rowSpan="2"
-                    className="w-[10%] border border-black px-1 py-2"
+                    className="border border-black px-1 py-2"
                   >
                     Name of Applicant
                   </th>
 
                   <th
                     rowSpan="2"
-                    className="w-[8%] border border-black px-1 py-2"
+                    className="border border-black px-1 py-2"
                   >
                     Application Code
                   </th>
@@ -126,7 +174,7 @@ export default function CARPrintForm({
 
                   <th
                     rowSpan="2"
-                    className="w-[6%] border border-black px-1 py-2"
+                    className="border border-black px-1 py-2"
                   >
                     Remarks
                   </th>
@@ -144,7 +192,7 @@ export default function CARPrintForm({
 
                   <th
                     rowSpan="2"
-                    className="w-[8%] border border-black px-1 py-1"
+                    className="border border-black px-1 py-1"
                   >
                     For
                     <br />
@@ -161,7 +209,7 @@ export default function CARPrintForm({
 
                   <th
                     rowSpan="2"
-                    className="w-[8%] border border-black px-1 py-1"
+                    className="border border-black px-1 py-1"
                   >
                     For probation
                     <div className="mt-1 text-[6px] font-normal italic">
@@ -182,45 +230,45 @@ export default function CARPrintForm({
                 {/* Assessment headers */}
                 <tr className="font-bold">
 
-                  <th className="border border-black px-1 py-2">
+                  <th className="border border-black px-1 py-2 text-[7px]">
                     Education
                   </th>
 
-                  <th className="border border-black px-1 py-2">
+                  <th className="border border-black px-1 py-2 text-[7px]">
                     Training
                   </th>
 
-                  <th className="border border-black px-1 py-2">
+                  <th className="border border-black px-1 py-2 text-[7px]">
                     Experience
                   </th>
 
-                  <th className="border border-black px-1 py-2">
+                  <th className="border border-black px-1 py-2 text-[7px]">
                     Performance
                   </th>
 
-                  <th className="border border-black px-1 py-1">
+                  <th className="border border-black px-1 py-1 text-[8px]">
                     Outstanding
                     <br />
                     Accomplishments
                   </th>
 
-                  <th className="border border-black px-1 py-1">
+                  <th className="border border-black px-1 py-1 text-[7px]">
                     Application
                     <br />
                     of Education
                   </th>
 
-                  <th className="border border-black px-1 py-1">
+                  <th className="border border-black px-1 py-1 text-[7px]">
                     Application
                     <br />
                     of L&D
                   </th>
 
-                  <th className="border border-black px-1 py-2">
+                  <th className="border border-black px-1 py-2 text-[7px]">
                     Potential
                   </th>
 
-                  <th className="border border-black px-1 py-2">
+                  <th className="border border-black px-1 py-2 text-[7px]">
                     Total
                   </th>
 
@@ -462,66 +510,32 @@ export default function CARPrintForm({
           {/* =======================================================
               SIGNATURE SECTION
           ======================================================= */}
-          <div className="mt-5 flex justify-between gap-8">
-
-            {/* HMRPSB */}
-            <div className="w-[65%]">
-
-              <div className="font-bold">
-                Prepared by the HMRPSB
-              </div>
-
-              <div className="italic">
-                (All members should affix signature)
-              </div>
+          <div className="mt-5">
+            <div className="w-full">
+              <div className="font-bold">Prepared by the HRMPSB</div>
+              <div className="italic">(All members should affix signature)</div>
 
               <div className="mt-8 grid grid-cols-5 gap-4 text-center">
-
-                {[
-                  "Name and Position\nHMRPSB Member",
-                  "Name and Position\nHMRPSB Member",
-                  "Name and Position\nHMRPSB Chairperson",
-                  "Name and Position\nHMRPSB Member",
-                  "Name and Position\nHMRPSB Member",
-                ].map((label, index) => (
-                  <div key={index}>
-                    <div className="mx-auto mb-1 w-full border-b border-black"></div>
-
-                    <div className="whitespace-pre-line text-[8px] leading-tight">
-                      {label}
+                {hrmpsbMembers.slice(0, 5).map((member, index) => (
+                  <div key={member.id ?? member.user_id ?? member.email ?? index}>
+                    <div className="mx-auto mb-1 min-h-[18px] w-full border-b border-black" />
+                    <div className="text-[8px] font-bold leading-tight">
+                      {member.full_name ||
+                        [member.first_name, member.last_name].filter(Boolean).join(" ") ||
+                        member.name || ""}
+                    </div>
+                    <div className="mt-1 whitespace-pre-line text-[8px] leading-tight">
+                      {member.position || "HRMPSB Member"}
                     </div>
                   </div>
                 ))}
-
               </div>
-
             </div>
-
-            {/* Appointing Authority */}
-            <div className="w-[25%]">
-
-              <div className="text-center font-bold">
-                Appointment conferred by:
-              </div>
-
-              <div className="mt-12 text-center">
-
-                <div className="border-b border-black"></div>
-
-                <div className="mt-1 text-[8px] leading-tight">
-                  Name and Position
-                  <br />
-                  Appointing Authority
-                </div>
-
-              </div>
-
-            </div>
-
           </div>
 
         </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

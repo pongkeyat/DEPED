@@ -1,4 +1,6 @@
-import transporters from "../config/emailTransporters.js";
+import transporters, {
+    createEmailSender,
+} from "../config/emailTransporters.js";
 
 const transporter = transporters.initialEvaluation;
 
@@ -80,7 +82,7 @@ export const sendApplicationReceivedEmail = async (
 
         const mailOptions = {
 
-            from: process.env.EMAIL,
+            from: createEmailSender(),
 
             to: email,
 
@@ -237,7 +239,7 @@ export const sendQualifiedInitialEvaluationEmail = async ({
 
         const mailOptions = {
 
-            from: process.env.EMAIL,
+            from: createEmailSender(),
 
             to: email,
 
@@ -600,7 +602,7 @@ export const sendNotQualifiedInitialEvaluationEmail = async ({
 
         const mailOptions = {
 
-            from: process.env.EMAIL,
+            from: createEmailSender(),
 
             to: email,
 
@@ -1192,8 +1194,7 @@ export const sendIndividualEvaluationSheetEmail = async ({
 
         const mailOptions = {
 
-            from:
-                `"DepEd La Union Schools Division Office" <${process.env.EMAIL}>`,
+            from: createEmailSender(),
 
             to:
                 email,

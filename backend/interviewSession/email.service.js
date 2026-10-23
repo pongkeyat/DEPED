@@ -1,5 +1,7 @@
 
-import transporters from "../config/emailTransporters.js";
+import transporters, {
+    createEmailSender,
+} from "../config/emailTransporters.js";
 
 const transporter = transporters.interviewSession;
 
@@ -94,10 +96,7 @@ export const sendAssessmentInvitationEmail = async ({
         const safeVenue = escapeHtml(venue || "To be announced");
 
         const mailOptions = {
-            from: {
-                name: "DepEd La Union Schools Division Office",
-                address: process.env.EMAIL,
-            },
+            from: createEmailSender(),
 
             to: email,
 

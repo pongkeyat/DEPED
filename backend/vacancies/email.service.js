@@ -1,4 +1,6 @@
-import transporters from "../config/emailTransporters.js";
+import transporters, {
+    createEmailSender,
+} from "../config/emailTransporters.js";
 
 const transporter = transporters.vacancies;
 
@@ -17,7 +19,7 @@ export const sendInitialScreeningEmail = async (
 
         const mailOptions = {
 
-            from: process.env.EMAIL,
+            from: createEmailSender(),
 
             to: email,
 
@@ -171,7 +173,7 @@ export const sendRequirementsReminderEmail = async (
         );
 
         await transporter.sendMail({
-            from: process.env.EMAIL,
+            from: createEmailSender(),
             to: email,
             subject: "Reminder: Submit Your Application Requirements",
 
@@ -182,6 +184,7 @@ This is a friendly reminder to submit your application requirements for the posi
 
 Application Ticket: ${ticket}
 Application Deadline: ${formattedDeadline}
+Application Submission Hours: 8:00 AM - 5:00 PM (Philippine Time)
 
 Please ensure that you submit all required documents before the deadline.
 

@@ -8,7 +8,8 @@ export default function EvaluationSection({ title, icon: Icon, isPass, children 
         <h2 className="text-xl font-bold text-[#1E3E74] flex items-center gap-2">
           {Icon && <Icon size={22} />} {title}
         </h2>
-        {isPass ? (
+        {isPass !== undefined && isPass !== null && (
+          isPass ? (
           <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-700 font-bold text-xs rounded-full shadow-sm">
             <CheckCircle size={14} /> Pass
           </span>
@@ -16,6 +17,7 @@ export default function EvaluationSection({ title, icon: Icon, isPass, children 
           <span className="inline-flex items-center gap-1 px-3 py-1 bg-rose-100 text-rose-700 font-bold text-xs rounded-full shadow-sm">
             <XCircle size={14} /> Fail
           </span>
+          )
         )}
       </div>
       {children}

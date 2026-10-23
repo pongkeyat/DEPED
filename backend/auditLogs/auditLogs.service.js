@@ -1,4 +1,47 @@
-import pool from "../config/db.js";
+import pool from "../config/auditdb.js";
+import usersPool from "../config/db.js";
+
+const addUserDisplayFields = async (logs) => {
+    const userIds = [
+        ...new Set(
+            logs
+                .map((log) => log.user_id)
+                .filter((userId) => userId !== null && userId !== undefined)
+                .map(String)
+        )
+    ];
+
+    if (userIds.length === 0) {
+        return logs.map((log) => ({
+            ...log,
+            display_username: log.username,
+            display_user_role: log.user_role
+        }));
+    }
+
+    const usersResult = await usersPool.query(
+        `SELECT id::text AS id, first_name, last_name, role
+         FROM users
+         WHERE id::text = ANY($1::text[])`,
+        [userIds]
+    );
+    const usersById = new Map(
+        usersResult.rows.map((user) => [user.id, user])
+    );
+
+    return logs.map((log) => {
+        const user = usersById.get(String(log.user_id));
+        const fullName = user
+            ? [user.first_name, user.last_name].filter(Boolean).join(" ").trim()
+            : "";
+
+        return {
+            ...log,
+            display_username: fullName || log.username,
+            display_user_role: user?.role ?? log.user_role
+        };
+    });
+};
 
 // ======================================================
 // CREATE AUDIT LOG
@@ -214,17 +257,10 @@ export const getAuditLogs = async ({
                     OR audit_logs.description LIKE 'POST /api/database/restore returned HTTP %'
                     OR audit_logs.description LIKE 'POST /api/database/restore/upload returned HTTP %'
                  )
-                THEN 'RESTORE'
-                ELSE audit_logs.action
-            END AS display_action,
-            COALESCE(
-                NULLIF(BTRIM(CONCAT_WS(' ', users.first_name, users.last_name)), ''),
-                audit_logs.username
-            ) AS display_username,
-            COALESCE(users.role, audit_logs.user_role) AS display_user_role
+                 THEN 'RESTORE'
+                 ELSE audit_logs.action
+            END AS display_action
         FROM audit_logs
-        LEFT JOIN users
-            ON users.id::text = audit_logs.user_id::text
         ${whereClause}
         ORDER BY audit_logs.created_at DESC, audit_logs.audit_log_id DESC
         LIMIT $${values.length + 1}
@@ -235,9 +271,10 @@ export const getAuditLogs = async ({
         dataQuery,
         dataValues
     );
+    const logs = await addUserDisplayFields(result.rows);
 
     return {
-        logs: result.rows,
+        logs,
         pagination: {
             page: parsedPage,
             limit: parsedLimit,
@@ -268,17 +305,10 @@ export const getAuditLogById = async (
                     OR audit_logs.description LIKE 'POST /api/database/restore returned HTTP %'
                     OR audit_logs.description LIKE 'POST /api/database/restore/upload returned HTTP %'
                  )
-                THEN 'RESTORE'
-                ELSE audit_logs.action
-            END AS display_action,
-            COALESCE(
-                NULLIF(BTRIM(CONCAT_WS(' ', users.first_name, users.last_name)), ''),
-                audit_logs.username
-            ) AS display_username,
-            COALESCE(users.role, audit_logs.user_role) AS display_user_role
+                 THEN 'RESTORE'
+                 ELSE audit_logs.action
+            END AS display_action
         FROM audit_logs
-        LEFT JOIN users
-            ON users.id::text = audit_logs.user_id::text
         WHERE audit_logs.audit_log_id = $1;
     `;
 
@@ -287,5 +317,6 @@ export const getAuditLogById = async (
         [audit_log_id]
     );
 
-    return result.rows[0] || null;
+    const [log] = await addUserDisplayFields(result.rows);
+    return log || null;
 };

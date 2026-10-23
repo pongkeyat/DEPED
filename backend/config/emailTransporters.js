@@ -7,6 +7,11 @@ import tls from "tls";
 
 dns.setDefaultResultOrder("ipv4first");
 
+export const createEmailSender = (address = process.env.EMAIL) => ({
+    name: "DepEd La Union Schools Division Office",
+    address,
+});
+
 const port = Number(process.env.SMTP_PORT || 587);
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) {

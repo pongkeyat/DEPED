@@ -855,6 +855,8 @@ export const getApplicantById = async (req, res) => {
 
                 vacancies.position_title,
 
+                positions.category,
+
                 vacancies.office_unit,
 
                 job_applications.date_received,
@@ -976,6 +978,12 @@ export const getApplicantById = async (req, res) => {
 
                 ON job_applications.vacancy_id =
                    vacancies.vacancy_id
+
+
+            LEFT JOIN positions
+
+                ON vacancies.position_id =
+                   positions.position_id
 
 
             -- ======================================================

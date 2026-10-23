@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   X,
   FileText,
@@ -6,10 +6,9 @@ import {
   GraduationCap,
   BriefcaseBusiness,
   ShieldCheck,
-  Check,
-  Eye,
 } from "lucide-react";
 import DocumentPreviewModal from "./DocumentPreviewModal";
+import DocumentFileThumbnail from "./DocumentFileThumbnail";
 
 // Same 12 requirements (a to l) and order as the Basic Documentary Requirement
 // table, with the "if applicable" / "if available" notes left out.
@@ -412,36 +411,15 @@ export default function ViewApplicationModal({
                             )}
                           </td>
 
-                          {/* Status: check + eye (preview), or "Not uploaded" */}
+                          {/* Uploaded file thumbnail, or "Not uploaded" */}
                           <td className="border border-gray-300 py-2 text-center align-middle">
                             {uploaded ? (
                               <div className="flex items-center justify-center gap-2">
-                                <div
-                                  className="flex h-8 w-8 items-center justify-center rounded-md border border-green-200 bg-green-100 text-green-600"
-                                  title="File uploaded"
-                                >
-                                  <Check size={16} strokeWidth={2.5} />
-                                </div>
-
                                 {previewable.length > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setPreviewFile(
-                                        previewable.length > 1
-                                          ? previewable
-                                          : previewable[0]
-                                      )
-                                    }
-                                    title={
-                                      previewable.length > 1
-                                        ? `Preview ${previewable.length} files`
-                                        : "Preview file"
-                                    }
-                                    className="flex h-8 w-8 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-blue-700 transition-colors hover:bg-blue-100"
-                                  >
-                                    <Eye size={16} />
-                                  </button>
+                                  <DocumentFileThumbnail
+                                    files={previewable}
+                                    onPreview={setPreviewFile}
+                                  />
                                 )}
                               </div>
                             ) : (

@@ -21,6 +21,11 @@ import {
     sendNotQualifiedInitialEvaluationEmail
 } from "./email.service.js";
 
+import {
+    getPerformanceAssessmentType,
+    getPerformanceScore
+} from "../assessment/performanceScoring.js";
+
 /* ============================================================
    HELPER
 ============================================================ */
@@ -258,7 +263,9 @@ export const createInitialScreening = async (data) => {
         screened_by,
 
         submitted_documents_passed,
-        documents_note
+        documents_note,
+        performance_assessment_option_id,
+        performance_points
     } = data;
 
     const client = await pool.connect();
@@ -383,6 +390,107 @@ export const createInitialScreening = async (data) => {
 
         const salaryGrade =
             vacancy.salary_grade;
+
+        const performanceAssessmentType =
+            getPerformanceAssessmentType(
+                positionCategory
+            );
+        const hasPerformanceInput =
+            (
+                performance_assessment_option_id !== undefined &&
+                performance_assessment_option_id !== null
+            ) ||
+            (
+                performance_points !== undefined &&
+                performance_points !== null
+            );
+        let savedPerformanceOptionId = null;
+        let savedPerformancePoints = null;
+
+        if (!performanceAssessmentType && hasPerformanceInput) {
+            const error = new Error(
+                "Performance ratings are not allowed for this position category."
+            );
+            error.statusCode = 400;
+            throw error;
+        }
+
+        if (performanceAssessmentType) {
+            if (hasPerformanceInput) {
+                const optionId =
+                    Number(performance_assessment_option_id);
+                const submittedPoints =
+                    Number(performance_points);
+
+                if (
+                    !Number.isInteger(optionId) ||
+                    optionId <= 0 ||
+                    !Number.isFinite(submittedPoints)
+                ) {
+                    const error = new Error(
+                        "The selected Performance rating is invalid."
+                    );
+                    error.statusCode = 400;
+                    throw error;
+                }
+
+                const optionResult =
+                    await client.query(
+                        `
+                        SELECT
+                            ac.max_points,
+                            ao.assessment_option_id,
+                            ao.points
+                        FROM assessment_criteria ac
+                        INNER JOIN assessment_options ao
+                            ON ao.assessment_criteria_id =
+                               ac.assessment_criteria_id
+                        WHERE ac.is_active = TRUE
+                          AND ao.is_active = TRUE
+                          AND UPPER(TRIM(ac.criterion_name)) = 'PERFORMANCE'
+                          AND UPPER(TRIM(ac.assessment_type)) = $1
+                          AND ao.assessment_option_id = $2
+                        LIMIT 1
+                        `,
+                        [
+                            performanceAssessmentType,
+                            optionId
+                        ]
+                    );
+
+                if (optionResult.rows.length === 0) {
+                    const error = new Error(
+                        "The selected Performance rating is not active or does not apply to this position."
+                    );
+                    error.statusCode = 400;
+                    throw error;
+                }
+
+                const option = optionResult.rows[0];
+                const expectedPoints = getPerformanceScore(
+                    option.points,
+                    performanceAssessmentType,
+                    option.max_points
+                );
+
+                if (
+                    !Number.isFinite(expectedPoints) ||
+                    expectedPoints < 0 ||
+                    expectedPoints > Number(option.max_points) ||
+                    Math.abs(expectedPoints - submittedPoints) > 0.0001
+                ) {
+                    const error = new Error(
+                        "The submitted Performance points do not match the selected rating."
+                    );
+                    error.statusCode = 400;
+                    throw error;
+                }
+
+                savedPerformanceOptionId =
+                    Number(option.assessment_option_id);
+                savedPerformancePoints = expectedPoints;
+            }
+        }
 
         /* ========================================================
            3. GET APPLICANT INFORMATION
@@ -912,7 +1020,10 @@ export const createInitialScreening = async (data) => {
                     experience_increment,
                     experience_points,
 
-                    initial_screening_points
+                    initial_screening_points,
+
+                    performance_assessment_option_id,
+                    performance_points
 
                 )
 
@@ -952,7 +1063,10 @@ export const createInitialScreening = async (data) => {
                     $22,
                     $23,
 
-                    $24
+                    $24,
+
+                    $25,
+                    $26
 
                 )
 
@@ -1032,7 +1146,10 @@ export const createInitialScreening = async (data) => {
                     ==================================================== */
 
                     scoring.total ??
-                        0
+                        0,
+
+                    savedPerformanceOptionId,
+                    savedPerformancePoints
 
                 ]
             );

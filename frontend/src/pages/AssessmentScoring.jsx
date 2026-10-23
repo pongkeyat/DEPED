@@ -15,6 +15,78 @@ import SessionSelector from "../components/assessment/SessionSelector";
 import ApplicantRow from "../components/assessment/ApplicantRow";
 import ActionModal from "../components/ActionModal";
 
+const ASSESSMENT_DRAFT_STORAGE_KEY =
+    "assessment-scoring-drafts-v1";
+
+const getDraftOwnerId = () => {
+    const token = localStorage.getItem("auth_token");
+
+    if (!token) {
+        return "";
+    }
+
+    try {
+        const payload = token.split(".")[1];
+
+        if (payload) {
+            const normalizedPayload = payload
+                .replace(/-/g, "+")
+                .replace(/_/g, "/");
+            const claims = JSON.parse(
+                window.atob(
+                    normalizedPayload.padEnd(
+                        Math.ceil(normalizedPayload.length / 4) * 4,
+                        "="
+                    )
+                )
+            );
+            const userId =
+                claims.id ??
+                claims.user_id ??
+                claims.userId ??
+                claims.sub;
+
+            if (userId !== undefined && userId !== null) {
+                return `user:${String(userId)}`;
+            }
+        }
+    } catch (error) {
+        console.error(
+            "Unable to identify the signed-in user from the authentication token; using a token-specific draft key:",
+            error
+        );
+    }
+
+    let tokenHash = 2166136261;
+    for (let index = 0; index < token.length; index += 1) {
+        tokenHash ^= token.charCodeAt(index);
+        tokenHash = Math.imul(tokenHash, 16777619);
+    }
+
+    return `token:${(tokenHash >>> 0).toString(16)}`;
+};
+
+const getAssessmentDraftKey = (ownerId, sessionId, applicantId) =>
+    `${ownerId}:${sessionId}:${applicantId}`;
+
+const readAssessmentDrafts = () => {
+    try {
+        const drafts = JSON.parse(
+            localStorage.getItem(ASSESSMENT_DRAFT_STORAGE_KEY) || "{}"
+        );
+
+        return drafts && typeof drafts === "object" && !Array.isArray(drafts)
+            ? drafts
+            : {};
+    } catch (error) {
+        console.error(
+            "Unable to load saved assessment drafts:",
+            error
+        );
+        return {};
+    }
+};
+
 export default function AssessmentScoring() {
     // ============================================================
     // STATE
@@ -28,6 +100,8 @@ export default function AssessmentScoring() {
     const [criteria, setCriteria] = useState([]);
 
     const [applicantScores, setApplicantScores] = useState({});
+    const [draftStorageError, setDraftStorageError] = useState("");
+    const draftOwnerId = getDraftOwnerId();
 
     const [submittedApplicants, setSubmittedApplicants] = useState({});
 
@@ -40,6 +114,184 @@ export default function AssessmentScoring() {
     // Stores the response from the panelist submission.
     const [panelSubmissionStatus, setPanelSubmissionStatus] = useState({});
     const [panelSubmissionStatusReady, setPanelSubmissionStatusReady] = useState(false);
+
+    useEffect(() => {
+        if (
+            !draftOwnerId ||
+            !selectedSession ||
+            !panelSubmissionStatusReady
+        ) {
+            return;
+        }
+
+        const savedDrafts = readAssessmentDrafts();
+        const restoredScores = {};
+        const submittedApplicantIds = new Set(
+            Object.entries(panelSubmissionStatus)
+                .filter(([, status]) => status?.submitted)
+                .map(([applicantId]) => String(applicantId))
+        );
+
+        sessionApplicants.forEach((applicant) => {
+            const applicantId = String(getApplicantId(applicant));
+
+            if (!applicantId || submittedApplicantIds.has(applicantId)) {
+                delete savedDrafts[
+                    getAssessmentDraftKey(
+                        draftOwnerId,
+                        selectedSession,
+                        applicantId
+                    )
+                ];
+                return;
+            }
+
+            const draftKey = getAssessmentDraftKey(
+                draftOwnerId,
+                selectedSession,
+                applicantId
+            );
+            const savedScores = savedDrafts[draftKey];
+
+            if (
+                savedScores &&
+                typeof savedScores === "object" &&
+                !Array.isArray(savedScores)
+            ) {
+                restoredScores[applicantId] = savedScores;
+            }
+        });
+
+        try {
+            localStorage.setItem(
+                ASSESSMENT_DRAFT_STORAGE_KEY,
+                JSON.stringify(savedDrafts)
+            );
+        } catch (error) {
+            console.error(
+                "Unable to clear submitted assessment drafts:",
+                error
+            );
+            setDraftStorageError(
+                "Unable to clear a submitted draft from this browser."
+            );
+        }
+
+        setApplicantScores(restoredScores);
+    }, [
+        draftOwnerId,
+        panelSubmissionStatus,
+        panelSubmissionStatusReady,
+        selectedSession,
+        sessionApplicants,
+    ]);
+
+    useEffect(() => {
+        if (
+            !draftOwnerId ||
+            !selectedSession ||
+            Object.keys(applicantScores).length === 0
+        ) {
+            return;
+        }
+
+        try {
+            const savedDrafts = readAssessmentDrafts();
+            const currentSessionApplicantIds = new Set(
+                sessionApplicants
+                    .filter(
+                        (applicant) =>
+                            String(applicant.assessment_session_id) ===
+                            String(selectedSession)
+                    )
+                    .map((applicant) =>
+                        String(getApplicantId(applicant))
+                    )
+            );
+
+            Object.entries(applicantScores).forEach(
+                ([applicantId, scores]) => {
+                    if (!currentSessionApplicantIds.has(applicantId)) {
+                        return;
+                    }
+
+                    const draftKey = getAssessmentDraftKey(
+                        draftOwnerId,
+                        selectedSession,
+                        applicantId
+                    );
+                    const hasScores = Object.values(scores || {}).some(
+                        (score) =>
+                            score !== "" &&
+                            score !== null &&
+                            score !== undefined
+                    );
+
+                    if (hasScores) {
+                        savedDrafts[draftKey] = scores;
+                    } else {
+                        delete savedDrafts[draftKey];
+                    }
+                }
+            );
+
+            localStorage.setItem(
+                ASSESSMENT_DRAFT_STORAGE_KEY,
+                JSON.stringify(savedDrafts)
+            );
+            setDraftStorageError("");
+        } catch (error) {
+            console.error(
+                "Unable to save assessment drafts:",
+                error
+            );
+            setDraftStorageError(
+                "Draft saving failed in this browser. Keep this page open until you submit."
+            );
+        }
+    }, [
+        applicantScores,
+        draftOwnerId,
+        selectedSession,
+        sessionApplicants,
+    ]);
+
+    const clearApplicantDraft = (applicantId) => {
+        if (!draftOwnerId) {
+            return;
+        }
+
+        const savedDrafts = readAssessmentDrafts();
+        delete savedDrafts[
+            getAssessmentDraftKey(
+                draftOwnerId,
+                selectedSession,
+                applicantId
+            )
+        ];
+
+        try {
+            localStorage.setItem(
+                ASSESSMENT_DRAFT_STORAGE_KEY,
+                JSON.stringify(savedDrafts)
+            );
+            setDraftStorageError("");
+        } catch (error) {
+            console.error(
+                "Unable to clear submitted assessment draft:",
+                error
+            );
+            setDraftStorageError(
+                "Unable to clear the submitted draft from this browser."
+            );
+        }
+
+        setApplicantScores((previous) => {
+            const nextScores = { ...previous };
+            delete nextScores[applicantId];
+            return nextScores;
+        });
+    };
 
     // ============================================================
     // MODAL
@@ -257,9 +509,62 @@ export default function AssessmentScoring() {
             return selected;
         }
 
+        if (
+            ["RELATED_TEACHING", "SCHOOL_ADMINISTRATION", "NON_TEACHING"].includes(
+                assessmentType
+            ) &&
+            selected > 5
+        ) {
+            return selected;
+        }
+
         return assessmentType === "RELATED_TEACHING"
             ? selected * 4
             : (selected / 5) * Number(criterion.max || 0);
+    };
+
+    const getInitialPerformance = (item) => {
+        const applicantId = getApplicantId(item);
+        const details =
+            applicantDetails[applicantId] || item || {};
+        const category = String(details.category || "")
+            .trim()
+            .toUpperCase()
+            .replace(/[-_]+/g, " ")
+            .replace(/\s+/g, " ");
+        const performanceTypes = {
+            "NON TEACHING": "NON_TEACHING",
+            "NON TEACHING POSITION": "NON_TEACHING",
+            "NON TEACHING POSITIONS": "NON_TEACHING",
+            "SCHOOL ADMINISTRATION": "SCHOOL_ADMINISTRATION",
+            "SCHOOL ADMINISTRATION POSITION": "SCHOOL_ADMINISTRATION",
+            "SCHOOL ADMINISTRATION POSITIONS": "SCHOOL_ADMINISTRATION",
+            "RELATED TEACHING": "RELATED_TEACHING",
+            "RELATED TEACHING POSITION": "RELATED_TEACHING",
+            "RELATED TEACHING POSITIONS": "RELATED_TEACHING",
+        };
+        const assessmentType = performanceTypes[category];
+        const optionId = Number(
+            details.performance_assessment_option_id
+        );
+        const points = Number(details.performance_points);
+
+        if (
+            !assessmentType ||
+            !Number.isInteger(optionId) ||
+            optionId <= 0 ||
+            details.performance_points === null ||
+            details.performance_points === undefined ||
+            !Number.isFinite(points)
+        ) {
+            return null;
+        }
+
+        return {
+            optionId,
+            points,
+            label: details.performance_option_label || "",
+        };
     };
 
     // ============================================================
@@ -978,13 +1283,24 @@ export default function AssessmentScoring() {
                         criterion.type === "text"
                 )
                 .reduce(
-                    (sum, criterion) =>
-                        sum +
-                        getCriterionScore(
-                            criterion,
-                            selectedScores[criterion.id],
-                            getAssessmentType(selectedSessionData)
-                        ),
+                    (sum, criterion) => {
+                        const initialPerformance =
+                            String(criterion.name || "")
+                                .trim()
+                                .toUpperCase() === "PERFORMANCE"
+                                ? getInitialPerformance(item)
+                                : null;
+
+                        return sum + (
+                            initialPerformance
+                                ? initialPerformance.points
+                                : getCriterionScore(
+                                    criterion,
+                                    selectedScores[criterion.id],
+                                    getAssessmentType(selectedSessionData)
+                                )
+                        );
+                    },
                     0
                 );
 
@@ -1150,6 +1466,15 @@ export default function AssessmentScoring() {
                     return;
                 }
 
+                continue;
+            }
+
+            if (
+                String(criterion.name || "")
+                    .trim()
+                    .toUpperCase() === "PERFORMANCE" &&
+                getInitialPerformance(item)
+            ) {
                 continue;
             }
 
@@ -1406,12 +1731,20 @@ export default function AssessmentScoring() {
                     )
                     .map(
                         (criterion) => {
+                            const initialPerformance =
+                                String(criterion.name || "")
+                                    .trim()
+                                    .toUpperCase() === "PERFORMANCE"
+                                    ? getInitialPerformance(item)
+                                    : null;
                             const score =
                                 criterion.isIntegratedETE
                                     ? getInitialScreeningScore(
                                         item,
                                         criterion.name
                                     )
+                                    : initialPerformance
+                                        ? initialPerformance.points
                                     : Number(
                                         selectedScores[
                                             criterion.id
@@ -1419,7 +1752,12 @@ export default function AssessmentScoring() {
                                     );
 
                             const selectedOption =
-                                criterion.type ===
+                                initialPerformance
+                                    ? {
+                                        optionId:
+                                            initialPerformance.optionId,
+                                    }
+                                    : criterion.type ===
                                     "dropdown"
                                     ? criterion.options?.find(
                                         (opt) =>
@@ -1444,11 +1782,13 @@ export default function AssessmentScoring() {
                                     null,
 
                                 score:
-                                    getCriterionScore(
-                                        criterion,
-                                        score,
-                                        getAssessmentType(selectedSessionData)
-                                    ),
+                                    initialPerformance
+                                        ? initialPerformance.points
+                                        : getCriterionScore(
+                                            criterion,
+                                            score,
+                                            getAssessmentType(selectedSessionData)
+                                        ),
 
                                 remarks: "",
                             };
@@ -1523,6 +1863,8 @@ export default function AssessmentScoring() {
                     scores:
                         submissionScores,
                 });
+
+            clearApplicantDraft(String(applicantId));
 
             console.log(
                 "Panelist submission response:",
@@ -1707,6 +2049,31 @@ export default function AssessmentScoring() {
             )
             : "";
 
+    const currentAssessmentType =
+        getAssessmentType(selectedSessionData);
+    const includesInitialPerformance =
+        currentAssessmentType === "NON_TEACHING" &&
+        !isIntegrated100PointAssessment(selectedSessionData);
+    const currentPerformanceMax =
+        includesInitialPerformance
+            ? Number(
+                criteria.find(
+                    (criterion) =>
+                        String(criterion.name || "")
+                            .trim()
+                            .toUpperCase() === "PERFORMANCE"
+                )?.max || 0
+            )
+            : 0;
+    const displayedAssessmentMax =
+        criteria
+            .filter((criterion) => criterion.type !== "initial")
+            .reduce(
+                (sum, criterion) =>
+                    sum + Number(criterion.max || 0),
+                0
+            ) - currentPerformanceMax;
+
     // ============================================================
     // RENDER
     // ============================================================
@@ -1822,28 +2189,11 @@ export default function AssessmentScoring() {
                                             Initial Screening
                                             ETE:{" "}
                                             <strong>
-                                                30 points
+                                                50 points
                                             </strong>{" "}
                                             + Other Assessment:{" "}
                                             <strong>
-                                                {criteria
-                                                    .filter(
-                                                        (c) =>
-                                                            c.type !==
-                                                            "initial"
-                                                    )
-                                                    .reduce(
-                                                        (
-                                                            sum,
-                                                            c
-                                                        ) =>
-                                                            sum +
-                                                            Number(
-                                                                c.max ||
-                                                                    0
-                                                            ),
-                                                        0
-                                                    )}{" "}
+                                                {displayedAssessmentMax}{" "}
                                                 points
                                             </strong>{" "}
                                             ={" "}
@@ -1859,24 +2209,7 @@ export default function AssessmentScoring() {
                                             </strong>{" "}
                                             + Assessment:{" "}
                                             <strong>
-                                                {criteria
-                                                    .filter(
-                                                        (c) =>
-                                                            c.type !==
-                                                            "initial"
-                                                    )
-                                                    .reduce(
-                                                        (
-                                                            sum,
-                                                            c
-                                                        ) =>
-                                                            sum +
-                                                            Number(
-                                                                c.max ||
-                                                                    0
-                                                            ),
-                                                        0
-                                                    )}{" "}
+                                                {displayedAssessmentMax}{" "}
                                                 points
                                             </strong>
                                         </>
@@ -1887,6 +2220,21 @@ export default function AssessmentScoring() {
                                     Final ranking is calculated
                                     only after all assigned
                                     HRMPSB panel members submit.
+                                </p>
+
+                                <p
+                                    className={`mt-1 text-xs ${
+                                        draftStorageError
+                                            ? "text-red-600"
+                                            : "text-emerald-700"
+                                    }`}
+                                >
+                                    {draftStorageError ||
+                                        (
+                                            draftOwnerId
+                                                ? "Scoring drafts are saved for your account on this device until you submit."
+                                                : "Sign in to save scoring drafts for your account."
+                                        )}
                                 </p>
                             </div>
 

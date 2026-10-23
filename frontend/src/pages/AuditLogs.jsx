@@ -238,14 +238,6 @@ const AuditLogs = () => {
         />
       </div>
 
-      {(selectedLog || detailsLoading) && (
-        <AuditLogDetailsModal
-          log={selectedLog}
-          loading={detailsLoading}
-          error={detailsError}
-          onClose={handleCloseDetails}
-        />
-      )}
     </div>
   );
 };

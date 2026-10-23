@@ -1,5 +1,7 @@
 
-import transporters from "../config/emailTransporters.js";
+import transporters, {
+    createEmailSender,
+} from "../config/emailTransporters.js";
 
 const transporter = transporters.assessmentTransporter;
 
@@ -330,7 +332,7 @@ export const sendIndividualEvaluationSheetEmail = async ({
         // ========================================================
 
         const mailOptions = {
-            from: `"DepEd La Union Schools Division Office" <${process.env.EMAIL}>`,
+            from: createEmailSender(),
             to: email,
             subject: `Individual Evaluation Sheet (IES) - ${
                 positionTitle || "Application"

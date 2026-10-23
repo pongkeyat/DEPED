@@ -124,6 +124,42 @@ const describeActivity = (modulePath, method, statusCode) => {
         : `${pastTense.charAt(0).toUpperCase()}${pastTense.slice(1)} ${subject} successfully.`;
 };
 
+export const describeVacancyStatusActivity = (req, statusCode) => {
+    const requestedStatus = String(req.body?.status || "")
+        .trim()
+        .toLowerCase();
+    const failed = statusCode >= 400;
+    const actions = {
+        closed: ["close", "close"],
+        terminated: ["terminate", "terminate"],
+        assessment: ["move", "move"]
+    };
+    const [verb, action] = actions[requestedStatus] || [];
+
+    if (!verb) {
+        return describeActivity("vacancies", req.method.toUpperCase(), statusCode);
+    }
+
+    if (failed) {
+        return `Failed to ${action} vacancy (HTTP ${statusCode}).`;
+    }
+
+    if (requestedStatus === "assessment") {
+        return "Moved vacancy to Assessment successfully.";
+    }
+
+    if (requestedStatus === "terminated") {
+        const filename = String(req.file?.originalname || "")
+            .replace(/[\\/]/g, "")
+            .replace(/[\r\n]/g, "");
+        return filename
+            ? `Terminated vacancy with memo file "${filename}".`
+            : "Terminated vacancy successfully.";
+    }
+
+    return "Closed vacancy successfully.";
+};
+
 export const auditActivity = (req, res, next) => {
     const method = req.method.toUpperCase();
     const path = req.originalUrl.split("?")[0];
@@ -153,6 +189,8 @@ export const auditActivity = (req, res, next) => {
             const user = await resolveAuditUser(req);
             const statusCode = res.statusCode;
             const isSuccessful = statusCode < 400;
+            const isVacancyStatusChange =
+                modulePath === "vacancies" && subresource === "status";
             const description = isDatabaseRestore
                 ? isSuccessful
                     ? `Restored the database from ${subresource === "upload" ? "an uploaded" : "a server"} backup.`
@@ -161,7 +199,9 @@ export const auditActivity = (req, res, next) => {
                     ? isSuccessful
                         ? "Created a database backup."
                         : `Failed to create a database backup (HTTP ${statusCode}).`
-                    : describeActivity(modulePath, method, statusCode);
+                    : isVacancyStatusChange
+                        ? describeVacancyStatusActivity(req, statusCode)
+                        : describeActivity(modulePath, method, statusCode);
 
             await createAuditLog({
                 user_id: user?.id ?? null,
@@ -189,7 +229,10 @@ export const auditActivity = (req, res, next) => {
                 metadata: {
                     method,
                     path,
-                    status_code: statusCode
+                    status_code: statusCode,
+                    ...(isVacancyStatusChange && req.body?.status
+                        ? { requested_status: req.body.status }
+                        : {})
                 },
                 status: isSuccessful ? "SUCCESS" : "FAILED"
             });

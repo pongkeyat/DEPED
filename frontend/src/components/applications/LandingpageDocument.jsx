@@ -1,11 +1,5 @@
-import React from "react";
-import {
-  FileCheck,
-  Upload,
-  FileText,
-  Check,
-  Eye,
-} from "lucide-react";
+import { FileCheck, Upload, FileText } from "lucide-react";
+import DocumentFileThumbnail from "./DocumentFileThumbnail";
 
 export default function LandingPageDocument({
   documents,
@@ -31,13 +25,11 @@ export default function LandingPageDocument({
     },
     {
       field: "has_prc_license_id",
-      label:
-        "Photocopy of valid and updated PRC License/ID, if applicable.",
+      label: "Photocopy of valid and updated PRC License/ID, if applicable.",
     },
     {
       field: "has_civil_service_eligibility_cert",
-      label:
-        "Photocopy of Certificate of Eligibility/Rating, if applicable.",
+      label: "Photocopy of Certificate of Eligibility/Rating, if applicable.",
     },
     {
       field: "has_diploma",
@@ -51,8 +43,7 @@ export default function LandingPageDocument({
     },
     {
       field: "has_training_certificates",
-      label:
-        "Photocopy of Certificate/s of Training, if applicable.",
+      label: "Photocopy of Certificate/s of Training, if applicable.",
       multiple: true,
     },
     {
@@ -62,13 +53,11 @@ export default function LandingPageDocument({
     },
     {
       field: "has_service_record",
-      label:
-        "Photocopy of Service Record, if applicable.",
+      label: "Photocopy of Service Record, if applicable.",
     },
     {
       field: "has_latest_appointment",
-      label:
-        "Photocopy of latest appointment, if applicable.",
+      label: "Photocopy of latest appointment, if applicable.",
     },
     {
       field: "has_performance_rating",
@@ -136,9 +125,7 @@ export default function LandingPageDocument({
     }
 
     if (Array.isArray(value)) {
-      const names = value
-        .map((item) => getFileLabel(item))
-        .filter(Boolean);
+      const names = value.map((item) => getFileLabel(item)).filter(Boolean);
 
       return names.length > 0 ? names : null;
     }
@@ -190,9 +177,7 @@ export default function LandingPageDocument({
     }
 
     if (Array.isArray(file)) {
-      const names = file
-        .map((item) => getFileLabel(item))
-        .filter(Boolean);
+      const names = file.map((item) => getFileLabel(item)).filter(Boolean);
 
       if (names.length === 0) {
         return null;
@@ -217,10 +202,7 @@ export default function LandingPageDocument({
             8
           </div>
 
-          <FileCheck
-            size={20}
-            className="text-white"
-          />
+          <FileCheck size={20} className="text-white" />
 
           <h2 className="text-white font-semibold text-lg">
             Basic Documentary Requirement
@@ -241,7 +223,7 @@ export default function LandingPageDocument({
                 Basic Documentary Requirement
               </th>
 
-              <th className="border border-gray-300 w-36 text-gray-700">
+              <th className="border border-gray-300 w-44 text-gray-700">
                 Document
               </th>
             </tr>
@@ -301,46 +283,18 @@ export default function LandingPageDocument({
                   {/* Document Actions */}
                   <td className="border border-gray-300 text-center py-2 align-middle">
                     <div className="flex items-center justify-center gap-2">
-                      {/* CHECK ICON */}
-                      {uploaded && (
-                        <div
-                          className="flex items-center justify-center w-8 h-8 rounded-md bg-green-100 text-green-600 border border-green-200"
-                          title="File uploaded"
-                        >
-                          <Check size={16} strokeWidth={2.5} />
-                        </div>
-                      )}
-
-                      {/* PREVIEW (eye icon, beside the upload button) */}
+                      {/* THUMBNAIL PREVIEW (replaces the eye icon) */}
                       {previewable.length > 0 && onPreview && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onPreview(
-                              previewable.length > 1
-                                ? previewable
-                                : previewable[0]
-                            )
-                          }
-                          title={
-                            previewable.length > 1
-                              ? `Preview ${previewable.length} files`
-                              : "Preview file"
-                          }
-                          className="flex items-center justify-center w-8 h-8 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors"
-                        >
-                          <Eye size={16} />
-                        </button>
+                        <DocumentFileThumbnail
+                          files={previewable}
+                          onPreview={onPreview}
+                        />
                       )}
 
                       {/* UPLOAD ICON */}
                       <label
                         className="flex items-center justify-center w-8 h-8 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 cursor-pointer transition-colors border border-gray-300"
-                        title={
-                          uploaded
-                            ? "Replace file"
-                            : "Upload file"
-                        }
+                        title={uploaded ? "Replace file" : "Upload file"}
                       >
                         <Upload size={16} />
 

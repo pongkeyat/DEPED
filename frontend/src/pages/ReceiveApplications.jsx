@@ -3,7 +3,7 @@ import ApplicationHeader from "../components/applications/ApplicationsHeader";
 import StepProgress from "../components/applications/StepProgress";
 import ApplicantForm from "../components/applications/ApplicantForm";
 import Applications from "../components/applications/Applications";
-// Same checklist component the Job Application Portal uses (table + eye preview)
+// Same checklist component the Job Application Portal uses (table + thumbnail preview)
 import DocumentChecklist from "../components/applications/LandingpageDocument";
 import EqualOpportunityDeclaration from "../components/applications/EqualOpportunityDeclaration";
 import HRRemarksForm from "../components/applications/HRRemarksForm";
@@ -445,12 +445,17 @@ export default function ReceiveApplications() {
       education_list: stripGroupIds(
         formData.educationData.educationList.map((education) => ({
           ...education,
+          // Graduated = units are automatic, so nothing is sent
+          units:
+            education.graduation_status === "Graduated"
+              ? null
+              : education.units,
           graduation_status: education.graduation_status || null,
         }))
       ),
       // group_id is only used by the form to group rows under one "Conducted By"
       trainings_list: formData.trainingData.trainings.map(
-        ({ group_id, ...training }) => training
+        ({ group_id, day_type, ...training }) => training
       ),
       eligibility_list: stripGroupIds(formData.eligibilityData),
       work_experience_list: stripGroupIds(submittedWorkExperience),
@@ -704,7 +709,7 @@ export default function ReceiveApplications() {
           isOpen={successModal}
           type="confirm"
           title="Success!"
-          message="Application submitted successfully!"
+          message={"Application submitted successfully!\nKindly check your email."}
           onClose={() => setSuccessModal(false)}
           onConfirm={() => setSuccessModal(false)}
         />

@@ -6,6 +6,7 @@ import {
 
 import { useNavigate } from "react-router-dom";
 
+import { useAuth } from "../context/AuthContext";
 import { getApplications } from "../api/ApplicationApi";
 import { getVacancies } from "../api/VacancyApi";
 
@@ -54,6 +55,7 @@ const getVacancyStatus = (vacancy) =>
     .toLowerCase();
 
 export default function InitialEvaluationResults() {
+  const { user } = useAuth();
   const [allApplications, setAllApplications] =
     useState([]);
 
@@ -70,6 +72,28 @@ export default function InitialEvaluationResults() {
     useState(true);
 
   const navigate = useNavigate();
+  const authenticatedUser = user?.user ?? user?.profile ?? user;
+  const hrName =
+    [
+      authenticatedUser?.first_name,
+      authenticatedUser?.middle_name,
+      authenticatedUser?.last_name,
+      authenticatedUser?.suffix,
+    ]
+      .filter(Boolean)
+      .join(" ") ||
+    authenticatedUser?.full_name ||
+    authenticatedUser?.name ||
+    "";
+  const normalizedHrRole = String(authenticatedUser?.role || "")
+    .trim()
+    .toUpperCase();
+  const hrTitle =
+    normalizedHrRole === "HRO"
+      ? "Human Resource Officer (HRO)"
+      : normalizedHrRole === "HRMO"
+        ? "Human Resource Management Officer (HRMO)"
+        : "Human Resource Management Officer";
 
   // ============================================================
   // LOAD TERMINATED AND ASSESSMENT VACANCIES
@@ -345,6 +369,15 @@ export default function InitialEvaluationResults() {
       return;
     }
 
+    const originalTitle = document.title;
+    document.title = "";
+    window.addEventListener(
+      "afterprint",
+      () => {
+        document.title = originalTitle;
+      },
+      { once: true },
+    );
     window.print();
   };
 
@@ -632,6 +665,8 @@ export default function InitialEvaluationResults() {
       <IERPrintForm
         vacancy={selectedVacancyData}
         applicants={filteredApplications}
+        hrName={hrName}
+        hrTitle={hrTitle}
       />
 
     </div>

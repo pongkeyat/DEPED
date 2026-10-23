@@ -193,7 +193,9 @@ export const getAllVacanciesService = async ({
             END AS qualifications,
 
             vacancy_specific_qualifications.prescribed_qualifications,
-            vacancies_remarks.remark_text
+            vacancies_remarks.remark_text,
+            vacancies_remarks.memo_file_path,
+            vacancies_remarks.prescribed_qualifications_memo AS memo_file_name
 
         FROM vacancies
 
@@ -331,7 +333,9 @@ export const getVacancyByIdService = async (vacancy_id) => {
             END AS qualifications,
 
             vacancy_specific_qualifications.prescribed_qualifications,
-            vacancies_remarks.remark_text
+            vacancies_remarks.remark_text,
+            vacancies_remarks.memo_file_path,
+            vacancies_remarks.prescribed_qualifications_memo AS memo_file_name
 
         FROM vacancies
 
@@ -457,7 +461,7 @@ export const updateVacancyService = async (
             application_posted,
             application_deadline,
             qualifications,
-            remark_text,
+            remark_text
         } = data;
 
         // Validate position
@@ -494,7 +498,17 @@ export const updateVacancyService = async (
                 place_of_assignment = $6,
                 number_of_vacancies = $7,
                 application_posted = $8,
-                application_deadline = $9
+                application_deadline = $9,
+                status = CASE
+                    WHEN $9::date > vacancies.application_deadline
+                      AND $9::date >= CURRENT_DATE
+                      AND vacancies.status IN ('Open', 'Closed', 'Evaluation')
+                    THEN 'Open'
+                    WHEN vacancies.status = 'Open'
+                      AND vacancies.application_deadline < CURRENT_DATE
+                    THEN 'Closed'
+                    ELSE vacancies.status
+                END
             WHERE vacancy_id = $10
             RETURNING *
             `,
@@ -584,18 +598,28 @@ export const updateVacancyService = async (
             }
         }
 
-        // Update, insert, or remove remarks.
+        // Update remarks without removing an attached memo.
         if (remark_text !== undefined) {
             const existingRemark = await client.query(
                 `
-                SELECT vacancy_id
+                SELECT
+                    vacancy_id,
+                    memo_file_path
                 FROM vacancies_remarks
                 WHERE vacancy_id = $1
+                ORDER BY vacancies_remark_id DESC
+                LIMIT 1
                 `,
                 [vacancy_id]
             );
+            const existing = existingRemark.rows[0];
+            const cleanedRemarkText = String(remark_text ?? "").trim();
 
-            if (String(remark_text ?? "").trim() === "") {
+            if (
+                existing &&
+                cleanedRemarkText === "" &&
+                !existing.memo_file_path
+            ) {
                 await client.query(
                     `
                     DELETE FROM vacancies_remarks
@@ -603,14 +627,14 @@ export const updateVacancyService = async (
                     `,
                     [vacancy_id]
                 );
-            } else if (existingRemark.rowCount > 0) {
+            } else if (existing) {
                 await client.query(
                     `
                     UPDATE vacancies_remarks
                     SET remark_text = $1
                     WHERE vacancy_id = $2
                     `,
-                    [remark_text, vacancy_id]
+                    [remark_text ?? "", vacancy_id]
                 );
             } else {
                 await client.query(
@@ -621,7 +645,7 @@ export const updateVacancyService = async (
                     )
                     VALUES ($1, $2)
                     `,
-                    [vacancy_id, remark_text]
+                    [vacancy_id, remark_text ?? ""]
                 );
             }
         }

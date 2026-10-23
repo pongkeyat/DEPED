@@ -15,12 +15,21 @@ const getArray = (response) => {
 };
 
 const toDateKey = (value) => {
+  if (!value) return "";
+
+  // Plain date strings: use as-is (no timezone shifting)
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+
   const date = new Date(value);
+
   if (Number.isNaN(date.getTime())) return "";
 
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
+
   return `${year}-${month}-${day}`;
 };
 
@@ -30,8 +39,10 @@ export default function DashBoard() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [filterError, setFilterError] = useState("");
+
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+
   const [appliedDateRange, setAppliedDateRange] = useState({
     from: "",
     to: "",
@@ -39,78 +50,125 @@ export default function DashBoard() {
 
   useEffect(() => {
     let isCurrent = true;
+    let isFirstLoad = true;
+    let isFetching = false;
 
     const fetchDashboardData = async () => {
-      setLoading(true);
-      setLoadError("");
+      // Prevent overlapping requests
+      if (isFetching || !isCurrent) return;
 
-      const [applicationsResult, vacanciesResult] =
-        await Promise.allSettled([
-          getApplications(),
-          getVacancies({ limit: 1000, page: 1 }),
-        ]);
+      isFetching = true;
 
-      if (!isCurrent) return;
-
-      if (applicationsResult.status === "fulfilled") {
-        setApplications(getArray(applicationsResult.value));
-      } else {
-        console.error(
-          "Error loading dashboard applications:",
-          applicationsResult.reason
-        );
-        setLoadError("Applications could not be loaded.");
+      if (isFirstLoad) {
+        setLoading(true);
       }
 
-      if (vacanciesResult.status === "fulfilled") {
-        setVacancies(getArray(vacanciesResult.value));
-      } else {
-        console.error(
-          "Error loading dashboard vacancies:",
-          vacanciesResult.reason
-        );
-        setLoadError((current) =>
-          current
-            ? `${current} Vacancies could not be loaded.`
-            : "Vacancies could not be loaded."
-        );
-      }
+      try {
+        const [applicationsResult, vacanciesResult] =
+          await Promise.allSettled([
+            getApplications(),
+            getVacancies({ limit: 1000, page: 1 }),
+          ]);
 
-      setLoading(false);
+        if (!isCurrent) return;
+
+        const errors = [];
+
+        if (applicationsResult.status === "fulfilled") {
+          setApplications(getArray(applicationsResult.value));
+        } else {
+          console.error(
+            "Error loading dashboard applications:",
+            applicationsResult.reason
+          );
+          errors.push("Applications could not be loaded.");
+        }
+
+        if (vacanciesResult.status === "fulfilled") {
+          setVacancies(getArray(vacanciesResult.value));
+        } else {
+          console.error(
+            "Error loading dashboard vacancies:",
+            vacanciesResult.reason
+          );
+          errors.push("Vacancies could not be loaded.");
+        }
+
+        setLoadError(errors.join(" "));
+      } catch (error) {
+        console.error("Error refreshing dashboard:", error);
+
+        if (isCurrent) {
+          setLoadError("Unable to refresh dashboard data.");
+        }
+      } finally {
+        isFetching = false;
+
+        if (isCurrent && isFirstLoad) {
+          setLoading(false);
+          isFirstLoad = false;
+        }
+      }
     };
 
+    // Load dashboard data immediately
     fetchDashboardData();
+
+    // Refresh application and vacancy data every 30 seconds
+    const refreshInterval = setInterval(() => {
+      fetchDashboardData();
+    }, 30000);
 
     return () => {
       isCurrent = false;
+      clearInterval(refreshInterval);
     };
   }, []);
 
   const filteredApplications = useMemo(
     () =>
       applications.filter((application) => {
-        if (!appliedDateRange.from && !appliedDateRange.to) return true;
+        if (!appliedDateRange.from && !appliedDateRange.to) {
+          return true;
+        }
 
-        const receivedDate = toDateKey(application.date_received);
+        const receivedDate = toDateKey(
+          application.date_received
+        );
+
         if (!receivedDate) return false;
 
         return (
           (!appliedDateRange.from ||
             receivedDate >= appliedDateRange.from) &&
-          (!appliedDateRange.to || receivedDate <= appliedDateRange.to)
+          (!appliedDateRange.to ||
+            receivedDate <= appliedDateRange.to)
         );
       }),
     [applications, appliedDateRange]
   );
 
   const applyDateFilter = () => {
+    const today = toDateKey(new Date());
+
+    if ((dateFrom && dateFrom > today) || (dateTo && dateTo > today)) {
+      setFilterError("Future dates are not allowed. Please select today or an earlier date.");
+      return;
+    }
+
     if (dateFrom && dateTo && dateFrom > dateTo) {
-      setFilterError("The start date must be on or before the end date.");
+      setFilterError(
+        "The start date must be on or before the end date."
+      );
       return;
     }
 
     setFilterError("");
-    setAppliedDateRange({ from: dateFrom, to: dateTo });
+
+    setAppliedDateRange({
+      from: dateFrom,
+      to: dateTo,
+    });
   };
 
   return (
@@ -134,11 +192,13 @@ export default function DashBoard() {
         onDateToChange={setDateTo}
         onApplyDateFilter={applyDateFilter}
       />
+
       <DashboardCharts
         applications={filteredApplications}
         vacancies={vacancies}
         loading={loading}
       />
+
       <RecruitmentProcessOverview />
     </div>
   );

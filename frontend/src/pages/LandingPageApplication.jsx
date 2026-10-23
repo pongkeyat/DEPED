@@ -461,12 +461,20 @@ export default function LandingPageApplication({
       equal_opportunity: formData.equalOpportunityData,
 
       education_list: stripGroupIds(
-        formData.educationData.educationList
+        formData.educationData.educationList.map((education) => ({
+          ...education,
+          // Graduated = units are automatic, so nothing is sent
+          units:
+            education.graduation_status === "Graduated"
+              ? null
+              : education.units,
+          graduation_status: education.graduation_status || null,
+        }))
       ),
 
       // group_id only groups training rows under "Conducted By".
       trainings_list: formData.trainingData.trainings.map(
-        ({ group_id, ...training }) => training
+        ({ group_id, day_type, ...training }) => training
       ),
 
       eligibility_list: stripGroupIds(formData.eligibilityData),
@@ -957,7 +965,9 @@ export default function LandingPageApplication({
         isOpen={successModal}
         type="confirm"
         title="Success!"
-        message="Application submitted successfully!"
+        message={
+          "Application submitted successfully!\nKindly check your email."
+        }
         onClose={() => setSuccessModal(false)}
         onConfirm={() => setSuccessModal(false)}
       />

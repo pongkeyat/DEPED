@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import pool from "../config/db.js";
 import { sendAssessmentInvitationEmail } from "./email.service.js";
 
@@ -207,17 +208,20 @@ export const postInterviewSession = async (req, res) => {
         // 5. Create the parent session.
         // interview_sessions uses assessment_session_id as its parent FK.
         // This is retained for database compatibility.
+        const assessmentSessionId = randomBytes(10).toString("hex");
         const parentResult = await client.query(
             `INSERT INTO assessment_sessions (
+                assessment_session_id,
                 vacancy_id,
                 session_date,
                 venue,
                 conducted_by,
                 remarks
              )
-             VALUES ($1, $2, $3, $4, $5)
+             VALUES ($1, $2, $3, $4, $5, $6)
              RETURNING assessment_session_id`,
             [
+                assessmentSessionId,
                 String(vacancy_id),
                 session_date,
                 venue,
@@ -226,7 +230,7 @@ export const postInterviewSession = async (req, res) => {
             ]
         );
 
-        const assessmentSessionId =
+        const savedAssessmentSessionId =
             parentResult.rows[0].assessment_session_id;
 
         // 6. Save panel assignments
@@ -237,7 +241,7 @@ export const postInterviewSession = async (req, res) => {
                     user_id
                  )
                  VALUES ($1, $2)`,
-                [assessmentSessionId, userId]
+                [savedAssessmentSessionId, userId]
             );
         }
 
@@ -245,8 +249,10 @@ export const postInterviewSession = async (req, res) => {
         const insertedSessions = [];
 
         for (const applicationId of selectedApplicants) {
+            const sessionId = randomBytes(10).toString("hex");
             const result = await client.query(
                 `INSERT INTO interview_sessions (
+                    session_id,
                     assessment_session_id,
                     vacancy_id,
                     job_applications_id,
@@ -256,7 +262,7 @@ export const postInterviewSession = async (req, res) => {
                     conducted_by,
                     remarks
                  )
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                  RETURNING
                     session_id,
                     assessment_session_id,
@@ -271,7 +277,8 @@ export const postInterviewSession = async (req, res) => {
                     created_at,
                     updated_at`,
                 [
-                    assessmentSessionId,
+                    sessionId,
+                    savedAssessmentSessionId,
                     String(vacancy_id),
                     String(applicationId),
                     session_date,

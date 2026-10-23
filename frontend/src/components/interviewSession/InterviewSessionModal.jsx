@@ -357,7 +357,7 @@ export default function InterviewSessionModal({
         .join(" ")
 
         .trim() ||
-      user?.email ||
+      user?.role ||
       "Unknown User"
     );
   };
@@ -990,8 +990,7 @@ export default function InterviewSessionModal({
                 .map((user) => (
                   <option key={getUserId(user)} value={getUserId(user)}>
                     {getUserFullName(user)}
-
-                    {user.email ? ` - ${user.email}` : ""}
+                    {user.role ? ` - ${user.role}` : ""}
                   </option>
                 ))}
             </select>

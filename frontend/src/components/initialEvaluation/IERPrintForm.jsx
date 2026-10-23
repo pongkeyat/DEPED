@@ -26,6 +26,52 @@ const getValue = (source, ...keys) => {
   return null;
 };
 
+const getRecords = (applicant, ...keys) => {
+  const records = getValue(applicant, ...keys);
+  return Array.isArray(records) ? records : [];
+};
+
+const formatRecords = (records, getRecordText) => {
+  const values = records
+    .map(getRecordText)
+    .filter(
+      (value) =>
+        value !== null &&
+        value !== undefined &&
+        String(value).trim() !== ""
+    );
+
+  return values.length > 0 ? values.join("\n") : "N/A";
+};
+
+const formatRecordsOrFallback = (records, getRecordText, fallback) => {
+  const formatted = formatRecords(records, getRecordText);
+  return formatted === "N/A" ? safe(fallback) : formatted;
+};
+
+const getExperienceYears = (work) => {
+  const recordedYears = getValue(
+    work,
+    "experience_years",
+    "years_experience",
+    "years"
+  );
+  if (recordedYears !== null) return recordedYears;
+
+  const startValue = getValue(work, "experience_date_from", "date_from");
+  const endValue = getValue(work, "experience_date_to", "date_to");
+  if (!startValue) return null;
+
+  const start = new Date(startValue);
+  const end = endValue ? new Date(endValue) : new Date();
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return null;
+  }
+
+  const years = Math.max(0, (end.getTime() - start.getTime()) / 31_557_600_000);
+  return years > 0 ? `${years.toFixed(1)} years` : "Less than 1 year";
+};
+
 const getFullName = (applicant) => {
   const lastName =
     getValue(
@@ -136,6 +182,8 @@ const getStatus = (applicant) => {
 export default function IERPrintForm({
   vacancy,
   applicants = [],
+  hrName = "",
+  hrTitle = "Human Resource Management Officer",
 }) {
   const position =
     getValue(
@@ -211,7 +259,26 @@ export default function IERPrintForm({
       : null;
 
   return (
+    <>
+    <style>{`
+      @page {
+        size: landscape;
+        margin: 0;
+      }
+
+      @media print {
+        html,
+        body,
+        #root {
+          width: 100% !important;
+          height: auto !important;
+          margin: 0 !important;
+          overflow: visible !important;
+        }
+      }
+    `}</style>
     <div className="hidden print:block print:w-full print:bg-white print:text-black">
+      <div className="ier-print-sheet border border-black px-3 py-2 font-serif">
 
       {/* ======================================================
           ANNEX D HEADER
@@ -597,47 +664,124 @@ export default function IERPrintForm({
                     </td>
 
                     {/* EDUCATION */}
-                    <td className="border border-black px-1 py-2">
-                      {safe(
-                        applicant.education ||
-                          applicant.education_level
+                    <td className="whitespace-pre-line break-words border border-black px-1 py-2">
+                      {formatRecordsOrFallback(
+                        getRecords(applicant, "education_list"),
+                        (education) =>
+                          [
+                            getValue(
+                              education,
+                              "degree_course",
+                              "education_level",
+                              "education"
+                            ),
+                            getValue(
+                              education,
+                              "school_name",
+                              "institution"
+                            ),
+                          ]
+                            .filter(Boolean)
+                            .join(" - "),
+                        applicant.education || applicant.education_level
                       )}
                     </td>
 
                     {/* TRAINING TITLE */}
-                    <td className="border border-black px-1 py-2">
-                      {safe(
-                        applicant.training_title ||
-                          applicant.training
+                    <td className="whitespace-pre-line break-words border border-black px-1 py-2">
+                      {formatRecordsOrFallback(
+                        getRecords(applicant, "trainings_list"),
+                        (training) =>
+                          [
+                            getValue(training, "training_title", "training"),
+                            getValue(training, "conducted_by"),
+                          ]
+                            .filter(Boolean)
+                            .join(" - "),
+                        applicant.training_title || applicant.training
                       )}
                     </td>
 
                     {/* TRAINING HOURS */}
-                    <td className="border border-black px-1 py-2 text-center">
-                      {safe(
+                    <td className="whitespace-pre-line border border-black px-1 py-2 text-center">
+                      {formatRecordsOrFallback(
+                        getRecords(applicant, "trainings_list"),
+                        (training) =>
+                          getValue(
+                            training,
+                            "hours_attended",
+                            "training_hours",
+                            "hours"
+                          ),
                         applicant.training_hours
                       )}
                     </td>
 
                     {/* EXPERIENCE DETAILS */}
-                    <td className="border border-black px-1 py-2">
-                      {safe(
-                        applicant.experience_details ||
-                          applicant.experience
+                    <td className="whitespace-pre-line break-words border border-black px-1 py-2">
+                      {formatRecordsOrFallback(
+                        getRecords(applicant, "work_experience_list"),
+                        (work) =>
+                          [
+                            getValue(
+                              work,
+                              "appointment_status",
+                              "position_title",
+                              "position"
+                            ),
+                            getValue(work, "company_office", "employer"),
+                            [
+                              getValue(
+                                work,
+                                "experience_date_from",
+                                "date_from"
+                              ),
+                              getValue(
+                                work,
+                                "experience_date_to",
+                                "date_to"
+                              ) || "Present",
+                            ]
+                              .filter(Boolean)
+                              .join(" - "),
+                          ]
+                            .filter(Boolean)
+                            .join(", "),
+                        applicant.experience_details || applicant.experience
                       )}
                     </td>
 
                     {/* EXPERIENCE YEARS */}
-                    <td className="border border-black px-1 py-2 text-center">
-                      {safe(
+                    <td className="whitespace-pre-line border border-black px-1 py-2 text-center">
+                      {formatRecordsOrFallback(
+                        getRecords(applicant, "work_experience_list"),
+                        getExperienceYears,
                         applicant.experience_years ||
                           applicant.years_experience
                       )}
                     </td>
 
                     {/* ELIGIBILITY */}
-                    <td className="border border-black px-1 py-2">
-                      {safe(
+                    <td className="whitespace-pre-line break-words border border-black px-1 py-2">
+                      {formatRecordsOrFallback(
+                        getRecords(applicant, "eligibility_list"),
+                        (eligibility) =>
+                          [
+                            getValue(
+                              eligibility,
+                              "eligibility_type",
+                              "eligibility"
+                            ),
+                            getValue(eligibility, "rating") &&
+                              `Rating: ${getValue(eligibility, "rating")}`,
+                            getValue(eligibility, "license_number") &&
+                              `License: ${getValue(
+                                eligibility,
+                                "license_number"
+                              )}`,
+                          ]
+                            .filter(Boolean)
+                            .join(", "),
                         applicant.eligibility
                       )}
                     </td>
@@ -673,12 +817,18 @@ export default function IERPrintForm({
             &nbsp;
           </div>
 
+          {hrName && (
+            <div className="mt-1 font-semibold">
+              {hrName}
+            </div>
+          )}
+
           <div className="mt-1 text-[7px]">
             (Name and signature)
           </div>
 
           <div className="mt-1 font-semibold">
-            Human Resource Management Officer
+            {hrTitle}
           </div>
 
           <div className="mt-1">
@@ -717,6 +867,8 @@ export default function IERPrintForm({
 
       </div>
 
+      </div>
     </div>
+    </>
   );
 }

@@ -1,4 +1,6 @@
-import transporters from "../../config/emailTransporters.js";
+import transporters, {
+    createEmailSender,
+} from "../../config/emailTransporters.js";
 
 const transporter = transporters.applications;
 
@@ -16,7 +18,7 @@ export const sendApplicationReceivedEmail = async (
 
     const mailOptions = {
 
-        from: process.env.EMAIL,
+        from: createEmailSender(),
 
         to: email,
 
@@ -154,7 +156,7 @@ export const sendApplicationReviewEmail = async ({
         ).replace(/\/+$/, "");
 
         const mailOptions = {
-            from: `"DepEd Recruitment Management System" <${process.env.EMAIL}>`,
+            from: createEmailSender(),
             to: recipients,
             subject: `Application Review Required - ${applicantName}`,
             html: `

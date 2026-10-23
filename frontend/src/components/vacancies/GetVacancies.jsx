@@ -11,6 +11,7 @@ import {
     X,
     Eye,
     RotateCcw,
+    FileText,
 } from "lucide-react";
 import {
     getVacancies,
@@ -19,6 +20,8 @@ import {
     updateVacancyStatus,
 } from "../../api/VacancyApi";
 import EditVacancyModal from "./EditVacancyModal";
+import { validateMemoFile } from "../../utils/memoFile";
+import MemoFileViewer from "./MemoFileViewer";
 const normalizeStatus = (status) =>
     String(status ?? "").trim().toLowerCase();
 
@@ -338,9 +341,11 @@ export default function GetVacancies({ onPostVacancy }) {
     // TERMINATE VACANCY -> TERMINATED
     // =====================================================
     const [terminatingVacancyId, setTerminatingVacancyId] = useState(null);
-    const [terminationReason, setTerminationReason] = useState("");
+    const [terminationMemoFile, setTerminationMemoFile] = useState(null);
     const [terminating, setTerminating] = useState(false);
     const [terminationError, setTerminationError] = useState("");
+    const [showTerminationConfirmation, setShowTerminationConfirmation] = useState(false);
+
     const handleTerminateClick = (vacancy) => {
         const id = vacancy.vacancy_id || vacancy.id;
         if (!id) return;
@@ -349,30 +354,39 @@ export default function GetVacancies({ onPostVacancy }) {
         } else {
             setTerminatingVacancyId(id);
         }
-        setTerminationReason("");
+        setTerminationMemoFile(null);
+        setShowTerminationConfirmation(false);
         setTerminationError("");
     };
-    const handleSubmitTermination = async (vacancy) => {
+
+    const handlePrepareTermination = () => {
+        const error = validateMemoFile(terminationMemoFile);
+        if (error) {
+            setTerminationError(error);
+            return;
+        }
+
+        setTerminationError("");
+        setShowTerminationConfirmation(true);
+    };
+
+    const handleConfirmTermination = async (vacancy) => {
         const id = vacancy.vacancy_id || vacancy.id;
-        const reason = terminationReason.trim();
         if (!id) {
             setTerminationError("Vacancy ID is missing.");
             return;
         }
-        if (!reason) {
-            setTerminationError("Please enter a reason.");
-            return;
-        }
+
         try {
             setTerminating(true);
             setTerminationError("");
-            // Send both the new status and required termination memo.
             await updateVacancyStatus(id, {
                 status: "Terminated",
-                memo: reason,
+                memo_file: terminationMemoFile
             });
             setTerminatingVacancyId(null);
-            setTerminationReason("");
+            setTerminationMemoFile(null);
+            setShowTerminationConfirmation(false);
             setCurrentPage(1);
             setRefreshKey((previous) => previous + 1);
         } catch (error) {
@@ -385,6 +399,7 @@ export default function GetVacancies({ onPostVacancy }) {
             setTerminating(false);
         }
     };
+
     // LOADING SCREEN
     // =====================================================
     if (loading) {
@@ -995,7 +1010,8 @@ export default function GetVacancies({ onPostVacancy }) {
                     onClick={() => {
                         if (terminating) return;
                         setTerminatingVacancyId(null);
-                        setTerminationReason("");
+                        setTerminationMemoFile(null);
+                        setShowTerminationConfirmation(false);
                         setTerminationError("");
                     }}
                 >
@@ -1003,7 +1019,7 @@ export default function GetVacancies({ onPostVacancy }) {
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="termination-memo-title"
-                        className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+                        className="max-h-[95vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
                         onClick={(event) => event.stopPropagation()}
                     >
                         <div className="mb-5 flex items-start justify-between gap-4">
@@ -1026,7 +1042,8 @@ export default function GetVacancies({ onPostVacancy }) {
                                 disabled={terminating}
                                 onClick={() => {
                                     setTerminatingVacancyId(null);
-                                    setTerminationReason("");
+                                    setTerminationMemoFile(null);
+                                    setShowTerminationConfirmation(false);
                                     setTerminationError("");
                                 }}
                                 className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
@@ -1053,31 +1070,33 @@ export default function GetVacancies({ onPostVacancy }) {
                         <form
                             onSubmit={(event) => {
                                 event.preventDefault();
-                                const vacancy = vacancies.find(
-                                    (item) => String(item.vacancy_id || item.id) === String(terminatingVacancyId)
-                                );
-                                if (vacancy) handleSubmitTermination(vacancy);
+                                handlePrepareTermination();
                             }}
                         >
-                            <label htmlFor="termination-reason" className="mb-2 block text-sm font-semibold text-gray-700">
-                                Memo / Reason for Termination <span className="text-red-600">*</span>
+                            <label htmlFor="termination-memo-file" className="mb-2 block text-sm font-semibold text-gray-700">
+                                Memo File <span className="text-red-600">*</span>
                             </label>
-                            <textarea
-                                id="termination-reason"
-                                value={terminationReason}
-                                onChange={(event) => {
-                                    setTerminationReason(event.target.value);
-                                    setTerminationError("");
-                                }}
-                                required
-                                maxLength={500}
+                            <input
+                                id="termination-memo-file"
+                                type="file"
+                                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                                 disabled={terminating}
-                                rows={4}
-                                placeholder="Enter the memo or reason for termination..."
-                                className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100 disabled:bg-gray-100"
+                                onChange={(event) => {
+                                    const file = event.target.files?.[0] || null;
+                                    const error = file ? validateMemoFile(file) : "";
+                                    setTerminationMemoFile(error ? null : file);
+                                    setTerminationError(error);
+                                    if (error) event.target.value = "";
+                                }}
+                                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-red-50 file:px-3 file:py-1.5 file:font-semibold file:text-red-700"
                             />
-                            <p className="mt-1 text-right text-xs text-gray-400">
-                                {terminationReason.length}/500 characters
+                            {terminationMemoFile && (
+                                <p className="mt-2 truncate text-sm font-medium text-gray-700">
+                                    Selected file: {terminationMemoFile.name}
+                                </p>
+                            )}
+                            <p className="mt-1 text-xs text-gray-500">
+                                PDF or DOCX, maximum 10 MB.
                             </p>
                             {terminationError && (
                                 <p className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -1085,7 +1104,7 @@ export default function GetVacancies({ onPostVacancy }) {
                                 </p>
                             )}
                             <p className="mt-3 text-xs leading-5 text-gray-500">
-                                Submitting this memo will set the vacancy status to Terminated, save the memo, and stop new applications. Existing applicants can continue through recruitment.
+                                Submitting this memo will set the vacancy status to Terminated, save the memo file, and stop new applications. Existing applicants can continue through recruitment.
                             </p>
                             <div className="mt-6 flex justify-end gap-3">
                                 <button
@@ -1093,7 +1112,8 @@ export default function GetVacancies({ onPostVacancy }) {
                                     disabled={terminating}
                                     onClick={() => {
                                         setTerminatingVacancyId(null);
-                                        setTerminationReason("");
+                                        setTerminationMemoFile(null);
+                                        setShowTerminationConfirmation(false);
                                         setTerminationError("");
                                     }}
                                     className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
@@ -1102,14 +1122,69 @@ export default function GetVacancies({ onPostVacancy }) {
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={terminating || !terminationReason.trim()}
+                                    disabled={terminating || !terminationMemoFile}
                                     className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     <XCircle size={16} />
-                                    {terminating ? "Submitting..." : "Submit Memo"}
+                                    Continue
                                 </button>
                             </div>
                         </form>
+                        {showTerminationConfirmation && (
+                            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4">
+                                <div
+                                    role="alertdialog"
+                                    aria-modal="true"
+                                    aria-labelledby="confirm-termination-title"
+                                    className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+                                >
+                                    <h3
+                                        id="confirm-termination-title"
+                                        className="text-lg font-bold text-gray-900"
+                                    >
+                                        Confirm Vacancy Termination
+                                    </h3>
+                                    <p className="mt-2 text-sm text-gray-600">
+                                        This will terminate the vacancy and save the selected memo.
+                                    </p>
+                                    <p className="mt-3 flex items-center gap-2 break-all rounded-lg bg-gray-50 p-3 text-sm font-semibold text-gray-800">
+                                        <FileText size={16} className="shrink-0" />
+                                        {terminationMemoFile?.name}
+                                    </p>
+                                    {terminationError && (
+                                        <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                                            {terminationError}
+                                        </p>
+                                    )}
+                                    <div className="mt-6 flex justify-end gap-3">
+                                        <button
+                                            type="button"
+                                            disabled={terminating}
+                                            onClick={() => setShowTerminationConfirmation(false)}
+                                            className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                        >
+                                            Back
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={terminating}
+                                            onClick={() => {
+                                                const vacancy = vacancies.find(
+                                                    (item) =>
+                                                        String(item.vacancy_id || item.id) ===
+                                                        String(terminatingVacancyId)
+                                                );
+                                                if (vacancy) handleConfirmTermination(vacancy);
+                                            }}
+                                            className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                                        >
+                                            <XCircle size={16} />
+                                            {terminating ? "Terminating..." : "Confirm Termination"}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -1129,7 +1204,7 @@ export default function GetVacancies({ onPostVacancy }) {
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="view-termination-memo-title"
-                        className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+                        className="max-h-[95vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
                         onClick={(event) => event.stopPropagation()}
                     >
                         <div className="mb-5 flex items-start justify-between gap-4">
@@ -1177,14 +1252,23 @@ export default function GetVacancies({ onPostVacancy }) {
 
                         <div className="rounded-xl border border-gray-200 p-4">
                             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                Memo / Reason for Termination
+                                Memo File
                             </p>
-                            <p className="whitespace-pre-wrap break-words text-sm leading-6 text-gray-700">
-                                {selectedMemoVacancy.memo ||
-                                    selectedMemoVacancy.termination_memo ||
-                                    selectedMemoVacancy.latest_memo ||
-                                    "No memo was returned for this vacancy. Make sure the getVacancies API includes the latest memo from vacancies_remarks."}
+                            <p className="break-all text-sm font-semibold text-gray-800">
+                                {selectedMemoVacancy.memo_file_name ||
+                                    "No memo filename is available."}
                             </p>
+                            {selectedMemoVacancy.memo_file_path && (
+                                <div className="mt-4">
+                                    <MemoFileViewer
+                                        vacancyId={
+                                            selectedMemoVacancy.vacancy_id ||
+                                            selectedMemoVacancy.id
+                                        }
+                                        filename={selectedMemoVacancy.memo_file_name}
+                                    />
+                                </div>
+                            )}
                         </div>
 
                         <div className="mt-6 flex justify-end">

@@ -7,14 +7,17 @@ import { getApplications } from "../api/ApplicationApi";
 import { getVacancies } from "../api/VacancyApi";
 
 const getStatusStyles = (status) => {
-  switch (status) {
-    case "Initial Screening": return "bg-orange-100 text-orange-700";
-    case "Complete": return "bg-violet-100 text-violet-700";
-    case "Incomplete": return "bg-emerald-100 text-emerald-700";
+  switch (normalizeApplicationStatus(status)) {
+    case "initial_screening": return "bg-orange-100 text-orange-700";
+    case "under_review": return "bg-amber-100 text-amber-700";
+    case "complete": return "bg-violet-100 text-violet-700";
+    case "incomplete": return "bg-emerald-100 text-emerald-700";
     default: return "bg-slate-100 text-slate-700";
   }
 };
 
+const normalizeApplicationStatus = (status) =>
+  String(status ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
 const normalizeVacancyId = (id) => String(id ?? "").trim();
 
 export default function AllApplication() {
@@ -54,36 +57,24 @@ export default function AllApplication() {
     fetchData();
   }, []);
 
-  // Map vacancies by ID for fast lookup
-  const vacancyStatusMap = useMemo(() => {
-    const map = new Map();
-    vacancies.forEach((v) => {
-      const id = normalizeVacancyId(v.vacancy_id || v.id);
-      map.set(id, { status: v.status, title: v.position_title || v.title || v.job_title });
-    });
-    return map;
-  }, [vacancies]);
-
-  // First pass: Filter applications by open vacancies and dropdown vacancy selection
+  // Show every application unless the user selects a specific vacancy.
   const baseFilteredApplications = useMemo(() => {
-    return applications.filter((app) => {
-      const vacId = normalizeVacancyId(app.vacancy_id);
-      const vacInfo = vacancyStatusMap.get(vacId);
-      const isOpen = vacInfo && String(vacInfo.status).toLowerCase() === "open";
-      
-      const matchesSelectedVacancy = selectedVacancy
-        ? vacId === normalizeVacancyId(selectedVacancy)
-        : true;
+    if (!selectedVacancy) return applications;
 
-      return isOpen && matchesSelectedVacancy;
-    });
-  }, [applications, vacancyStatusMap, selectedVacancy]);
+    return applications.filter(
+      (app) =>
+        normalizeVacancyId(app.vacancy_id) ===
+        normalizeVacancyId(selectedVacancy)
+    );
+  }, [applications, selectedVacancy]);
 
   // Second pass: Apply card status filter for the table display
   const filteredApplications = useMemo(() => {
     if (selectedStatusFilter === "all") return baseFilteredApplications;
     return baseFilteredApplications.filter(
-      (app) => app.application_status === selectedStatusFilter
+      (app) =>
+        normalizeApplicationStatus(app.application_status) ===
+        selectedStatusFilter
     );
   }, [baseFilteredApplications, selectedStatusFilter]);
 
@@ -98,22 +89,37 @@ export default function AllApplication() {
       iconColor: "text-[#1E3E74]" 
     },
     { 
-      id: "Complete",
+      id: "complete",
       title: "Complete", 
-      value: baseFilteredApplications.filter(a => a.application_status === 'complete').length, 
+      value: baseFilteredApplications.filter(
+        (app) => normalizeApplicationStatus(app.application_status) === "complete"
+      ).length, 
       icon: Trophy, 
       topBarColor: "bg-teal-500", 
       iconBg: "bg-teal-50", 
       iconColor: "text-teal-500" 
     },
     { 
-      id: "Incomplete",
+      id: "incomplete",
       title: "Incomplete", 
-      value: baseFilteredApplications.filter(a => a.application_status === 'incomplete').length, 
+      value: baseFilteredApplications.filter(
+        (app) => normalizeApplicationStatus(app.application_status) === "incomplete"
+      ).length, 
       icon: UserPlus, 
       topBarColor: "bg-emerald-500", 
       iconBg: "bg-emerald-50", 
       iconColor: "text-emerald-500" 
+    },
+    {
+      id: "under_review",
+      title: "Under Review",
+      value: baseFilteredApplications.filter(
+        (app) => normalizeApplicationStatus(app.application_status) === "under_review"
+      ).length,
+      icon: Hourglass,
+      topBarColor: "bg-amber-500",
+      iconBg: "bg-amber-50",
+      iconColor: "text-amber-600"
     }
   ];
 
@@ -139,7 +145,7 @@ export default function AllApplication() {
             <ClipboardList className="text-[#1E3E74]" size={32} />
             <div>
               <h1 className="text-3xl font-bold text-[#1E3E74]">Application Status</h1>
-              <p className="text-slate-500 text-sm mt-0.5">Overview of current applicant statuses for open vacancies</p>
+              <p className="text-slate-500 text-sm mt-0.5">Overview of applicant statuses across all vacancies</p>
             </div>
           </div>
           <button
@@ -151,7 +157,7 @@ export default function AllApplication() {
         </div>
 
         {/* Clickable Interactive Stats Cards */}
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
           {stats.map((card) => {
             const IconComp = card.icon;
             const isSelected = selectedStatusFilter === card.id;
@@ -213,10 +219,8 @@ export default function AllApplication() {
                 onChange={(e) => setSelectedVacancy(e.target.value)}
                 className="w-full appearance-none rounded-xl border border-gray-300 bg-white py-2.5 pl-10 pr-10 text-sm font-medium text-gray-700 shadow-sm transition focus:border-[#1E3E74] focus:outline-none focus:ring-2 focus:ring-[#1E3E74]/20 cursor-pointer"
               >
-                <option value="">All Open Vacancies</option>
-                {vacancies
-                  .filter((v) => String(v.status).toLowerCase() === "open")
-                  .map((vacancy) => {
+                <option value="">All Vacancies</option>
+                {vacancies.map((vacancy) => {
                     const id = normalizeVacancyId(vacancy.vacancy_id || vacancy.id);
                     const title = vacancy.position_title || vacancy.title || vacancy.job_title;
                     return (
